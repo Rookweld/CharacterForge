@@ -1,0 +1,61 @@
+MISSION 00 — IGNITION
+
+You are working in the Character Forge / Quest Forge repository.
+
+Your job in this run is to execute ONLY:
+`GAZINGA/missions/MISSION_00_IGNITION.md`
+
+Before making any changes, read these files in this order:
+
+1. `GAZINGA/CANON_CORE.md`
+2. `GAZINGA/PROJECT_STATE.md`
+3. `GAZINGA/missions/MISSION_00_IGNITION.md`
+4. `GAZINGA/WORLD_BIBLE_LOOKUP_MAP.md`
+5. `GAZINGA/HANDOFF_PROTOCOL.md`
+
+Then inspect the repository and current Git status.
+
+For canonical design context, use:
+- `GAZINGA/reference_Character_Forge_Quest_Forge_WORLD_BIBLE_Platinum_Roadmap.md`
+- `GAZINGA/reference_GAZINGA_CODEX_BUILD_PROMPT_v1.0_FOUNDATION.md`
+
+IMPORTANT CONTEXT RULE:
+Do NOT read or ingest both reference documents in full by default.
+Use `GAZINGA/WORLD_BIBLE_LOOKUP_MAP.md` and read only the sections mapped to Mission 00, plus the smallest additional section required if repository evidence makes it necessary.
+
+EXECUTION RULES:
+
+- Work autonomously inside Mission 00.
+- v1.0 FOUNDATION only.
+- Stay strictly inside the mission scope.
+- Do not begin Mission 01.
+- Do not implement Character Forge, Quest Forge, persistence, AI integrations, marketplace, cloud sync, World Forge, expansions, or other later-mission/later-version features.
+- Preserve a clean architecture suitable for the long-term roadmap without implementing that roadmap early.
+- Do not weaken tests or verification requirements to manufacture a PASS.
+- Do not claim that a command, build, test, launch, or verification succeeded unless you actually executed it and observed success.
+- If a prerequisite is missing, complete everything safely possible, document the exact blocker and remediation, and report BLOCKED or PARTIAL rather than pretending PASS.
+- Keep the repository recoverable at all times.
+- Never delete user work or unrelated existing files merely to make setup easier.
+
+MISSION 00 DELIVERABLES AND EXIT CRITERIA ARE AUTHORITATIVE:
+Follow `GAZINGA/missions/MISSION_00_IGNITION.md` exactly.
+
+MANDATORY HANDOFF:
+
+Before stopping:
+
+1. Run every verification required by Mission 00.
+2. Create or update:
+   `docs/missions/MISSION_00_REPORT.md`
+3. Update:
+   `GAZINGA/PROJECT_STATE.md`
+4. Include exact commands executed and actual outcomes in the mission report.
+5. Record current Git branch, commit/hash if applicable, and clean/dirty status.
+6. State one final mission status only:
+   - PASS
+   - PARTIAL
+   - BLOCKED
+   - FAIL
+7. STOP after Mission 00. Do not start Mission 01.
+
+Begin by reading the five required GAZINGA control files. Do not code before completing that preflight.

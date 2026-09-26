@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = [
+  "apps/desktop/src-tauri",
+  "crates/app-core",
+  "crates/storage",
+  "crates/export",
+  "crates/contracts",
+]
+
+[workspace.package]
+edition = "2024"
+license = "UNLICENSED"
+version = "0.1.0"

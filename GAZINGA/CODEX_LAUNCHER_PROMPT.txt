@@ -1,0 +1,27 @@
+Execute the current GAZINGA SPLIT EDITION mission.
+
+MANDATORY START:
+1. Read `CANON_CORE.md`.
+2. Read `PROJECT_STATE.md`.
+3. Read the current mission file completely.
+4. Read `WORLD_BIBLE_LOOKUP_MAP.md` and only the mapped canonical World Bible/spec sections needed for this mission.
+5. Inspect the repository and git status before changing anything.
+
+WORK MODE:
+- Work autonomously inside this mission.
+- Preserve canonical architecture and previously passing behavior.
+- Add implementation and tests together.
+- Fix defects required for this mission's gate.
+- Do not implement later missions or later product versions.
+- Do not weaken tests to manufacture PASS.
+- Do not claim something was run, built, launched or verified unless it actually was.
+
+MANDATORY END:
+- Run every mission verification/gate.
+- Create/update `docs/missions/MISSION_XX_REPORT.md` using `HANDOFF_PROTOCOL.md`.
+- Update `PROJECT_STATE.md`.
+- If blocked, state the exact blocker and leave the repository recoverable.
+- Stop after this mission. Do not begin the next mission.
+
+Current mission:
+<REPLACE WITH PATH, e.g. missions/MISSION_00_IGNITION.md>

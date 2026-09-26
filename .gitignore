@@ -1,0 +1,37 @@
+# JavaScript package managers and frontend output
+node_modules/
+dist/
+pnpm-debug.log*
+npm-debug.log*
+
+# Rust build output
+**/target/
+
+# Tauri generated artifacts
+apps/desktop/src-tauri/gen/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Editors and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local application/database files
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
+# Release outputs; retain directory conventions with .gitkeep
+artifacts/releases/*
+!artifacts/releases/.gitkeep
+
+# Generated minimal Tauri build icon
+apps/desktop/src-tauri/icons/icon.ico
