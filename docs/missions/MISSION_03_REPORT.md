@@ -1,71 +1,49 @@
-# Mission 03 — CALLING
+# Mission 03 — CALLING remediation report
 
-## Status
+## Status and scope
 
-**PARTIAL.** A deterministic Quest candidate path, shared ForgeDNA integration, Quest CLI, basic lock/reroll/manual-edit behavior, and bounded quality sweep were added. The required full vertical slice is not complete; details below.
+**PARTIAL.** The Quest Forge improvement is in place, but the required exit gate is not met. Mission 04 — MEMORY is not started. No persistence or Character Forge redesign was added.
 
-## Scope delivered
+V2 generation remains available for compatibility. New recipes use v3. The shared ForgeDNA serialization shape, field-stream context, nonce semantics, locks, and dependency graph rules remain unchanged; the contracts crate now accepts content version 3. The pre-implementation HEAD was `5e84827e5605a18f3ff3b477daa86489d9055202` on `master`. At the start of this continuation the worktree had an untracked `content/quests/v3/core.json` from in-progress work and therefore was not clean. That artifact was preserved. No commit was created.
 
-- Added `QuestForge` over Mission 01 field streams and shared reroll/lock functions.
-- Added structured generation for existing v1 `Quest` fields and a JSON CLI (`quest_forge`).
-- Added support for all eleven canonical preset IDs, with preset-specific story pressure.
-- Added lock-aware reroll, reroll-all, manual edit, provenance, deterministic tests, and quality audit example.
-- Kept Character generator/version behavior unchanged. Quest DNA uses content version 2; Quest content version 1 is rejected because no historical Quest corpus existed to replay.
+## Changes
 
-## Files materially changed
+- Added a versioned declarative corpus for all eleven presets, with semantic thread tags and distinct pools for givers, premises, objectives, stakes, threats, complications, clues, twists, rewards, consequences, moral pressures, locations, titles, and follow-ups.
+- Added deterministic thread and per-field selection through existing FieldStreams. V3 field selection is bound to an explicit Frame dependency. New candidates include clue and briefing fields; the shared Quest entity contract remains unchanged.
+- Added structured Quest constraint validation. `inspiration` is supported and appears in the briefing. Unsupported and Character-only constraints fail explicitly.
+- Added corpus load validation and targeted v3 generation, reroll, lock, constraint, deterministic, and Unicode serialization tests.
+- Kept the version-2 generator path for replay.
+- Expanded the audit example to sweep every preset, compare the original 14 public fields, count field diversity and thread clusters, compare controlled axis distributions, and emit representative samples.
 
-- `crates/app-core/src/quest.rs`, `crates/app-core/src/lib.rs`
-- `crates/app-core/examples/quest_forge.rs`, `crates/app-core/examples/quest_quality_audit.rs`
-- `docs/QUEST_CONTENT_QUALITY_REPORT.md`, `docs/ARCHITECTURE.md`
-- `GAZINGA/PROJECT_STATE.md`
+## Quality results
 
-## Commands executed
+Full measurements and representative samples are in [QUEST_CONTENT_QUALITY_REPORT.md](../QUEST_CONTENT_QUALITY_REPORT.md).
 
-- `cargo test -p forge-app-core quest::tests` — 4 passed, 0 failed.
-- `cargo run -q -p forge-app-core --example quest_quality_audit` — PASS; 256 seeds for each of the ten ordinary presets and 1,024 Chaos Blend seeds, with field distributions, exact duplicate counts, pairwise equality statistics, and 256 controlled pairs for each axis. Results: `docs/QUEST_CONTENT_QUALITY_REPORT.md`.
-- `cargo run -q -p forge-app-core --example quest_forge -- --seed 42 --preset <preset>` — PASS for all eleven presets; each output parsed as JSON and contained premise, objective, and stakes.
-- `cargo fmt --all -- --check` — PASS.
-- `cargo clippy --workspace --all-targets -- -D warnings` — PASS.
-- `cargo test --workspace` — 52 passed (42 app-core, 10 contracts), 0 failed; other crates and doc-test targets had 0 tests.
-- `./scripts/verify.ps1` — PASS; frontend formatting/lint/type-check, 1/1 frontend test, frontend build, Rust format/clippy, 52 Rust tests, and optimized Tauri no-bundle build passed.
-- `cargo metadata --no-deps --format-version 1` — PASS.
-- `git diff --check` — PASS (exit code 0; Git emitted only line-ending and inaccessible global-ignore warnings).
-- `git status --short --branch` — branch `master`, dirty with the Mission 03 files listed above.
-- `git rev-parse HEAD` — `8f18d3e09d53c4fb92708f0717922ab35e011165`.
+| Chaos Blend metric (1,024 seeds; 523,776 pairs) | v2 baseline | v3 |
+|---|---:|---:|
+| Exact expanded clones | 0 | 4 |
+| Pairs >=10/14 | 2,083 | 15,990 |
+| Pairs >=8/14 | 30,149 | 88,856 |
+| Mean shared fields | 4.668 | 3.528 |
+| Maximum shared fields | 13 | 14 |
+| Unique expanded candidates | 1,024 | 1,020 |
 
-## Verification evidence
+The average overlap improved, while high-overlap pairs and exact clones increased. Most narrative fields have four observed values per preset. Monster Hunter produced one exact expanded duplicate in its 256-seed sweep. This is not a successful similarity remediation.
 
-- Focused Quest tests: 4 passed, 0 failed. Workspace total: 52 passed, 0 failed.
-- The Quest CLI produced valid structured JSON for seed 42 across all eleven presets; the Cyberpunk Technology override also parsed successfully.
-- Deterministic seed sweep: see `docs/QUEST_CONTENT_QUALITY_REPORT.md`.
-- Full workspace verification results are recorded below; failing gates remain explicit.
+Controlled 256-seed Chaos Blend axis comparisons shifted thread counts for Bleak, Epic, Ambiguity, Surreal, Technology, and Mysticism. Mythic and Chaos showed no measurable distribution shift. Those two axis claims remain unproven. Constraint coverage remains deliberately bounded to `inspiration`; the canonical Character-only constraints are rejected, but broader Quest content filters do not yet exist. Human coherence and wording review found coherent chains in representative samples but also repeated wording, tag-like quest types, and gaps between some clues/objectives/opposition. A broad human acceptance review remains outstanding.
 
-## Architecture decisions
+## Verification
 
-- Quest generation is in `forge-app-core` and reuses ForgeDNA field streams and lock/reroll orchestration.
-- New Quest recipes use content version 2. Version 1 is rejected for Quest generation. Character content version replay remains unchanged.
-- Current Quest thematic source material is implemented as a Rust match table, not the required declarative, versioned Quest corpus. This is an incomplete mission requirement, not a permanent architecture decision.
+- `cargo test -p forge-app-core quest::tests`: 9 passed, 0 failed.
+- `cargo test -p forge-app-core quest_content::tests`: 1 passed, 0 failed.
+- `cargo run -q -p forge-app-core --example quest_quality_audit`: PASS; 256 seeds for each of ten ordinary presets, 1,024 Chaos Blend seeds, v2/v3 same-basis comparison, 256 low/high controlled pairs per canonical axis, samples for all presets, axis extremes, and an inspiration-constrained sample.
+- `cargo fmt --all -- --check`: PASS.
+- `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
+- `cargo test --workspace`: 58 passed (48 app-core, 10 contracts), 0 failed.
+- `cargo metadata --no-deps --format-version 1`: PASS.
+- `./scripts/verify.ps1`: PASS; frontend format/lint/typecheck, 1 frontend test, frontend build, Rust checks/tests, and optimized Tauri no-bundle build passed.
+- `git diff --check`: pending final state check.
 
-## Known defects
+## Exit gate re-evaluation
 
-- **P1 / mission-blocking:** content families are not declarative/versioned corpus data; several fields still share three reusable prose variants, and no robust semantic compatibility model protects arbitrary reroll combinations.
-- **P1 / mission-blocking:** required clue/condition and concise mission briefing are not explicit generated contract fields. The existing Quest contract has no such fields; it was left unchanged to avoid silently altering its serialized contract.
-- **P1 / mission-blocking:** no Quest golden seed fixtures or complete historical content compatibility matrix. Seed-42 examples across all eleven presets were reviewed, but broad subjective coverage remains limited.
-- **P1 / mission-blocking:** the generator does not yet give every creative axis an explicit semantic effect. Controlled seed changes alone are not proof of meaningful axis influence.
-- **P2:** Quest constraints are carried through ForgeDNA but are not comprehensively parsed/applied as structured filters.
-- **P2:** entity identity/project handling is developer-demo scoped; no optional Character linkage was added.
-
-## Deferred items
-
-Only explicitly out-of-scope Mission 04+, persistence, UI, AI/provider integration, campaigns, World Forge, and expansion features.
-
-## Repository state
-
-- Branch: `master`.
-- Starting HEAD: `8f18d3e09d53c4fb92708f0717922ab35e011165`.
-- Current HEAD: unchanged; no commit was created.
-- Worktree: dirty from this Mission 03 implementation; no pre-existing dirty files were present at start.
-
-## Next mission readiness
-
-**NO.** Mission 03 must be completed and re-audited before Mission 04.
+Mission 03 remains **PARTIAL**. Declarative data and v3 clue/briefing are present, and determinism/verification pass. Material gates remain: reduce high-overlap Chaos Blend clustering; deepen field pools; address expanded exact clones; establish every relevant axis with controlled distribution evidence; provide a comprehensively reviewed Quest constraint matrix; and complete human review of coherence and wording. Do not begin Mission 04 until those gates are closed.

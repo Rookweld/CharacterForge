@@ -29,6 +29,25 @@ const FIELDS: [QuestField; 15] = [
     QuestField::Failure,
     QuestField::FollowUp,
 ];
+const FIELDS_V3: [QuestField; 17] = [
+    QuestField::Frame,
+    QuestField::Title,
+    QuestField::Type,
+    QuestField::Premise,
+    QuestField::Patron,
+    QuestField::Objective,
+    QuestField::Stakes,
+    QuestField::Opposition,
+    QuestField::Complications,
+    QuestField::Twist,
+    QuestField::MoralPressure,
+    QuestField::Locations,
+    QuestField::Rewards,
+    QuestField::Failure,
+    QuestField::FollowUp,
+    QuestField::Clue,
+    QuestField::Briefing,
+];
 const PRESETS: [&str; 11] = [
     "dark-fantasy",
     "pirate",
@@ -43,6 +62,7 @@ const PRESETS: [&str; 11] = [
     "chaos-blend",
 ];
 const V2: ContentVersion = ContentVersion(2);
+const V3: ContentVersion = ContentVersion(3);
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QuestField {
@@ -61,6 +81,8 @@ pub enum QuestField {
     Rewards,
     Failure,
     FollowUp,
+    Clue,
+    Briefing,
 }
 impl QuestField {
     pub fn key(self) -> ValidationResult<FieldKey> {
@@ -80,6 +102,8 @@ impl QuestField {
             Self::Rewards => "13-rewards",
             Self::Failure => "14-failure",
             Self::FollowUp => "15-follow-up",
+            Self::Clue => "16-clue",
+            Self::Briefing => "17-briefing",
         })
     }
 }
@@ -101,6 +125,10 @@ pub struct QuestCandidate {
     pub quest: Quest,
     pub dna: ForgeDNA,
     pub field_origins: BTreeMap<FieldKey, QuestOrigin>,
+    #[serde(default)]
+    pub clue: Option<String>,
+    #[serde(default)]
+    pub briefing: Option<String>,
 }
 impl QuestCandidate {
     pub fn manual_edit(
@@ -109,7 +137,7 @@ impl QuestCandidate {
         value: QuestFieldValue,
     ) -> ValidationResult<()> {
         let mut updated = self.clone();
-        set(&mut updated.quest, field, value)?;
+        apply_candidate_value(&mut updated, field, value)?;
         updated
             .field_origins
             .insert(field.key()?, QuestOrigin::UserModified);
@@ -123,6 +151,16 @@ impl QuestCandidate {
     pub fn validate(&self) -> ValidationResult<()> {
         self.quest.validate()?;
         validate_dna(&self.dna)?;
+        if self.dna.content_version == V3
+            && (self.clue.as_ref().is_none_or(String::is_empty)
+                || self.briefing.as_ref().is_none_or(String::is_empty))
+        {
+            return Err(err(
+                ValidationCode::InvalidEntity,
+                "quest.briefing",
+                "v3 candidates require a clue and briefing",
+            ));
+        }
         if self
             .quest
             .envelope
@@ -159,14 +197,15 @@ impl QuestForge {
         let mut r = GenerationRecipe::new(GenerationKind::Quest, seed, p);
         r.creative_axes = axes;
         r.constraints = constraints;
-        for f in FIELDS {
+        validate_quest_constraints(&r.constraints)?;
+        for f in FIELDS_V3 {
             r.add_field(f.key()?)?;
         }
-        for f in FIELDS.into_iter().skip(1) {
+        for f in FIELDS_V3.into_iter().skip(1) {
             r.set_dependencies(f.key()?, [QuestField::Frame.key()?])?;
         }
         let mut d = ForgeDNA::new(r);
-        d.content_version = V2;
+        d.content_version = V3;
         d.normalize()?;
         Ok(d)
     }
@@ -174,6 +213,9 @@ impl QuestForge {
         let mut d = dna.clone();
         d.normalize()?;
         validate_dna(&d)?;
+        if d.content_version == V3 {
+            return generate_v3(&d);
+        }
         let mut vals = FieldValues::new();
         for f in FIELDS {
             let k = f.key()?;
@@ -235,6 +277,8 @@ impl QuestForge {
             quest: q,
             dna: d,
             field_origins,
+            clue: None,
+            briefing: None,
         };
         c.validate()?;
         Ok(c)
@@ -253,22 +297,29 @@ impl QuestForge {
     ) -> ValidationResult<Vec<QuestField>> {
         let mut n = c.clone();
         n.validate()?;
-        let mut vals = to_values(&n.quest)?;
+        let mut vals = to_values(&n)?;
         let dna_snapshot = n.dna.clone();
+        let mut staged = vals.clone();
         let changed = reroll_field(&mut n.dna, &mut vals, &f.key()?, |key, stream| {
-            let f = FIELDS
+            let f = fields_for(&dna_snapshot)
+                .iter()
+                .copied()
                 .into_iter()
                 .find(|f| f.key().is_ok_and(|k| k == *key))
                 .ok_or_else(|| err(ValidationCode::UnknownField, "field", "unknown Quest field"))?;
-            generate_value(f, &dna_snapshot, &FieldValues::new(), stream)
+            let value = generate_versioned_value(f, &dna_snapshot, &staged, stream)?;
+            staged.insert(key.clone(), value.clone());
+            Ok(value)
         })?
         .changed_fields;
         for key in &changed {
-            let f = FIELDS
+            let f = fields_for(&n.dna)
+                .iter()
+                .copied()
                 .into_iter()
                 .find(|f| f.key().is_ok_and(|k| k == *key))
                 .unwrap();
-            set(&mut n.quest, f, vals[key].clone())?;
+            apply_candidate_value(&mut n, f, vals[key].clone())?;
         }
         sync_provenance(&mut n)?;
         n.validate()?;
@@ -285,22 +336,46 @@ impl QuestForge {
     pub fn reroll_all(c: &mut QuestCandidate) -> ValidationResult<Vec<QuestField>> {
         let mut n = c.clone();
         n.validate()?;
-        let mut vals = to_values(&n.quest)?;
+        let mut vals = to_values(&n)?;
         let dna_snapshot = n.dna.clone();
+        let original_locks = n
+            .dna
+            .recipe
+            .field_controls
+            .iter()
+            .map(|(key, control)| (key.clone(), control.locked))
+            .collect::<BTreeMap<_, _>>();
+        for (key, origin) in &n.field_origins {
+            if *origin == QuestOrigin::UserModified
+                && let Some(control) = n.dna.recipe.field_controls.get_mut(key)
+            {
+                control.locked = true;
+            }
+        }
+        let mut staged = vals.clone();
         let changed = reroll_all_unlocked(&mut n.dna, &mut vals, |key, stream| {
-            let f = FIELDS
+            let f = fields_for(&dna_snapshot)
+                .iter()
+                .copied()
                 .into_iter()
                 .find(|f| f.key().is_ok_and(|k| k == *key))
                 .unwrap();
-            generate_value(f, &dna_snapshot, &FieldValues::new(), stream)
+            let value = generate_versioned_value(f, &dna_snapshot, &staged, stream)?;
+            staged.insert(key.clone(), value.clone());
+            Ok(value)
         })?
         .changed_fields;
+        for (key, locked) in original_locks {
+            n.dna.recipe.field_controls.get_mut(&key).unwrap().locked = locked;
+        }
         for key in &changed {
-            let f = FIELDS
+            let f = fields_for(&n.dna)
+                .iter()
+                .copied()
                 .into_iter()
                 .find(|f| f.key().is_ok_and(|k| k == *key))
                 .unwrap();
-            set(&mut n.quest, f, vals[key].clone())?;
+            apply_candidate_value(&mut n, f, vals[key].clone())?;
         }
         sync_provenance(&mut n)?;
         n.validate()?;
@@ -326,15 +401,19 @@ fn validate_dna(d: &ForgeDNA) -> ValidationResult<()> {
             "Quest Forge requires a supported Quest preset",
         ));
     }
-    if d.content_version != V2 {
+    if d.content_version != V2 && d.content_version != V3 {
         return Err(err(
             ValidationCode::UnsupportedVersion,
             "content_version",
             "unsupported Quest content version",
         ));
     }
-    let expected: FieldsSet = FIELDS
-        .into_iter()
+    if d.content_version == V3 {
+        validate_quest_constraints(&d.recipe.constraints)?;
+    }
+    let expected: FieldsSet = fields_for(d)
+        .iter()
+        .copied()
         .map(QuestField::key)
         .collect::<ValidationResult<_>>()?;
     if d.recipe
@@ -351,6 +430,367 @@ fn validate_dna(d: &ForgeDNA) -> ValidationResult<()> {
         ));
     }
     Ok(())
+}
+fn validate_quest_constraints(constraints: &forge_contracts::Constraints) -> ValidationResult<()> {
+    for (key, value) in constraints {
+        if key.as_str() != "inspiration" {
+            return Err(err(
+                ValidationCode::InvalidConstraint,
+                &format!("constraints.{key}"),
+                "unsupported Quest constraint; Quest Forge supports inspiration only; Character-only constraints do not apply to Quest generation",
+            ));
+        }
+        if value.trim().is_empty() || value.chars().count() > 200 {
+            return Err(err(
+                ValidationCode::InvalidConstraint,
+                "constraints.inspiration",
+                "inspiration must contain 1 to 200 characters",
+            ));
+        }
+    }
+    Ok(())
+}
+fn fields_for(d: &ForgeDNA) -> &'static [QuestField] {
+    if d.content_version == V3 {
+        &FIELDS_V3
+    } else {
+        &FIELDS
+    }
+}
+fn generate_versioned_value(
+    f: QuestField,
+    d: &ForgeDNA,
+    values: &FieldValues<QuestFieldValue>,
+    s: &mut FieldStream,
+) -> ValidationResult<QuestFieldValue> {
+    if d.content_version == V2 {
+        return generate_value(f, d, values, s);
+    }
+    let catalog = crate::quest_content::Catalog::get()?;
+    let preset = &catalog.presets[d.recipe.universe_preset.as_str()];
+    let thread_id = if f == QuestField::Frame {
+        select_thread(d, preset, s)?.id.clone()
+    } else {
+        values
+            .get(&QuestField::Frame.key()?)
+            .and_then(|v| text_value(v).ok())
+            .unwrap_or_else(|| {
+                select_thread(d, preset, s)
+                    .map_or_else(|_| preset.threads[0].id.clone(), |t| t.id.clone())
+            })
+    };
+    let thread = preset
+        .threads
+        .iter()
+        .find(|t| t.id == thread_id)
+        .unwrap_or(&preset.threads[0]);
+    if f == QuestField::Frame {
+        return Ok(QuestFieldValue::Text(thread.id.clone()));
+    }
+    let pool = match f {
+        QuestField::Title => &thread.titles,
+        QuestField::Type => &thread.tags,
+        QuestField::Premise => &thread.premises,
+        QuestField::Patron => &thread.givers,
+        QuestField::Objective => &thread.objectives,
+        QuestField::Stakes => &thread.stakes,
+        QuestField::Opposition => &thread.threats,
+        QuestField::Complications => &thread.complications,
+        QuestField::Twist => &thread.twists,
+        QuestField::MoralPressure => &thread.moral_pressures,
+        QuestField::Locations => &thread.locations,
+        QuestField::Rewards => &thread.rewards,
+        QuestField::Failure => &thread.consequences,
+        QuestField::FollowUp => &thread.followups,
+        QuestField::Clue => &thread.clues,
+        QuestField::Briefing => &thread.premises,
+        QuestField::Frame => unreachable!(),
+    };
+    let index = s.next_bounded(pool.len() as u64)? as usize;
+    let value = if f == QuestField::Briefing {
+        format!("{}: {}", thread.givers[0], pool[index])
+    } else {
+        pool[index].clone()
+    };
+    if f == QuestField::Briefing
+        && let Some(inspiration) = d
+            .recipe
+            .constraints
+            .get(&forge_contracts::ConstraintKey::new("inspiration")?)
+    {
+        return Ok(QuestFieldValue::Text(format!(
+            "{value} Inspiration: {inspiration}"
+        )));
+    }
+    if matches!(
+        f,
+        QuestField::Complications
+            | QuestField::Locations
+            | QuestField::Rewards
+            | QuestField::Failure
+            | QuestField::FollowUp
+    ) {
+        Ok(QuestFieldValue::Texts(vec![value]))
+    } else {
+        Ok(QuestFieldValue::Text(value))
+    }
+}
+fn select_thread<'a>(
+    d: &ForgeDNA,
+    preset: &'a crate::quest_content::Preset,
+    stream: &mut FieldStream,
+) -> ValidationResult<&'a crate::quest_content::Thread> {
+    let axes = &d.recipe.creative_axes.levels;
+    let level = |a| *axes.get(&a).unwrap_or(&50) as u64;
+    let weights = preset
+        .threads
+        .iter()
+        .map(|t| {
+            let tags = t.tags.iter().map(String::as_str).collect::<BTreeSet<_>>();
+            let mut w = 100
+                + if tags
+                    .iter()
+                    .any(|x| ["scarcity", "curse", "survival", "debt", "loss"].contains(x))
+                {
+                    level(CreativeAxis::Bleak) * 2
+                } else {
+                    0
+                };
+            w += if tags
+                .iter()
+                .any(|x| ["mythic", "oath", "undead", "curse"].contains(x))
+            {
+                level(CreativeAxis::Mythic) * 2
+            } else {
+                0
+            };
+            w += if tags
+                .iter()
+                .any(|x| ["memory", "machine", "tide"].contains(x))
+            {
+                level(CreativeAxis::Chaos) * 2
+            } else {
+                0
+            };
+            w += if tags
+                .iter()
+                .any(|x| ["quest", "migration", "convoy"].contains(x))
+            {
+                level(CreativeAxis::Epic) * 2
+            } else {
+                0
+            };
+            w += if tags
+                .iter()
+                .any(|x| ["machine", "memory", "signal", "technology"].contains(x))
+            {
+                level(CreativeAxis::Technology) * 2
+            } else {
+                0
+            };
+            w += if tags
+                .iter()
+                .any(|x| ["mythic", "oath", "curse", "undead", "occult"].contains(x))
+            {
+                level(CreativeAxis::Mysticism) * 2
+            } else {
+                0
+            };
+            w += if tags
+                .iter()
+                .any(|x| ["memory", "myth", "curse", "surreal", "identity"].contains(x))
+            {
+                level(CreativeAxis::Surreal) * 2
+            } else {
+                0
+            };
+            w += if tags
+                .iter()
+                .any(|x| ["inheritance", "record", "identity", "debt", "myth"].contains(x))
+            {
+                level(CreativeAxis::Ambiguity) * 2
+            } else {
+                0
+            };
+            for (axis, tag) in [
+                (CreativeAxis::Bleak, "bleak"),
+                (CreativeAxis::Mythic, "mythic"),
+                (CreativeAxis::Chaos, "chaos"),
+                (CreativeAxis::Epic, "epic"),
+                (CreativeAxis::Technology, "technology"),
+                (CreativeAxis::Mysticism, "mysticism"),
+                (CreativeAxis::Surreal, "surreal"),
+                (CreativeAxis::Ambiguity, "ambiguity"),
+            ] {
+                if tags.contains(tag) {
+                    w += level(axis) * 8;
+                }
+            }
+            w
+        })
+        .collect::<Vec<_>>();
+    let total = weights.iter().sum();
+    let mut draw = stream.next_bounded(total)?;
+    Ok(preset
+        .threads
+        .iter()
+        .zip(weights)
+        .find_map(|(t, w)| {
+            if draw < w {
+                Some(t)
+            } else {
+                draw -= w;
+                None
+            }
+        })
+        .unwrap_or(&preset.threads[0]))
+}
+fn generate_v3(d: &ForgeDNA) -> ValidationResult<QuestCandidate> {
+    use crate::quest_content::Catalog;
+    let catalog = Catalog::get()?;
+    let preset = catalog
+        .presets
+        .get(d.recipe.universe_preset.as_str())
+        .ok_or_else(|| {
+            err(
+                ValidationCode::UnsupportedPreset,
+                "universe_preset",
+                "missing Quest corpus preset",
+            )
+        })?;
+    let frame_key = QuestField::Frame.key()?;
+    let mut frame_stream = FieldStream::derive(d, &frame_key)?;
+    let thread = select_thread(d, preset, &mut frame_stream)?;
+    let mut vals = FieldValues::new();
+    for f in FIELDS_V3 {
+        let key = f.key()?;
+        let value = if f == QuestField::Frame {
+            QuestFieldValue::Text(thread.id.clone())
+        } else {
+            let mut stream = FieldStream::derive(d, &key)?;
+            let pool: &[String] = match f {
+                QuestField::Title => &thread.titles,
+                QuestField::Patron => &thread.givers,
+                QuestField::Premise => &thread.premises,
+                QuestField::Objective => &thread.objectives,
+                QuestField::Stakes => &thread.stakes,
+                QuestField::Opposition => &thread.threats,
+                QuestField::Complications => &thread.complications,
+                QuestField::Twist => &thread.twists,
+                QuestField::MoralPressure => &thread.moral_pressures,
+                QuestField::Locations => &thread.locations,
+                QuestField::Rewards => &thread.rewards,
+                QuestField::Failure => &thread.consequences,
+                QuestField::FollowUp => &thread.followups,
+                QuestField::Clue => &thread.clues,
+                QuestField::Briefing => &thread.premises,
+                QuestField::Type => &thread.tags,
+                QuestField::Frame => unreachable!(),
+            };
+            let idx = stream.next_bounded(pool.len() as u64)? as usize;
+            let text = if f == QuestField::Briefing {
+                let base = format!("{}: {}", thread.givers[0], thread.premises[idx]);
+                d.recipe
+                    .constraints
+                    .get(&forge_contracts::ConstraintKey::new("inspiration")?)
+                    .map_or(base.clone(), |hint| format!("{base} Inspiration: {hint}"))
+            } else {
+                pool[idx].clone()
+            };
+            if matches!(
+                f,
+                QuestField::Complications
+                    | QuestField::Locations
+                    | QuestField::Rewards
+                    | QuestField::Failure
+                    | QuestField::FollowUp
+            ) {
+                QuestFieldValue::Texts(vec![text])
+            } else {
+                QuestFieldValue::Text(text)
+            }
+        };
+        vals.insert(key, value);
+    }
+    let id = EntityId::from_bytes(
+        blake3::hash(&d.canonical_bytes()?).as_bytes()[..16]
+            .try_into()
+            .unwrap(),
+    );
+    let mut quest = Quest {
+        envelope: EntityEnvelope {
+            id,
+            project_id: ProjectId::from_bytes([7; 16]),
+            entity_type: EntityType::Quest,
+            name: String::new(),
+            schema_version: d.schema_version,
+            canon_state: CanonState::Candidate,
+            origin: EntityOrigin::Generated,
+            favorite: false,
+            created_at_unix_ms: 0,
+            updated_at_unix_ms: 0,
+            tags: vec![
+                format!("preset:{}", d.recipe.universe_preset),
+                format!("thread:{}", thread.id),
+            ],
+            notes: None,
+            generation_provenance: None,
+        },
+        quest_type: String::new(),
+        premise: String::new(),
+        patron: String::new(),
+        objective: String::new(),
+        stakes: String::new(),
+        opposition: String::new(),
+        complications: vec![],
+        twist: String::new(),
+        moral_pressure: String::new(),
+        locations: vec![],
+        rewards: vec![],
+        failure_consequences: vec![],
+        follow_up_hooks: vec![],
+    };
+    let mut clue = String::new();
+    let mut briefing = String::new();
+    for f in FIELDS_V3 {
+        let value = vals[&f.key()?].clone();
+        match f {
+            QuestField::Clue => clue = text_value(&value)?,
+            QuestField::Briefing => briefing = text_value(&value)?,
+            _ => {}
+        }
+        set(&mut quest, f, value)?;
+    }
+    quest.envelope.generation_provenance = Some(GenerationMetadata {
+        generation_id: id,
+        generated_at_unix_ms: 0,
+        action: GenerationAction::Forge,
+        parent_generation_id: None,
+        dna: d.clone(),
+    });
+    let field_origins = FIELDS_V3
+        .into_iter()
+        .map(|f| Ok((f.key()?, QuestOrigin::Generated)))
+        .collect::<ValidationResult<_>>()?;
+    let candidate = QuestCandidate {
+        quest,
+        dna: d.clone(),
+        field_origins,
+        clue: Some(clue),
+        briefing: Some(briefing),
+    };
+    candidate.validate()?;
+    Ok(candidate)
+}
+fn text_value(value: &QuestFieldValue) -> ValidationResult<String> {
+    match value {
+        QuestFieldValue::Text(s) => Ok(s.clone()),
+        _ => Err(err(
+            ValidationCode::InvalidEntity,
+            "quest.field",
+            "expected text",
+        )),
+    }
 }
 type FieldsSet = BTreeSet<FieldKey>;
 fn generate_value(
@@ -387,7 +827,8 @@ fn generate_value(
         QuestField::Locations=>return Ok(QuestFieldValue::Texts(vec![place.to_string(),format!("{}",if epic>50 { ["the mountain signal tower","the records balcony","the locked approach below the hearing room"][n] } else { ["the service passage","the neighboring block","the clerk's side office"][n] })])),
         QuestField::Rewards=>return Ok(QuestFieldValue::Texts(vec![format!("{reward}, held in trust until the displaced can claim it"),format!("{}",["A sealed record naming the next person at risk","A signed warrant that protects the witness","A map of the hidden route to the archive"][n])])),
         QuestField::Failure=>return Ok(QuestFieldValue::Texts(vec![format!("{}.",["The crisis becomes permanent at the next census","The witness is charged before the evidence can be heard","The district loses its legal status at the next ruling"][n]),format!("The patron takes the blame, while {threat} gains lawful control of {place}.")])) ,
-        QuestField::FollowUp=>return Ok(QuestFieldValue::Texts(vec![format!("{}",["The sealed record names another district facing the same erasure","The witness sends a second copy to a rival authority","The patron's warrant bears a date from a case not yet opened"][n])]))
+        QuestField::FollowUp=>return Ok(QuestFieldValue::Texts(vec![format!("{}",["The sealed record names another district facing the same erasure","The witness sends a second copy to a rival authority","The patron's warrant bears a date from a case not yet opened"][n])])),
+        QuestField::Clue | QuestField::Briefing => return Err(err(ValidationCode::UnsupportedVersion, "field", "v3-only Quest fields are unavailable in v2")),
     };
     Ok(QuestFieldValue::Text(line))
 }
@@ -528,10 +969,12 @@ fn set(q: &mut Quest, f: QuestField, x: QuestFieldValue) -> ValidationResult<()>
         QuestField::Rewards => q.rewards = ts(x)?,
         QuestField::Failure => q.failure_consequences = ts(x)?,
         QuestField::FollowUp => q.follow_up_hooks = ts(x)?,
+        QuestField::Clue | QuestField::Briefing => {}
     }
     Ok(())
 }
-fn to_values(q: &Quest) -> ValidationResult<FieldValues<QuestFieldValue>> {
+fn to_values(c: &QuestCandidate) -> ValidationResult<FieldValues<QuestFieldValue>> {
+    let q = &c.quest;
     let mut m = FieldValues::new();
     for (f, v) in [
         (
@@ -588,7 +1031,45 @@ fn to_values(q: &Quest) -> ValidationResult<FieldValues<QuestFieldValue>> {
     ] {
         m.insert(f.key()?, v);
     }
+    if c.dna.content_version == V3 {
+        let thread = q
+            .envelope
+            .tags
+            .iter()
+            .find_map(|tag| tag.strip_prefix("thread:"))
+            .unwrap_or("claim-of-the-dead")
+            .to_string();
+        m.insert(QuestField::Frame.key()?, QuestFieldValue::Text(thread));
+        m.insert(
+            QuestField::Clue.key()?,
+            QuestFieldValue::Text(c.clue.clone().unwrap_or_default()),
+        );
+        m.insert(
+            QuestField::Briefing.key()?,
+            QuestFieldValue::Text(c.briefing.clone().unwrap_or_default()),
+        );
+    }
     Ok(m)
+}
+fn apply_candidate_value(
+    c: &mut QuestCandidate,
+    f: QuestField,
+    value: QuestFieldValue,
+) -> ValidationResult<()> {
+    match f {
+        QuestField::Clue => c.clue = Some(text_value(&value)?),
+        QuestField::Briefing => c.briefing = Some(text_value(&value)?),
+        QuestField::Frame => {
+            let id = text_value(&value)?;
+            c.quest
+                .envelope
+                .tags
+                .retain(|tag| !tag.starts_with("thread:"));
+            c.quest.envelope.tags.push(format!("thread:{id}"));
+        }
+        _ => set(&mut c.quest, f, value)?,
+    }
+    Ok(())
 }
 fn sync_provenance(c: &mut QuestCandidate) -> ValidationResult<()> {
     if let Some(p) = &mut c.quest.envelope.generation_provenance {
@@ -620,6 +1101,65 @@ mod tests {
         }
     }
     #[test]
+    fn version_three_recipe_generates_declarative_quest_content() {
+        let mut dna = QuestForge::new_dna(
+            RootSeed::new(44),
+            "pirate",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        dna.content_version = ContentVersion(3);
+        let candidate = QuestForge::generate(&dna).unwrap();
+        assert!(candidate.clue.as_deref().is_some_and(|s| !s.is_empty()));
+        assert!(candidate.briefing.as_deref().is_some_and(|s| !s.is_empty()));
+        assert_eq!(
+            candidate,
+            serde_json::from_str(&serde_json::to_string(&candidate).unwrap()).unwrap()
+        );
+    }
+    #[test]
+    fn quest_rejects_character_only_and_unknown_constraints() {
+        for key in ["no_magic", "must_be_non_human", "unknown_quest_rule"] {
+            let mut constraints = BTreeMap::new();
+            constraints.insert(
+                forge_contracts::ConstraintKey::new(key).unwrap(),
+                "true".into(),
+            );
+            assert_eq!(
+                QuestForge::new_dna(
+                    RootSeed::new(1),
+                    "occult",
+                    CreativeAxes::neutral(),
+                    constraints
+                )
+                .unwrap_err()
+                .errors[0]
+                    .code,
+                ValidationCode::InvalidConstraint
+            );
+        }
+    }
+    #[test]
+    fn inspiration_constraint_is_visible_in_briefing_and_unicode_roundtrips() {
+        let mut constraints = BTreeMap::new();
+        constraints.insert(
+            forge_contracts::ConstraintKey::new("inspiration").unwrap(),
+            "雪の港 — séance 🗝️".into(),
+        );
+        let candidate = QuestForge::generate(
+            &QuestForge::new_dna(
+                RootSeed::new(5),
+                "occult",
+                CreativeAxes::neutral(),
+                constraints,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(candidate.briefing.unwrap().contains("雪の港 — séance 🗝️"));
+    }
+    #[test]
     fn quest_reroll_obeys_locks() {
         let d = QuestForge::new_dna(
             RootSeed::new(9),
@@ -634,6 +1174,47 @@ mod tests {
         QuestForge::reroll_all(&mut q).unwrap();
         assert_eq!(q.quest.envelope.name, name);
         q.validate().unwrap();
+    }
+    #[test]
+    fn frame_reroll_preserves_locked_descendants_and_clue_values() {
+        let dna = QuestForge::new_dna(
+            RootSeed::new(919),
+            "pirate",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let mut candidate = QuestForge::generate(&dna).unwrap();
+        QuestForge::lock(&mut candidate, QuestField::Title).unwrap();
+        let title = candidate.quest.envelope.name.clone();
+        let changed = QuestForge::reroll_field(&mut candidate, QuestField::Frame).unwrap();
+        assert!(!changed.contains(&QuestField::Title));
+        assert_eq!(candidate.quest.envelope.name, title);
+        assert!(candidate.clue.as_ref().is_some_and(|s| !s.is_empty()));
+        candidate.validate().unwrap();
+    }
+    #[test]
+    fn reroll_all_preserves_manual_edits_and_original_lock_flags() {
+        let dna = QuestForge::new_dna(
+            RootSeed::new(920),
+            "pirate",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let mut candidate = QuestForge::generate(&dna).unwrap();
+        let edited = "My own title — 銀の港".to_owned();
+        candidate
+            .manual_edit(QuestField::Title, QuestFieldValue::Text(edited.clone()))
+            .unwrap();
+        let was_locked =
+            candidate.dna.recipe.field_controls[&QuestField::Title.key().unwrap()].locked;
+        QuestForge::reroll_all(&mut candidate).unwrap();
+        assert_eq!(candidate.quest.envelope.name, edited);
+        assert_eq!(
+            candidate.dna.recipe.field_controls[&QuestField::Title.key().unwrap()].locked,
+            was_locked
+        );
     }
     #[test]
     fn manual_edit_survives_unrelated_reroll_and_seed_changes_candidate() {

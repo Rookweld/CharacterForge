@@ -7,11 +7,11 @@
 **Current mission:** 03 — CALLING
 **Current status:** PARTIAL — Quest Forge prototype added; mission gates remain open
 **Target release:** v1.0.0 FOUNDATION
-**Last verified HEAD:** `8f18d3e09d53c4fb92708f0717922ab35e011165` (starting baseline; Mission 03 changes uncommitted)
-**Branch:** `master` (dirty from Mission 03; started clean; supplied character samples are preserved)
+**Last verified HEAD:** `5e84827e5605a18f3ff3b477daa86489d9055202` (Mission 03 remediation changes uncommitted)
+**Branch:** `master` (Mission 03 remediation changes uncommitted; this continuation began with the in-progress untracked v3 corpus)
 **Schema version:** 1
 **Generator version:** 1
-**Content version:** 2 (v1 retained for replay)
+**Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
 ## Architecture decisions currently locked
 
@@ -39,7 +39,8 @@
 - Mission 02 quality tests cover same-DNA reproducibility, no input DNA mutation, fixed seed outputs across all presets, 64-seed repetition sweeps, creative-axis extremes and distribution shifts, Chaos Blend, field cardinalities, structured invalid-input errors, dependency rerolls/firewalls, explicit locks, manual edits, and stable JSON serialization.
 - Mission 02 verification passed: `./scripts/verify.ps1` (frontend checks/test/build, Rust fmt/clippy/workspace tests, optimized Tauri build); 43 Rust unit tests passed (33 app-core, 10 contracts); `git diff --check` passed. Details are in `docs/missions/MISSION_02_REPORT.md`.
 - Mission 03 prototype adds a deterministic Quest candidate pipeline, CLI, all eleven core preset identifiers, and shared lock/reroll integration. Current quality evidence shows substantial exact multi-field similarity (up to 13/14 matching fields in seed sweeps), sparse three-choice fields, incomplete axis semantics, and coherence defects in reviewed preset samples. Mission 03 is **PARTIAL** and must not be closed.
-- Quest content version 2 is used for new Quest DNA; version 1 Quest generation is rejected because no frozen v1 Quest corpus existed. Character content versions 1 and 2 are unchanged.
+- Mission 03 remediation adds `content/quests/v3/core.json`, a deterministic declarative Quest path with semantic threads, clue, and briefing. Quest v2 generation remains available for replay; new Quest DNA uses v3. Character content versions 1 and 2 are unchanged.
+- Mission 03 remains PARTIAL after remediation: Chaos Blend mean shared public fields fell from 4.668 to 3.528, but pairs sharing >=10/14 fields rose from 2,083 to 15,990, pairs sharing >=8 rose from 30,149 to 88,856, and v3 produced four exact expanded clones. Most narrative fields have four observed values per preset. Mythic and Chaos controlled-axis shifts were not demonstrated; constraint vocabulary and human quality gates remain open. See `docs/QUEST_CONTENT_QUALITY_REPORT.md` and `docs/missions/MISSION_03_REPORT.md`.
 - Pre-Mission-03 SOUL diversity audit expanded the current corpus to content version 2 while preserving the v1 corpus and ForgeDNA stream/reroll semantics. Deterministic field-level, archetype-cluster, Chaos Blend, controlled-axis, and UTF-8 evidence is recorded in `docs/CONTENT_QUALITY_REPORT.md`; Mission 02 remains PASS after audit verification.
 
 ## Mission 00 closeout
@@ -56,7 +57,7 @@
 
 ## Deferred by design
 
-Persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features. Quest Forge is only partially implemented; see `docs/missions/MISSION_03_REPORT.md`.
+Persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features. Quest Forge remains PARTIAL; do not begin Mission 04 until the remaining Mission 03 gates are resolved. See `docs/missions/MISSION_03_REPORT.md`.
 
 ## Handoff
 

@@ -59,6 +59,6 @@ See [ADR 0002](adr/0002-forge-dna-and-field-streams.md) for the serialization an
 ## Mission 03 — Quest prototype (partial)
 
 - Quest generation is implemented in `forge-app-core` and reuses the existing ForgeDNA streams, nonce controls, and lock/reroll functions. The developer harness is `cargo run -p forge-app-core --example quest_forge -- --seed 42 --preset cyberpunk --axis technology=100`.
-- New Quest recipes use content version 2. Quest content version 1 is currently rejected; no historical Quest corpus was created before Mission 03.
-- The Quest preset thematic data is currently embedded in Rust source and the prose pools remain small. The intended declarative, versioned Quest corpus and complete quality/coherence gates remain unfinished. See the Mission 03 report.
+- Quest content version 2 remains available for replay; new Quest recipes use content version 3. The v3 corpus is `content/quests/v3/core.json`; the Rust loader validates it and deterministic selection/composition is separate from the JSON data. ForgeDNA wire encoding and field-stream derivation are unchanged.
+- V3 adds internal thread selection plus generated clue and briefing fields on `QuestCandidate` without changing the shared Quest entity contract. The compatibility boundary and quality limitations are recorded in the Mission 03 report. Mission 03 remains PARTIAL because field pools are shallow and Chaos Blend high-overlap counts worsened.
 - **Remediation compatibility decision:** the committed content-version-2 Quest output is treated as replay behavior and will remain frozen. New declarative Quest content uses content version 3. No ForgeDNA serialization, stream context, nonce, lock, or dependency semantics are changed.

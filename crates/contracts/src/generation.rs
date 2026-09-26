@@ -444,7 +444,7 @@ impl ForgeDNA {
         if self.generator_version != INITIAL_GENERATOR_VERSION {
             return Err(unsupported("generator_version", self.generator_version.0));
         }
-        if !matches!(self.content_version.0, 1 | 2) {
+        if !matches!(self.content_version.0, 1..=3) {
             return Err(unsupported("content_version", self.content_version.0));
         }
         self.recipe.validate()
@@ -647,7 +647,7 @@ mod tests {
         );
 
         let mut unsupported = dna;
-        unsupported.content_version = ContentVersion(3);
+        unsupported.content_version = ContentVersion(4);
         assert_eq!(
             unsupported.validate().unwrap_err().errors[0].code,
             ValidationCode::UnsupportedVersion

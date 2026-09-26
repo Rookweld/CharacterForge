@@ -4,6 +4,7 @@ mod character;
 mod character_content;
 mod field_stream;
 mod quest;
+mod quest_content;
 mod reroll;
 
 pub use character::{
