@@ -7,8 +7,8 @@
 **Current mission:** 01 — DNA
 **Current status:** PASS
 **Target release:** v1.0.0 FOUNDATION
-**Last verified commit:** `994ac6c95c51651afd90fa2e9864257cefc4694c` (working tree changes uncommitted)
-**Branch:** `master` (dirty; Mission 01 changes are uncommitted)
+**Last verified commit:** `b137179181ed90e07d6937c7629542d735e56681` (`feat: establish Forge DNA deterministic core`)
+**Branch:** `master` (dirty; pre-Mission-02 audit changes are uncommitted)
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 1
@@ -34,6 +34,7 @@
 - Human operator independently launched the built application from the normal interactive Windows desktop and verified a visible usable Tauri/WebView window, the expected title, and rendered React/Vite branding. This satisfies the Mission 00 GUI smoke gate.
 - Mission 01 added typed, versioned project/entity, Character/Quest, provenance, recipe, ForgeDNA, and validation contracts. Canonical serialization and BLAKE3 field streams are deterministic over explicit inputs; lock/reroll operations preserve locked and unrelated fields and commit atomically.
 - Mission 01 verification passed: frontend checks and React test, Rust formatting, clippy with warnings denied, 27 workspace tests, Cargo metadata, and optimized Tauri build. The consolidated script passed using a temporary Cargo target directory because the existing release executable was held open.
+- Pre-Mission-02 audit passed: explicit three-node cycle rejection/rollback and locked dependency-firewall tests; Rust formatting, clippy, consolidated verification, and 29 workspace tests passed.
 
 ## Mission 00 closeout
 
@@ -44,7 +45,7 @@
 
 - All Mission 01 exit criteria are satisfied. Mission 01 is closed; Mission 02 has not started.
 - **Architecture:** canonical ForgeDNA is compact JSON with deterministic map order, normalized identifiers/constraints, and supported version tuple 1/1/1/1. Per-field streams use BLAKE3 derive-key context `character-forge/forge-dna/field-stream/v1` and only explicit dependencies. See `docs/adr/0002-forge-dna-and-field-streams.md`.
-- **Git:** branch `master`, HEAD `994ac6c95c51651afd90fa2e9864257cefc4694c`, dirty with uncommitted Mission 01 changes. No commit was created.
+- **Git:** branch `master`, HEAD `b137179181ed90e07d6937c7629542d735e56681` (`feat: establish Forge DNA deterministic core`). Mission 01 baseline is committed; pre-Mission-02 audit changes remain uncommitted.
 - **Blockers/P0/P1:** none found within Mission 01 scope.
 
 ## Deferred by design

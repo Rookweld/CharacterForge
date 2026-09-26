@@ -577,6 +577,32 @@ mod tests {
     }
 
     #[test]
+    fn three_field_dependency_cycle_is_rejected_without_partial_mutation() {
+        let mut recipe = GenerationRecipe::new(
+            GenerationKind::Character,
+            RootSeed::new(3),
+            PresetId::new("core").unwrap(),
+        );
+        for field in ["a", "b", "c"] {
+            recipe.add_field(key(field)).unwrap();
+        }
+        recipe.set_dependencies(key("b"), [key("a")]).unwrap();
+        recipe.set_dependencies(key("c"), [key("b")]).unwrap();
+        let prior_dependencies = recipe.dependencies.clone();
+
+        let error = recipe.set_dependencies(key("a"), [key("c")]).unwrap_err();
+        assert_eq!(error.errors[0].code, ValidationCode::DependencyCycle);
+        assert_eq!(recipe.dependencies, prior_dependencies);
+        assert!(recipe.validate().is_ok());
+
+        // Public/deserialized input can still contain an invalid graph; validation rejects it
+        // iteratively with a structured error instead of recursing through the cycle.
+        recipe.dependencies.insert(key("a"), [key("c")].into());
+        let error = recipe.validate().unwrap_err();
+        assert_eq!(error.errors[0].code, ValidationCode::DependencyCycle);
+    }
+
+    #[test]
     fn seed_parser_rejects_empty_short_and_non_hex_values_without_panicking() {
         for invalid in ["", "1", "gggggggggggggggg", "00000000000000000"] {
             let error = RootSeed::parse_hex(invalid).unwrap_err();

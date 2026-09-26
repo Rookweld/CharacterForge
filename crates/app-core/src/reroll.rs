@@ -513,6 +513,41 @@ mod tests {
     }
 
     #[test]
+    fn locked_dependency_firewall_preserves_unlocked_descendants() {
+        let mut recipe = GenerationRecipe::new(
+            GenerationKind::Character,
+            RootSeed::new(21),
+            PresetId::new("core").unwrap(),
+        );
+        for field in ["a", "b", "c"] {
+            recipe.add_field(key(field)).unwrap();
+        }
+        // A -> B -> C means B explicitly depends on A, and C explicitly depends on B.
+        recipe.set_dependencies(key("b"), [key("a")]).unwrap();
+        recipe.set_dependencies(key("c"), [key("b")]).unwrap();
+        let mut dna = ForgeDNA::new(recipe);
+        lock_field(&mut dna, &key("b")).unwrap();
+        let mut values =
+            BTreeMap::from([(key("a"), 10_u64), (key("b"), 20_u64), (key("c"), 30_u64)]);
+        let before_b = values[&key("b")];
+        let before_c = values[&key("c")];
+
+        let result = reroll_field(&mut dna, &mut values, &key("a"), |_, stream| {
+            Ok(stream.next_u64())
+        })
+        .unwrap();
+
+        assert_eq!(result.changed_fields, vec![key("a")]);
+        assert_ne!(values[&key("a")], 10);
+        assert_eq!(dna.recipe.field_controls[&key("a")].nonce, FieldNonce(1));
+        assert_eq!(values[&key("b")], before_b);
+        assert_eq!(dna.recipe.field_controls[&key("b")].nonce, FieldNonce(0));
+        assert_eq!(values[&key("c")], before_c);
+        assert_eq!(dna.recipe.field_controls[&key("c")].nonce, FieldNonce(0));
+        assert!(!dna.recipe.field_controls[&key("c")].locked);
+    }
+
+    #[test]
     fn failed_generation_is_atomic_for_values_and_dna() {
         let mut dna = dna(16);
         dna.recipe
