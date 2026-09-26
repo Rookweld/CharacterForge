@@ -4,6 +4,47 @@
 
 **PARTIAL.** The v3 declarative corpus and generation path are implemented, but the similarity gate regressed at the important high-overlap thresholds, most field pools remain shallow, the axis experiment is inconclusive for two axes, and human review/coherence is not complete. Mission 04 remains blocked by Mission 03.
 
+## Remediation II — pre-fix selection-cluster investigation
+
+This section records the Phase 1/2 investigation before changing v3 selection or corpus content. The developer audit now emits stable content fingerprints and local option ordinals for each selected field (`thread/<id>`, `<field>/item-<content-hash>/option-<ordinal>`) plus the briefing composition ID. The IDs are generated only in the audit path and are not added to the Quest contract. The exact selected IDs and seed-indexed records are emitted by `quest_quality_audit`.
+
+### Root cause
+
+All **15,990 / 15,990** pairs at >=10/14 shared the same one selected thread. Cross-thread pairs produced **zero** >=10/14 matches. Same-thread pairs averaged **6.634 /14** equal public fields. The two largest upstream clusters were:
+
+| Selected thread | Seeds in cluster | >=10/14 pairs within it |
+|---|---:|---:|
+| `tide-memory-archive` | 642 | 11,679 |
+| `mythic-salvage` | 382 | 4,311 |
+
+The highest-neighbor seeds in the exact sweep were 129 (55 high-similarity partners), 362 (53), 183 (52), 498 (51), and 93, 94, 97, 400, and 465 (50 each). The complete seed membership and per-seed internal IDs are in the audit's `selection_records` and `thread_clusters` output. Within the high-pair set, each of location, stakes, objective, threat, complication, clue, reward, consequence, moral pressure, title, twist, and quest giver matched in roughly 12.2k pairs; field-local option choices are not aliases of one stream. `quest_type` is a tag sampled from a larger pool and matched in 5,090 high pairs.
+
+**Primary cause:** the v3 generator first picks a single fixed story thread, and every identity-bearing field then selects from a two-choice pool inside that thread. For pairs with the same thread, each binary field has about a 1/2 match chance; for pairs with different threads, many fields cannot match at all. The two-thread mix lowers the global average to 3.528, but conditioning on a shared thread puts the pair in the high-tail regime. This explains why the mean improved while the >=10 tail rose from 2,083 to 15,990. Briefing also uses `thread.givers[0]` rather than the selected giver, coupling it to the thread and premise. There is no accidental identical field stream, no compatibility filter reducing a larger set, and no cross-thread high-similarity cluster. The fixed thread bundle plus binary family depth is the structural cause.
+
+### V3 baseline field concentration
+
+For each cell below, values are `unique / most-common % / top-3 combined %`, across 256 seeds (1,024 for Chaos Blend). Percentages are measured on final rendered values; the top-three measure exposes the heavy concentration even where a field has four distinct strings.
+
+| Preset | Title | Location | Giver | Objective | Stakes | Threat | Complication | Clue | Reward | Consequence | Moral pressure | Briefing |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Dark fantasy | 4/32/82 | 4/32/80 | 4/30/80 | 4/31/84 | 4/34/81 | 4/37/80 | 4/30/80 | 4/30/81 | 4/32/82 | 4/31/81 | 4/30/80 | 4/30/80 |
+| Pirate | 4/27/78 | 4/29/78 | 4/28/81 | 4/28/77 | 4/28/80 | 4/29/79 | 4/29/77 | 4/30/77 | 4/29/78 | 4/29/77 | 4/28/79 | 4/27/80 |
+| Steampunk | 4/41/91 | 4/42/90 | 4/46/93 | 4/43/91 | 4/43/91 | 4/43/91 | 4/45/92 | 4/41/90 | 4/42/91 | 4/45/91 | 4/41/91 | 4/41/92 |
+| Cyberpunk | 4/36/86 | 4/40/88 | 4/39/86 | 4/36/87 | 4/36/88 | 4/39/86 | 4/38/88 | 4/38/88 | 4/36/89 | 4/37/87 | 4/39/86 | 4/37/87 |
+| Nordic myth | 4/32/80 | 4/31/77 | 4/28/79 | 4/28/78 | 4/29/81 | 4/29/79 | 4/27/79 | 4/29/79 | 4/31/80 | 4/35/80 | 4/29/78 | 4/28/79 |
+| Post-apocalyptic | 4/34/83 | 4/32/84 | 4/32/82 | 4/32/83 | 4/34/83 | 4/33/82 | 4/32/82 | 4/32/84 | 4/32/83 | 4/32/84 | 4/34/82 | 4/36/84 |
+| Occult | 4/31/80 | 4/32/79 | 4/29/80 | 4/31/80 | 4/30/80 | 4/31/81 | 4/29/80 | 4/29/83 | 4/29/80 | 4/32/79 | 4/29/81 | 4/33/79 |
+| Monster hunter | 4/34/86 | 4/35/86 | 4/38/87 | 4/36/87 | 4/37/86 | 4/37/86 | 4/36/85 | 4/37/85 | 4/43/85 | 4/35/84 | 4/38/85 | 4/39/85 |
+| Rogue assassin | 4/28/77 | 4/26/77 | 4/27/78 | 4/26/76 | 4/27/78 | 4/28/79 | 4/27/78 | 4/26/75 | 4/28/79 | 4/27/78 | 4/27/78 | 4/27/77 |
+| Contemporary weird | 4/44/93 | 4/43/95 | 4/43/93 | 4/42/95 | 4/43/93 | 4/48/93 | 4/44/93 | 4/44/95 | 4/50/92 | 4/43/92 | 4/48/93 | 4/42/93 |
+| Chaos Blend | 4/32/82 | 4/34/82 | 4/32/82 | 4/33/84 | 4/31/82 | 4/34/82 | 4/32/83 | 4/33/82 | 4/32/82 | 4/32/82 | 4/32/82 | 4/31/82 |
+
+Every listed identity-bearing field has only four values in each preset sample. Many top-three concentrations exceed 80%; this confirms that the problem is the per-thread binary pool design, not merely the number of full-candidate combinations.
+
+### Content-version decision
+
+The committed checkpoint labels Mission 03 **PARTIAL** and contains no v3 golden compatibility promise or v3 freeze decision. The explicit compatibility decision freezes Quest v2 replay; v3 was the unfinished remediation path. Therefore this run refines v3 in place. Quest v2 remains unchanged; no v4 is introduced.
+
 ## Original PARTIAL findings and causes
 
 The initial v2 audit used 1,024 Chaos Blend seeds and measured 2,083/523,776 pairs sharing at least 10 of 14 public Quest fields, 30,149 pairs sharing at least 8, mean 4.668 shared fields, maximum 13, and no exact clones. Each of six measured fields had three distinct values. The Rust `theme()` switch selected one fixed preset tuple; field prose drew from three shared variants. This is shallow reusable template content, not a failure of ForgeDNA stream separation.
@@ -94,10 +135,59 @@ Samples below are seed 0, neutral axes, no constraint. Each line includes the ce
 | Monster hunter | **A Trail of Warm Scales.** A healer asks the party to redirect a brood before market day. Venom appears upstream from the trail; a trophy hunter hides the only safe route. The wells are cured, but the healer closes the clinic to stop spread. |
 | Rogue assassin | **The Informant Who Wasn't There.** A bodyguard wants the informant moved before a purge. A route ledger shows a detour added after the target left; a rival escort knows the fallback routes. The informant escapes, but the lookout faces the network. |
 | Contemporary weird | **A Stop No One Remembers.** A neighborhood organizer asks the party to document a route serving a block missing from the city map. The driver's paper log lists passengers the camera missed; the route returns whenever someone names the stop. The stop returns to the map, but one passenger remains missing. |
-| Chaos Blend | **The Chart That Remembered.** A copied-memory chart smuggler asks the party to prove a living district exists before sunrise. A ledger records a tide from a vanished sea; the harbor court's daemon controls the archive gates. Restoring the district makes copied memories public evidence. |
+| Chaos Blend (Remediation II seed 0) | **A Harbor with Two Histories.** An oath-speaker asks the party to reach the signal tower and guide a convoy past drowned boundary stones before settlements lose their water. A carved boundary stone carries the pump's serial mark; a sworn guardian mistakes the salvage crew for oath-breakers. The settlements share the water while the guardian keeps the pump key. The mixed location is the tide-powered signal archive; the reward is a claim ticket honored by harbor law and machine code. |
 
 Additional audit samples include 16 seed-42 axis extremes and an Occult `inspiration` constraint sample (“a map written in starlight — 星 🗝️”). For example, the constrained briefing includes the Unicode inspiration verbatim. The v3 Chaos Blend sample is coherent at a glance, but its field pool remains small and its clue does not directly prove the district is inhabited.
 
 ## Verification scope and remaining limitations
 
 Focused Quest tests cover determinism, all eleven presets, v3 clue/briefing, JSON Unicode roundtrip, inspiration visibility, structured rejection of unsupported constraints, lock-aware frame reroll, manual edits, and reroll-all preservation of manual edits and original lock flags. The corpus parser validates schema/depth/ids but does not yet validate every semantic relationship or duplicate choice. A full constraint matrix, robust atomic failure injection after a partially planned generation, representative human review, and reliable axes evidence remain outstanding. The final consolidated verification and workspace checks are recorded in the Mission 03 report.
+
+## Remediation II — cluster collapse and axis proof (2026-09-26)
+
+The pre-content investigation above is the instrument-first baseline. It found that every pre-fix pair sharing at least 10 of 14 public fields belonged to one selected thread: 11,679 `tide-memory-archive` pairs and 4,311 `mythic-salvage` pairs. The selected Frame fixed one shallow two-choice pool for almost every field. Within those high pairs, 12 identity fields each matched in about 12,200 pairs. Distinct per-field streams were not aliases; their pools were coupled by the one-thread bundle. This explains the paradox: v3 lowered average overlap by adding a second thread, while the thread-local fields formed a larger high-similarity tail than v2.
+
+### Structural correction
+
+Quest v3 now treats Chaos Blend as a coherent story spine plus deterministic secondary-role source mixing. The selected Frame remains the spine for giver, premise, objective, stakes, threat, clue, consequence, and quest type. Explicitly `mix-compatible` source threads can supply title, location, complication, twist, moral pressure, reward, and follow-up according to each field's existing stream and the Chaos axis. Chaos 0 keeps those roles on the spine; Chaos 100 selects the other compatible source. No global random source, ForgeDNA protocol change, persistence, or v4 was introduced. The compatibility marker is excluded from user-facing quest-type selection.
+
+Briefing is now composed from the selected giver and premise. Its dependency list includes Frame, Patron, and Premise, and a regression test confirms that rerolling either input recomposes the briefing. Quest v2 is unchanged. The repository's committed PARTIAL checkpoint freezes v2 replay, but makes no v3 replay promise; v3 is therefore refined in place, with no v4.
+
+### Same 1,024-seed Chaos Blend audit
+
+All 523,776 pairs use the same original 14-field equality basis. The final audit found:
+
+| Metric | Initial v2 | Previous v3 | Remediation II v3 |
+|---|---:|---:|---:|
+| Exact expanded clones | 0 | 4 | 0 |
+| Pairs >=12/14 | not recorded | not recorded | 23 |
+| Pairs >=10/14 | 2,083 | 15,990 | 1,162 |
+| Pairs >=8/14 | 30,149 | 88,856 | 18,071 |
+| Mean equal fields | 4.668 | 3.528 | 3.409 |
+| Median equal fields | not recorded | not recorded | 3 |
+| Maximum equal fields | 13 | 14 | 13 |
+| Unique expanded candidates | 1,024 | 1,020 | 1,024 |
+
+The >=10 count is down 92.7% from the previous v3 run and 44.2% below v2. All 1,162 remaining >=10 pairs still share their primary thread (856 mythic-spine pairs; 306 tide-spine pairs); no cross-spine pair entered that tail. This remaining correlation is visible in the field-level data and is not declared solved. The largest connected component of the >=10 pair graph contains 584 seeds, beginning `0, 1, 3, 5, 7, 8, 9, 11, 12, 14, 15, 18, 22, 25, 27`; the next contains 176 seeds, beginning `13, 19, 24, 47, 57, 69, 72, 77, 80, 81, 91, 95, 99, 102, 108`. These are connected components via pair edges, not claims that every pair inside directly matches >=10. The largest per-seed high-pair neighborhood is seed 508 and seed 703 with 8 partners each. The full membership and selection IDs are emitted by `quest_quality_audit`.
+
+### Concentration and controlled axes
+
+The final Chaos Blend sample still has four rendered choices in each ordinary identity-bearing corpus field (title, location, giver, objective, stakes, threat, complication, clue, reward, consequence, moral pressure, follow-up, and twist); Briefing has eight giver-premise combinations. Top-one / top-three concentration remains high: roughly 25.9% / 77.3% for location, 26.0% / 76.0% for title, 32.5% / 82.6% for giver, 31.3% / 81.6% for objective, 31.2% / 81.6% for stakes, 31.4% / 83.1% for threat, 26.5% / 76.1% for complication, 32.2% / 81.2% for clue, 26.9% / 75.9% for reward, 32.4% / 82.2% for consequence, and 26.2% / 75.8% for moral pressure. The earlier per-preset table reports all 12 required fields' unique/top-one/top-three measurements across every preset; non-Chaos pools are unchanged by this source-selection correction. The low unique counts remain a material gate.
+
+Controlled same-seed Mythic comparisons on Chaos Blend (256 seeds, only Mythic changed) selected `mythic-salvage` 99 times at level 0 and 194 times at level 100. Mythic now has a direct semantic target: the thread explicitly tagged `mythic`, with stronger affinity in the selector. Controlled Chaos comparisons keep primary-thread counts nearly unchanged (150/106 vs 145/111) while changing secondary location source: low Chaos uses the spine for 256/256 seeds; high Chaos uses the compatible alternate source for 256/256 seeds. These prove intentional effects on story-family weighting and source mixing, respectively.
+
+### Regression review and remaining gates
+
+The final generated samples cover all eleven presets, axis extremes, and an inspiration-constrained output. They show the narrative chain remains connected for ordinary presets. Chaos's deliberately mixed secondary roles can still produce thematic seams; the cross-source alternatives need a human quality pass. The corpus still offers only two authored alternatives per source thread, and the four-value field result makes credible broad field-level diversity unproven. Quest's supported constraint surface remains only `inspiration`; its valid/empty/overlength matrix was exercised across all eleven presets, while unsupported and Character-only constraints remain structured errors. No broader semantic Quest filters are claimed. Human acceptance is not automated.
+
+Mission 03 therefore remains **PARTIAL**. The cluster regression and both axis proofs pass, but field depth, Chaos seam review, complete semantic constraint policy, and human coherence/wording acceptance remain open.
+
+### Final verification record
+
+- Targeted Quest tests: 13 passed, 0 failed.
+- `cargo fmt --all -- --check`: passed.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed.
+- `cargo test --workspace`: 62 passed (52 app-core and 10 contracts), 0 failed.
+- `cargo metadata --no-deps --format-version 1`: passed.
+- `./scripts/verify.ps1`: passed; frontend format/lint/typecheck, 1 frontend test, frontend build, Rust workspace checks/tests, and optimized Tauri no-bundle build passed.
+- `git diff --check`: passed.

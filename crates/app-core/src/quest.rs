@@ -131,6 +131,202 @@ pub struct QuestCandidate {
     pub briefing: Option<String>,
 }
 impl QuestCandidate {
+    /// Developer audit identifiers for selected v3 content; never serialized into Quest entities.
+    #[doc(hidden)]
+    pub fn audit_selection_ids(&self) -> ValidationResult<BTreeMap<String, String>> {
+        if self.dna.content_version != V3 {
+            return Ok(BTreeMap::new());
+        }
+        let preset = self.dna.recipe.universe_preset.as_str();
+        let catalog = crate::quest_content::Catalog::get()?;
+        let content = catalog.presets.get(preset).ok_or_else(|| {
+            err(
+                ValidationCode::UnsupportedPreset,
+                "universe_preset",
+                "missing Quest corpus preset",
+            )
+        })?;
+        let thread_id = self
+            .quest
+            .envelope
+            .tags
+            .iter()
+            .find_map(|tag| tag.strip_prefix("thread:"))
+            .ok_or_else(|| {
+                err(
+                    ValidationCode::InvalidEntity,
+                    "quest.thread",
+                    "v3 audit requires a selected thread",
+                )
+            })?;
+        let thread = content
+            .threads
+            .iter()
+            .find(|thread| thread.id == thread_id)
+            .ok_or_else(|| {
+                err(
+                    ValidationCode::InvalidEntity,
+                    "quest.thread",
+                    "selected thread is absent from the corpus",
+                )
+            })?;
+        let mut selections = BTreeMap::new();
+        selections.insert("theme/thread".into(), format!("thread/{}", thread.id));
+        let mut add =
+            |key: &str, selected: &str, primary_pool: &[String]| -> ValidationResult<()> {
+                let (source_thread, pool) = content
+                    .threads
+                    .iter()
+                    .find_map(|candidate| {
+                        let pool = match key {
+                            "title" => &candidate.titles,
+                            "location" => &candidate.locations,
+                            "quest_type" => &candidate.tags,
+                            "premise" => &candidate.premises,
+                            "quest_giver" => &candidate.givers,
+                            "objective" => &candidate.objectives,
+                            "stakes" => &candidate.stakes,
+                            "threat" => &candidate.threats,
+                            "complication" => &candidate.complications,
+                            "twist" => &candidate.twists,
+                            "clue" => &candidate.clues,
+                            "reward" => &candidate.rewards,
+                            "consequence" => &candidate.consequences,
+                            "moral_pressure" => &candidate.moral_pressures,
+                            "follow_up" => &candidate.followups,
+                            _ => primary_pool,
+                        };
+                        pool.iter()
+                            .any(|choice| choice == selected)
+                            .then_some((candidate, pool))
+                    })
+                    .unwrap_or((thread, primary_pool));
+                let index = pool
+                    .iter()
+                    .position(|choice| choice == selected)
+                    .ok_or_else(|| {
+                        err(
+                            ValidationCode::InvalidEntity,
+                            "quest.audit.selection",
+                            "rendered selection is not present in its source pool",
+                        )
+                    })?;
+                let fingerprint = blake3::hash(format!("{key}\0{selected}").as_bytes())
+                    .to_hex()
+                    .to_string();
+                selections.insert(
+                    key.into(),
+                    format!("{key}/item-{}/option-{index}", &fingerprint[..12]),
+                );
+                if matches!(
+                    key,
+                    "title"
+                        | "location"
+                        | "complication"
+                        | "twist"
+                        | "reward"
+                        | "moral_pressure"
+                        | "follow_up"
+                ) {
+                    selections.insert(
+                        format!("source/{key}"),
+                        format!("thread/{}", source_thread.id),
+                    );
+                }
+                Ok(())
+            };
+        add("title", &self.quest.envelope.name, &thread.titles)?;
+        let type_tags = thread
+            .tags
+            .iter()
+            .filter(|tag| tag.as_str() != "mix-compatible")
+            .cloned()
+            .collect::<Vec<_>>();
+        add("quest_type", &self.quest.quest_type, &type_tags)?;
+        add("premise", &self.quest.premise, &thread.premises)?;
+        add(
+            "location",
+            self.quest
+                .locations
+                .first()
+                .map(String::as_str)
+                .unwrap_or_default(),
+            &thread.locations,
+        )?;
+        add("quest_giver", &self.quest.patron, &thread.givers)?;
+        add("objective", &self.quest.objective, &thread.objectives)?;
+        add("stakes", &self.quest.stakes, &thread.stakes)?;
+        add("threat", &self.quest.opposition, &thread.threats)?;
+        add(
+            "complication",
+            self.quest
+                .complications
+                .first()
+                .map(String::as_str)
+                .unwrap_or_default(),
+            &thread.complications,
+        )?;
+        add("twist", &self.quest.twist, &thread.twists)?;
+        add(
+            "clue",
+            self.clue.as_deref().unwrap_or_default(),
+            &thread.clues,
+        )?;
+        add(
+            "reward",
+            self.quest
+                .rewards
+                .first()
+                .map(String::as_str)
+                .unwrap_or_default(),
+            &thread.rewards,
+        )?;
+        add(
+            "consequence",
+            self.quest
+                .failure_consequences
+                .first()
+                .map(String::as_str)
+                .unwrap_or_default(),
+            &thread.consequences,
+        )?;
+        add(
+            "moral_pressure",
+            &self.quest.moral_pressure,
+            &thread.moral_pressures,
+        )?;
+        add(
+            "follow_up",
+            self.quest
+                .follow_up_hooks
+                .first()
+                .map(String::as_str)
+                .unwrap_or_default(),
+            &thread.followups,
+        )?;
+        let briefing_premise = self
+            .briefing
+            .as_deref()
+            .unwrap_or_default()
+            .split_once(": ")
+            .map(|(_, premise)| premise)
+            .unwrap_or_default();
+        let giver_hash = blake3::hash(format!("briefing.giver\0{}", self.quest.patron).as_bytes())
+            .to_hex()
+            .to_string();
+        let premise_hash = blake3::hash(format!("briefing.premise\0{briefing_premise}").as_bytes())
+            .to_hex()
+            .to_string();
+        selections.insert(
+            "briefing/composition".into(),
+            format!(
+                "briefing/giver-premise-v1/giver-{}/premise-{}",
+                &giver_hash[..12],
+                &premise_hash[..12]
+            ),
+        );
+        Ok(selections)
+    }
     pub fn manual_edit(
         &mut self,
         field: QuestField,
@@ -202,7 +398,18 @@ impl QuestForge {
             r.add_field(f.key()?)?;
         }
         for f in FIELDS_V3.into_iter().skip(1) {
-            r.set_dependencies(f.key()?, [QuestField::Frame.key()?])?;
+            if f == QuestField::Briefing {
+                r.set_dependencies(
+                    f.key()?,
+                    [
+                        QuestField::Frame.key()?,
+                        QuestField::Patron.key()?,
+                        QuestField::Premise.key()?,
+                    ],
+                )?;
+            } else {
+                r.set_dependencies(f.key()?, [QuestField::Frame.key()?])?;
+            }
         }
         let mut d = ForgeDNA::new(r);
         d.content_version = V3;
@@ -479,17 +686,53 @@ fn generate_versioned_value(
                     .map_or_else(|_| preset.threads[0].id.clone(), |t| t.id.clone())
             })
     };
-    let thread = preset
+    let primary_thread = preset
         .threads
         .iter()
         .find(|t| t.id == thread_id)
         .unwrap_or(&preset.threads[0]);
     if f == QuestField::Frame {
-        return Ok(QuestFieldValue::Text(thread.id.clone()));
+        return Ok(QuestFieldValue::Text(primary_thread.id.clone()));
     }
+    let secondary_role = matches!(
+        f,
+        QuestField::Title
+            | QuestField::Locations
+            | QuestField::Complications
+            | QuestField::Twist
+            | QuestField::MoralPressure
+            | QuestField::Rewards
+            | QuestField::FollowUp
+    );
+    let mut source = primary_thread;
+    if preset.id == "chaos-blend" && secondary_role {
+        let chaos = *d
+            .recipe
+            .creative_axes
+            .levels
+            .get(&CreativeAxis::Chaos)
+            .unwrap_or(&50) as u64;
+        let compatible = preset
+            .threads
+            .iter()
+            .filter(|t| {
+                t.id != primary_thread.id && t.tags.iter().any(|tag| tag == "mix-compatible")
+            })
+            .collect::<Vec<_>>();
+        if !compatible.is_empty() && s.next_bounded(100)? < chaos {
+            source = compatible[s.next_bounded(compatible.len() as u64)? as usize];
+        }
+    }
+    let thread = source;
+    let type_tags = thread
+        .tags
+        .iter()
+        .filter(|tag| tag.as_str() != "mix-compatible")
+        .cloned()
+        .collect::<Vec<_>>();
     let pool = match f {
         QuestField::Title => &thread.titles,
-        QuestField::Type => &thread.tags,
+        QuestField::Type => &type_tags,
         QuestField::Premise => &thread.premises,
         QuestField::Patron => &thread.givers,
         QuestField::Objective => &thread.objectives,
@@ -508,7 +751,15 @@ fn generate_versioned_value(
     };
     let index = s.next_bounded(pool.len() as u64)? as usize;
     let value = if f == QuestField::Briefing {
-        format!("{}: {}", thread.givers[0], pool[index])
+        let giver = values
+            .get(&QuestField::Patron.key()?)
+            .and_then(|v| text_value(v).ok())
+            .unwrap_or_else(|| thread.givers[0].clone());
+        let premise = values
+            .get(&QuestField::Premise.key()?)
+            .and_then(|v| text_value(v).ok())
+            .unwrap_or_else(|| pool[index].clone());
+        format!("{giver}: {premise}")
     } else {
         pool[index].clone()
     };
@@ -623,7 +874,7 @@ fn select_thread<'a>(
                 (CreativeAxis::Ambiguity, "ambiguity"),
             ] {
                 if tags.contains(tag) {
-                    w += level(axis) * 8;
+                    w += level(axis) * if axis == CreativeAxis::Mythic { 40 } else { 8 };
                 }
             }
             w
@@ -664,51 +915,11 @@ fn generate_v3(d: &ForgeDNA) -> ValidationResult<QuestCandidate> {
     let mut vals = FieldValues::new();
     for f in FIELDS_V3 {
         let key = f.key()?;
+        let mut stream = FieldStream::derive(d, &key)?;
         let value = if f == QuestField::Frame {
             QuestFieldValue::Text(thread.id.clone())
         } else {
-            let mut stream = FieldStream::derive(d, &key)?;
-            let pool: &[String] = match f {
-                QuestField::Title => &thread.titles,
-                QuestField::Patron => &thread.givers,
-                QuestField::Premise => &thread.premises,
-                QuestField::Objective => &thread.objectives,
-                QuestField::Stakes => &thread.stakes,
-                QuestField::Opposition => &thread.threats,
-                QuestField::Complications => &thread.complications,
-                QuestField::Twist => &thread.twists,
-                QuestField::MoralPressure => &thread.moral_pressures,
-                QuestField::Locations => &thread.locations,
-                QuestField::Rewards => &thread.rewards,
-                QuestField::Failure => &thread.consequences,
-                QuestField::FollowUp => &thread.followups,
-                QuestField::Clue => &thread.clues,
-                QuestField::Briefing => &thread.premises,
-                QuestField::Type => &thread.tags,
-                QuestField::Frame => unreachable!(),
-            };
-            let idx = stream.next_bounded(pool.len() as u64)? as usize;
-            let text = if f == QuestField::Briefing {
-                let base = format!("{}: {}", thread.givers[0], thread.premises[idx]);
-                d.recipe
-                    .constraints
-                    .get(&forge_contracts::ConstraintKey::new("inspiration")?)
-                    .map_or(base.clone(), |hint| format!("{base} Inspiration: {hint}"))
-            } else {
-                pool[idx].clone()
-            };
-            if matches!(
-                f,
-                QuestField::Complications
-                    | QuestField::Locations
-                    | QuestField::Rewards
-                    | QuestField::Failure
-                    | QuestField::FollowUp
-            ) {
-                QuestFieldValue::Texts(vec![text])
-            } else {
-                QuestFieldValue::Text(text)
-            }
+            generate_versioned_value(f, d, &vals, &mut stream)?
         };
         vals.insert(key, value);
     }
@@ -1141,6 +1352,119 @@ mod tests {
         }
     }
     #[test]
+    fn supported_constraint_matrix_is_consistent_across_every_preset() {
+        for preset in PRESETS {
+            let mut constraints = BTreeMap::new();
+            constraints.insert(
+                forge_contracts::ConstraintKey::new("inspiration").unwrap(),
+                "A lantern under the harbor — 星".into(),
+            );
+            let dna = QuestForge::new_dna(
+                RootSeed::new(1703),
+                preset,
+                CreativeAxes::neutral(),
+                constraints,
+            )
+            .unwrap();
+            let candidate = QuestForge::generate(&dna).unwrap();
+            assert!(
+                candidate
+                    .briefing
+                    .unwrap()
+                    .contains("A lantern under the harbor — 星")
+            );
+            for invalid in [" ".to_owned(), "x".repeat(201)] {
+                let mut invalid_constraints = BTreeMap::new();
+                invalid_constraints.insert(
+                    forge_contracts::ConstraintKey::new("inspiration").unwrap(),
+                    invalid,
+                );
+                let error = QuestForge::new_dna(
+                    RootSeed::new(1703),
+                    preset,
+                    CreativeAxes::neutral(),
+                    invalid_constraints,
+                )
+                .unwrap_err();
+                assert_eq!(error.errors[0].code, ValidationCode::InvalidConstraint);
+            }
+        }
+    }
+    #[test]
+    fn chaos_axis_increases_secondary_role_source_mixing() {
+        let mut low = CreativeAxes::neutral();
+        let mut high = CreativeAxes::neutral();
+        low.levels.insert(CreativeAxis::Chaos, 0);
+        high.levels.insert(CreativeAxis::Chaos, 100);
+        let mut low_cross = 0;
+        let mut high_cross = 0;
+        for seed in 0..256 {
+            let a = QuestForge::generate(
+                &QuestForge::new_dna(
+                    RootSeed::new(seed),
+                    "chaos-blend",
+                    low.clone(),
+                    BTreeMap::new(),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let b = QuestForge::generate(
+                &QuestForge::new_dna(
+                    RootSeed::new(seed),
+                    "chaos-blend",
+                    high.clone(),
+                    BTreeMap::new(),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let ai = a.audit_selection_ids().unwrap();
+            let bi = b.audit_selection_ids().unwrap();
+            low_cross += usize::from(ai["source/location"] != ai["theme/thread"]);
+            high_cross += usize::from(bi["source/location"] != bi["theme/thread"]);
+        }
+        assert!(
+            high_cross >= 240,
+            "Chaos high should mix source themes in almost every paired seed: {low_cross} -> {high_cross}"
+        );
+        assert!(
+            high_cross > low_cross + 180,
+            "Chaos must materially shift source mixing: {low_cross} -> {high_cross}"
+        );
+    }
+    #[test]
+    fn mythic_axis_shifts_the_selected_quest_story_family() {
+        let mut low = CreativeAxes::neutral();
+        let mut high = CreativeAxes::neutral();
+        low.levels.insert(CreativeAxis::Mythic, 0);
+        high.levels.insert(CreativeAxis::Mythic, 100);
+        let count = |axes: CreativeAxes| {
+            (0..256)
+                .filter(|seed| {
+                    let candidate = QuestForge::generate(
+                        &QuestForge::new_dna(
+                            RootSeed::new(*seed),
+                            "chaos-blend",
+                            axes.clone(),
+                            BTreeMap::new(),
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                    candidate.audit_selection_ids().unwrap()["theme/thread"]
+                        == "thread/mythic-salvage"
+                })
+                .count()
+        };
+        let low_count = count(low);
+        let high_count = count(high);
+        assert!(
+            high_count >= low_count + 80,
+            "Mythic should favor the tagged mythic family: {low_count} -> {high_count}"
+        );
+    }
+    #[test]
     fn inspiration_constraint_is_visible_in_briefing_and_unicode_roundtrips() {
         let mut constraints = BTreeMap::new();
         constraints.insert(
@@ -1191,6 +1515,48 @@ mod tests {
         assert!(!changed.contains(&QuestField::Title));
         assert_eq!(candidate.quest.envelope.name, title);
         assert!(candidate.clue.as_ref().is_some_and(|s| !s.is_empty()));
+        candidate.validate().unwrap();
+    }
+    #[test]
+    fn briefing_recomposes_after_patron_and_premise_rerolls() {
+        let dna = QuestForge::new_dna(
+            RootSeed::new(921),
+            "chaos-blend",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let mut candidate = QuestForge::generate(&dna).unwrap();
+        QuestForge::reroll_field(&mut candidate, QuestField::Patron).unwrap();
+        assert!(
+            candidate
+                .briefing
+                .as_ref()
+                .unwrap()
+                .starts_with(&candidate.quest.patron)
+        );
+        assert!(
+            candidate
+                .briefing
+                .as_ref()
+                .unwrap()
+                .contains(&candidate.quest.premise)
+        );
+        QuestForge::reroll_field(&mut candidate, QuestField::Premise).unwrap();
+        assert!(
+            candidate
+                .briefing
+                .as_ref()
+                .unwrap()
+                .starts_with(&candidate.quest.patron)
+        );
+        assert!(
+            candidate
+                .briefing
+                .as_ref()
+                .unwrap()
+                .contains(&candidate.quest.premise)
+        );
         candidate.validate().unwrap();
     }
     #[test]
