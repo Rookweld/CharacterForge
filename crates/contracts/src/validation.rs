@@ -9,6 +9,8 @@ pub enum ValidationCode {
     InvalidSeed,
     InvalidRange,
     UnsupportedVersion,
+    UnsupportedPreset,
+    InvalidConstraint,
     AxisOutOfRange,
     MissingField,
     UnknownField,

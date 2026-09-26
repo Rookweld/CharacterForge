@@ -4,11 +4,11 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** 01 — DNA
+**Current mission:** 02 — SOUL
 **Current status:** PASS
 **Target release:** v1.0.0 FOUNDATION
-**Last verified commit:** `b137179181ed90e07d6937c7629542d735e56681` (`feat: establish Forge DNA deterministic core`)
-**Branch:** `master` (dirty; pre-Mission-02 audit changes are uncommitted)
+**Last verified HEAD:** `573f81a1cb0293fc45983c326e0657987ff669fd` (`test: harden Forge DNA dependency invariants`)
+**Branch:** `master` (dirty; Mission 02 implementation and documentation are uncommitted)
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 1
@@ -19,7 +19,7 @@
 - Frontend: React, TypeScript, Vite; strict TypeScript configuration
 - Core/application logic: Rust; four core crates plus desktop shell
 - Storage: SQLite is the planned source of truth; no persistence implementation in Mission 00
-- Generation: Mission 01 establishes versioned ForgeDNA contracts and deterministic field-stream/reroll infrastructure; no final content pack or generation UI
+- Generation: versioned ForgeDNA contracts and deterministic field-stream/reroll infrastructure underpin the Mission 02 deterministic Character Forge core; no generation UI
 - AI dependency in v1.0: none
 - Project format: `.forgeproject`
 - Frontend package manager: pnpm 11.25.0; npm launcher is misconfigured
@@ -35,6 +35,9 @@
 - Mission 01 added typed, versioned project/entity, Character/Quest, provenance, recipe, ForgeDNA, and validation contracts. Canonical serialization and BLAKE3 field streams are deterministic over explicit inputs; lock/reroll operations preserve locked and unrelated fields and commit atomically.
 - Mission 01 verification passed: frontend checks and React test, Rust formatting, clippy with warnings denied, 27 workspace tests, Cargo metadata, and optimized Tauri build. The consolidated script passed using a temporary Cargo target directory because the existing release executable was held open.
 - Pre-Mission-02 audit passed: explicit three-node cycle rejection/rollback and locked dependency-firewall tests; Rust formatting, clippy, consolidated verification, and 29 workspace tests passed.
+- Mission 02 added the typed Character candidate pipeline, declarative original content for all eleven v1 presets, axis-weighted deterministic selection, supported Character constraints, provenance-preserving manual edits, field rerolls, lock-aware reroll-all, and a JSON CLI harness. The corpus uses the initialized content version 1; ForgeDNA compatibility behavior and dependencies are unchanged.
+- Mission 02 quality tests cover same-DNA reproducibility, no input DNA mutation, fixed seed outputs across all presets, 64-seed repetition sweeps, creative-axis extremes and distribution shifts, Chaos Blend, field cardinalities, structured invalid-input errors, dependency rerolls/firewalls, explicit locks, manual edits, and stable JSON serialization.
+- Mission 02 verification passed: `./scripts/verify.ps1` (frontend checks/test/build, Rust fmt/clippy/workspace tests, optimized Tauri build); 43 Rust unit tests passed (33 app-core, 10 contracts); `git diff --check` passed. Details are in `docs/missions/MISSION_02_REPORT.md`.
 
 ## Mission 00 closeout
 
@@ -43,15 +46,15 @@
 
 ## Mission 01 closeout
 
-- All Mission 01 exit criteria are satisfied. Mission 01 is closed; Mission 02 has not started.
+- All Mission 01 exit criteria are satisfied. Mission 01 is closed.
 - **Architecture:** canonical ForgeDNA is compact JSON with deterministic map order, normalized identifiers/constraints, and supported version tuple 1/1/1/1. Per-field streams use BLAKE3 derive-key context `character-forge/forge-dna/field-stream/v1` and only explicit dependencies. See `docs/adr/0002-forge-dna-and-field-streams.md`.
-- **Git:** branch `master`, HEAD `b137179181ed90e07d6937c7629542d735e56681` (`feat: establish Forge DNA deterministic core`). Mission 01 baseline is committed; pre-Mission-02 audit changes remain uncommitted.
+- **Git at Mission 01 closeout:** branch `master`, HEAD `573f81a1cb0293fc45983c326e0657987ff669fd` (`test: harden Forge DNA dependency invariants`).
 - **Blockers/P0/P1:** none found within Mission 01 scope.
 
 ## Deferred by design
 
-Final Character/Quest content and generation workflows, persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features.
+Quest generation, persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features.
 
 ## Handoff
 
-Mission 00 report: `docs/missions/MISSION_00_REPORT.md`. Mission 01 report: `docs/missions/MISSION_01_REPORT.md`. Stop after Mission 01; do not begin Mission 02 without a new explicit task.
+Mission 00 report: `docs/missions/MISSION_00_REPORT.md`. Mission 01 report: `docs/missions/MISSION_01_REPORT.md`. Mission 02 report: `docs/missions/MISSION_02_REPORT.md`. Mission 02 is closed; stop here and do not begin Mission 03.

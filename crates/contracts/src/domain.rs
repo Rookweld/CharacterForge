@@ -112,9 +112,12 @@ impl EntityEnvelope {
 pub struct Character {
     pub envelope: EntityEnvelope,
     pub aliases: Vec<String>,
+    pub title: String,
     pub archetype: String,
     pub role: String,
     pub appearance: String,
+    pub faction_hint: String,
+    pub signature_gear: String,
     pub personality: Vec<String>,
     pub desire: String,
     pub fear: String,
@@ -125,6 +128,8 @@ pub struct Character {
     pub gear_links: Vec<EntityId>,
     pub faction_links: Vec<EntityId>,
     pub relationship_links: Vec<EntityId>,
+    pub relationship_hook: String,
+    pub backstory_hook: String,
     pub story_hooks: Vec<String>,
 }
 
@@ -132,13 +137,18 @@ impl Character {
     pub fn validate(&self) -> ValidationResult<()> {
         self.envelope.validate(EntityType::Character)?;
         for (path, value) in [
+            ("character.title", &self.title),
             ("character.archetype", &self.archetype),
             ("character.role", &self.role),
             ("character.appearance", &self.appearance),
+            ("character.faction_hint", &self.faction_hint),
+            ("character.signature_gear", &self.signature_gear),
             ("character.desire", &self.desire),
             ("character.fear", &self.fear),
             ("character.flaw", &self.flaw),
             ("character.secret", &self.secret),
+            ("character.relationship_hook", &self.relationship_hook),
+            ("character.backstory_hook", &self.backstory_hook),
         ] {
             validate_text(path, value)?;
         }
@@ -150,6 +160,20 @@ impl Character {
             ("character.story_hooks", &self.story_hooks),
         ] {
             validate_text_list(path, values)?;
+        }
+        for (path, values, minimum) in [
+            ("character.personality", &self.personality, 2),
+            ("character.skills", &self.skills, 2),
+            ("character.abilities", &self.abilities, 1),
+            ("character.story_hooks", &self.story_hooks, 3),
+        ] {
+            if values.len() < minimum {
+                return Err(ValidationErrors::one(ValidationError::new(
+                    ValidationCode::MissingField,
+                    path,
+                    format!("must contain at least {minimum} values"),
+                )));
+            }
         }
         validate_id_list("character.gear_links", &self.gear_links)?;
         validate_id_list("character.faction_links", &self.faction_links)?;
@@ -312,20 +336,29 @@ mod tests {
         let character = Character {
             envelope: envelope(EntityType::Character),
             aliases: vec![],
+            title: "The Glass Cartographer".into(),
             archetype: "cartographer".into(),
             role: "guide".into(),
             appearance: "ink-stained coat".into(),
-            personality: vec!["patient".into()],
+            faction_hint: "Harbor Surveyors".into(),
+            signature_gear: "brass compass".into(),
+            personality: vec!["patient".into(), "observant".into()],
             desire: "map the shifting coast".into(),
             fear: "losing the route".into(),
             flaw: "overconfident".into(),
             secret: "the charts are forged".into(),
-            skills: vec!["navigation".into()],
-            abilities: vec![],
+            skills: vec!["navigation".into(), "surveying".into()],
+            abilities: vec!["can read a moving coastline".into()],
             gear_links: vec![],
             faction_links: vec![],
             relationship_links: vec![],
-            story_hooks: vec!["the coast moves".into()],
+            relationship_hook: "A rival knows the true shoreline".into(),
+            backstory_hook: "The map records a drowned town".into(),
+            story_hooks: vec![
+                "the coast moves".into(),
+                "a chart is forged".into(),
+                "a rival returns".into(),
+            ],
         };
         assert!(character.validate().is_ok());
         let mut quest = Quest {
@@ -370,20 +403,29 @@ mod tests {
         let mut character = Character {
             envelope: envelope(EntityType::Character),
             aliases: vec![],
+            title: "The Glass Cartographer".into(),
             archetype: "scout".into(),
             role: "guide".into(),
             appearance: "blue cloak".into(),
-            personality: vec![],
+            faction_hint: "Harbor Surveyors".into(),
+            signature_gear: "brass compass".into(),
+            personality: vec!["patient".into(), "guarded".into()],
             desire: "find home".into(),
             fear: "dark".into(),
             flaw: "proud".into(),
             secret: "none".into(),
-            skills: vec![],
-            abilities: vec![],
+            skills: vec!["navigation".into(), "tracking".into()],
+            abilities: vec!["can hear a route change".into()],
             gear_links: vec![],
             faction_links: vec![],
             relationship_links: vec![],
-            story_hooks: vec![],
+            relationship_hook: "A rival knows the true shoreline".into(),
+            backstory_hook: "The map records a drowned town".into(),
+            story_hooks: vec![
+                "the coast moves".into(),
+                "a chart is forged".into(),
+                "a rival returns".into(),
+            ],
         };
         character.envelope.generation_provenance = Some(metadata);
         assert!(character.validate().is_ok());
