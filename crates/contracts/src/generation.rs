@@ -444,7 +444,7 @@ impl ForgeDNA {
         if self.generator_version != INITIAL_GENERATOR_VERSION {
             return Err(unsupported("generator_version", self.generator_version.0));
         }
-        if self.content_version != INITIAL_CONTENT_VERSION {
+        if !matches!(self.content_version.0, 1 | 2) {
             return Err(unsupported("content_version", self.content_version.0));
         }
         self.recipe.validate()
@@ -635,6 +635,22 @@ mod tests {
                 .errors[0]
                 .code,
             ValidationCode::Serialization
+        );
+
+        let mut content_v2 = dna.clone();
+        content_v2.content_version = ContentVersion(2);
+        content_v2.normalize().unwrap();
+        let serialized_v2 = content_v2.to_canonical_json().unwrap();
+        assert_eq!(
+            ForgeDNA::from_canonical_json(&serialized_v2).unwrap(),
+            content_v2
+        );
+
+        let mut unsupported = dna;
+        unsupported.content_version = ContentVersion(3);
+        assert_eq!(
+            unsupported.validate().unwrap_err().errors[0].code,
+            ValidationCode::UnsupportedVersion
         );
     }
 }

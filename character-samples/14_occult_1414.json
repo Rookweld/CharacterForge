@@ -1,0 +1,371 @@
+{
+  "character": {
+    "envelope": {
+      "id": "9b52d89a-0a5e-5e34-9dcd-27f36224e9e1",
+      "project_id": "d095c878-66c7-5286-98d7-ed8e46bdbf62",
+      "entity_type": "character",
+      "name": "Calder Morrow",
+      "schema_version": 1,
+      "canon_state": "candidate",
+      "origin": "generated",
+      "favorite": false,
+      "created_at_unix_ms": 0,
+      "updated_at_unix_ms": 0,
+      "tags": [
+        "preset:occult"
+      ],
+      "notes": null,
+      "generation_provenance": {
+        "generation_id": "5ed8bc73-6202-56b2-b8fa-9529b2040b2c",
+        "generated_at_unix_ms": 0,
+        "action": "forge",
+        "parent_generation_id": null,
+        "dna": {
+          "schema_version": 1,
+          "generator_version": 1,
+          "content_version": 1,
+          "recipe": {
+            "kind": "character",
+            "recipe_version": 1,
+            "root_seed": "0000000000000586",
+            "universe_preset": "occult",
+            "creative_axes": {
+              "levels": {
+                "bleak": 50,
+                "mythic": 50,
+                "chaos": 50,
+                "epic": 50,
+                "ambiguity": 50,
+                "surreal": 50,
+                "technology": 50,
+                "mysticism": 50
+              }
+            },
+            "constraints": {},
+            "field_controls": {
+              "01-archetype": {
+                "nonce": 0,
+                "locked": false
+              },
+              "02-role": {
+                "nonce": 0,
+                "locked": false
+              },
+              "03-name": {
+                "nonce": 0,
+                "locked": false
+              },
+              "04-title": {
+                "nonce": 0,
+                "locked": false
+              },
+              "05-appearance": {
+                "nonce": 0,
+                "locked": false
+              },
+              "06-personality": {
+                "nonce": 0,
+                "locked": false
+              },
+              "07-desire": {
+                "nonce": 0,
+                "locked": false
+              },
+              "08-fear": {
+                "nonce": 0,
+                "locked": false
+              },
+              "09-flaw": {
+                "nonce": 0,
+                "locked": false
+              },
+              "10-secret": {
+                "nonce": 0,
+                "locked": false
+              },
+              "11-skills": {
+                "nonce": 0,
+                "locked": false
+              },
+              "12-abilities": {
+                "nonce": 0,
+                "locked": false
+              },
+              "13-faction-hint": {
+                "nonce": 0,
+                "locked": false
+              },
+              "14-signature-gear": {
+                "nonce": 0,
+                "locked": false
+              },
+              "15-relationship-hook": {
+                "nonce": 0,
+                "locked": false
+              },
+              "16-backstory-hook": {
+                "nonce": 0,
+                "locked": false
+              },
+              "17-story-hooks": {
+                "nonce": 0,
+                "locked": false
+              }
+            },
+            "dependencies": {
+              "02-role": [
+                "01-archetype"
+              ],
+              "03-name": [
+                "01-archetype"
+              ],
+              "04-title": [
+                "01-archetype"
+              ],
+              "05-appearance": [
+                "01-archetype"
+              ],
+              "06-personality": [
+                "01-archetype"
+              ],
+              "07-desire": [
+                "01-archetype"
+              ],
+              "08-fear": [
+                "01-archetype"
+              ],
+              "09-flaw": [
+                "01-archetype"
+              ],
+              "10-secret": [
+                "01-archetype"
+              ],
+              "11-skills": [
+                "01-archetype"
+              ],
+              "12-abilities": [
+                "01-archetype"
+              ],
+              "13-faction-hint": [
+                "01-archetype"
+              ],
+              "14-signature-gear": [
+                "01-archetype"
+              ],
+              "15-relationship-hook": [
+                "01-archetype",
+                "07-desire"
+              ],
+              "16-backstory-hook": [
+                "01-archetype",
+                "07-desire"
+              ],
+              "17-story-hooks": [
+                "01-archetype",
+                "07-desire"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "aliases": [],
+    "title": "The Fourth Knock",
+    "archetype": "Missing-Persons Archivist",
+    "role": "keeper of case files that rewrite themselves",
+    "appearance": "One eye waters whenever a door opens onto the wrong floor.",
+    "faction_hint": "the Society for Unfinished Records",
+    "signature_gear": "a key blank cut from a demolished courthouse",
+    "personality": [
+      "asks permission before entering a strange room",
+      "stays calm until someone says their full name"
+    ],
+    "desire": "to learn who keeps booking a s├®ance under their name",
+    "fear": "a familiar knock from inside a locked drawer",
+    "flaw": "protects secrets that were never theirs to keep",
+    "secret": "they once filed their own disappearance and never closed the case",
+    "skills": [
+      "cataloguing handwriting under candle smoke",
+      "recognizing a false s├®ance by the room's dust"
+    ],
+    "abilities": [
+      "can ask one precise question of a threshold each night"
+    ],
+    "gear_links": [],
+    "faction_links": [],
+    "relationship_links": [],
+    "relationship_hook": "a detective sends them cases that have no crime number",
+    "backstory_hook": "they once locked a threshold and heard someone thank them from both sides",
+    "story_hooks": [
+      "The same key opens three doors in three buildings that share no address.",
+      "Someone knocks from inside the archive's only blank cabinet.",
+      "A s├®ance guest asks why they stopped visiting twenty years ago."
+    ]
+  },
+  "dna": {
+    "schema_version": 1,
+    "generator_version": 1,
+    "content_version": 1,
+    "recipe": {
+      "kind": "character",
+      "recipe_version": 1,
+      "root_seed": "0000000000000586",
+      "universe_preset": "occult",
+      "creative_axes": {
+        "levels": {
+          "bleak": 50,
+          "mythic": 50,
+          "chaos": 50,
+          "epic": 50,
+          "ambiguity": 50,
+          "surreal": 50,
+          "technology": 50,
+          "mysticism": 50
+        }
+      },
+      "constraints": {},
+      "field_controls": {
+        "01-archetype": {
+          "nonce": 0,
+          "locked": false
+        },
+        "02-role": {
+          "nonce": 0,
+          "locked": false
+        },
+        "03-name": {
+          "nonce": 0,
+          "locked": false
+        },
+        "04-title": {
+          "nonce": 0,
+          "locked": false
+        },
+        "05-appearance": {
+          "nonce": 0,
+          "locked": false
+        },
+        "06-personality": {
+          "nonce": 0,
+          "locked": false
+        },
+        "07-desire": {
+          "nonce": 0,
+          "locked": false
+        },
+        "08-fear": {
+          "nonce": 0,
+          "locked": false
+        },
+        "09-flaw": {
+          "nonce": 0,
+          "locked": false
+        },
+        "10-secret": {
+          "nonce": 0,
+          "locked": false
+        },
+        "11-skills": {
+          "nonce": 0,
+          "locked": false
+        },
+        "12-abilities": {
+          "nonce": 0,
+          "locked": false
+        },
+        "13-faction-hint": {
+          "nonce": 0,
+          "locked": false
+        },
+        "14-signature-gear": {
+          "nonce": 0,
+          "locked": false
+        },
+        "15-relationship-hook": {
+          "nonce": 0,
+          "locked": false
+        },
+        "16-backstory-hook": {
+          "nonce": 0,
+          "locked": false
+        },
+        "17-story-hooks": {
+          "nonce": 0,
+          "locked": false
+        }
+      },
+      "dependencies": {
+        "02-role": [
+          "01-archetype"
+        ],
+        "03-name": [
+          "01-archetype"
+        ],
+        "04-title": [
+          "01-archetype"
+        ],
+        "05-appearance": [
+          "01-archetype"
+        ],
+        "06-personality": [
+          "01-archetype"
+        ],
+        "07-desire": [
+          "01-archetype"
+        ],
+        "08-fear": [
+          "01-archetype"
+        ],
+        "09-flaw": [
+          "01-archetype"
+        ],
+        "10-secret": [
+          "01-archetype"
+        ],
+        "11-skills": [
+          "01-archetype"
+        ],
+        "12-abilities": [
+          "01-archetype"
+        ],
+        "13-faction-hint": [
+          "01-archetype"
+        ],
+        "14-signature-gear": [
+          "01-archetype"
+        ],
+        "15-relationship-hook": [
+          "01-archetype",
+          "07-desire"
+        ],
+        "16-backstory-hook": [
+          "01-archetype",
+          "07-desire"
+        ],
+        "17-story-hooks": [
+          "01-archetype",
+          "07-desire"
+        ]
+      }
+    }
+  },
+  "field_origins": {
+    "01-archetype": "generated",
+    "02-role": "generated",
+    "03-name": "generated",
+    "04-title": "generated",
+    "05-appearance": "generated",
+    "06-personality": "generated",
+    "07-desire": "generated",
+    "08-fear": "generated",
+    "09-flaw": "generated",
+    "10-secret": "generated",
+    "11-skills": "generated",
+    "12-abilities": "generated",
+    "13-faction-hint": "generated",
+    "14-signature-gear": "generated",
+    "15-relationship-hook": "generated",
+    "16-backstory-hook": "generated",
+    "17-story-hooks": "generated"
+  }
+}

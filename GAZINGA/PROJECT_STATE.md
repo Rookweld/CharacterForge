@@ -7,11 +7,11 @@
 **Current mission:** 02 — SOUL
 **Current status:** PASS
 **Target release:** v1.0.0 FOUNDATION
-**Last verified HEAD:** `573f81a1cb0293fc45983c326e0657987ff669fd` (`test: harden Forge DNA dependency invariants`)
-**Branch:** `master` (dirty; Mission 02 implementation and documentation are uncommitted)
+**Last verified HEAD:** `0593a01de54be9857d5689c57abcd338db3904cc`
+**Branch:** `master` (dirty; audit changes are uncommitted; supplied character samples are preserved)
 **Schema version:** 1
 **Generator version:** 1
-**Content version:** 1
+**Content version:** 2 (v1 retained for replay)
 
 ## Architecture decisions currently locked
 
@@ -35,9 +35,10 @@
 - Mission 01 added typed, versioned project/entity, Character/Quest, provenance, recipe, ForgeDNA, and validation contracts. Canonical serialization and BLAKE3 field streams are deterministic over explicit inputs; lock/reroll operations preserve locked and unrelated fields and commit atomically.
 - Mission 01 verification passed: frontend checks and React test, Rust formatting, clippy with warnings denied, 27 workspace tests, Cargo metadata, and optimized Tauri build. The consolidated script passed using a temporary Cargo target directory because the existing release executable was held open.
 - Pre-Mission-02 audit passed: explicit three-node cycle rejection/rollback and locked dependency-firewall tests; Rust formatting, clippy, consolidated verification, and 29 workspace tests passed.
-- Mission 02 added the typed Character candidate pipeline, declarative original content for all eleven v1 presets, axis-weighted deterministic selection, supported Character constraints, provenance-preserving manual edits, field rerolls, lock-aware reroll-all, and a JSON CLI harness. The corpus uses the initialized content version 1; ForgeDNA compatibility behavior and dependencies are unchanged.
+- Mission 02 added the typed Character candidate pipeline, declarative original content for all eleven v1 presets, axis-weighted deterministic selection, supported Character constraints, provenance-preserving manual edits, field rerolls, lock-aware reroll-all, and a JSON CLI harness. At that closeout the corpus used content version 1; the later diversity audit added v2 while preserving v1 replay.
 - Mission 02 quality tests cover same-DNA reproducibility, no input DNA mutation, fixed seed outputs across all presets, 64-seed repetition sweeps, creative-axis extremes and distribution shifts, Chaos Blend, field cardinalities, structured invalid-input errors, dependency rerolls/firewalls, explicit locks, manual edits, and stable JSON serialization.
 - Mission 02 verification passed: `./scripts/verify.ps1` (frontend checks/test/build, Rust fmt/clippy/workspace tests, optimized Tauri build); 43 Rust unit tests passed (33 app-core, 10 contracts); `git diff --check` passed. Details are in `docs/missions/MISSION_02_REPORT.md`.
+- Pre-Mission-03 SOUL diversity audit expanded the current corpus to content version 2 while preserving the v1 corpus and ForgeDNA stream/reroll semantics. Deterministic field-level, archetype-cluster, Chaos Blend, controlled-axis, and UTF-8 evidence is recorded in `docs/CONTENT_QUALITY_REPORT.md`; Mission 02 remains PASS after audit verification.
 
 ## Mission 00 closeout
 

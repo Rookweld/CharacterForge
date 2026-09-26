@@ -62,3 +62,9 @@
 - Working tree: dirty; Mission 02 implementation and documentation are uncommitted. `git diff --check` reported no whitespace errors. No existing user changes were discarded.
 
 Mission 02 is closed. Stop here; do not begin Mission 03.
+
+## Pre-Mission-03 content diversity audit supplement
+
+The follow-up audit identified low source-pool depth in the original v1 corpus. Human review of the 15 supplied samples was confirmed: the reviewed Cyberpunk pair shared 5/16 exact fields and 7/8 list items; the Pirate, Occult, and Chaos Blend pairs shared 4/16, 3/16, and 6/16 exact fields respectively. The audit report records per-field distributions, archetype clusters, the 1,024-seed Chaos Blend result, controlled axis comparisons, and Unicode findings in `docs/CONTENT_QUALITY_REPORT.md`.
+
+The v1 corpus and its generation behavior remain available for v1 DNA. An expanded content version 2 is now the default for newly created Character DNA. ForgeDNA encoding, field-stream derivation, dependency, and reroll semantics are unchanged. The audit added duplicate-choice validation, v1/v2 golden tests, and UTF-8 JSON roundtrip coverage. The final field sweep observed zero fully identical candidates in each 256-seed preset sample and in the 1,024-seed Chaos Blend sample. This supplement does not revise the original Mission 02 verification record; it adds the subsequent content-quality evidence.

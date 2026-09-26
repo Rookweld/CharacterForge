@@ -8,6 +8,9 @@ use serde::Deserialize;
 use std::{collections::BTreeMap, sync::OnceLock};
 
 const CHARACTER_CONTENT_V1: &str = include_str!("../../../content/characters/v1/core.json");
+const CHARACTER_CONTENT_V2: &str = include_str!("../../../content/characters/v2/core.json");
+const CHARACTER_CONTENT_V2_ADDITIONS: &str =
+    include_str!("../../../content/characters/v2/identity_depth.json");
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -167,14 +170,31 @@ impl PresetDocument {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ContentCatalog {
-    pub version: ContentVersion,
     presets: BTreeMap<String, PresetContent>,
 }
 
 impl ContentCatalog {
-    pub fn load() -> ValidationResult<&'static Self> {
-        static CONTENT: OnceLock<ValidationResult<ContentCatalog>> = OnceLock::new();
-        match CONTENT.get_or_init(parse_content) {
+    pub fn load(version: ContentVersion) -> ValidationResult<&'static Self> {
+        static CONTENT_V1: OnceLock<ValidationResult<ContentCatalog>> = OnceLock::new();
+        static CONTENT_V2: OnceLock<ValidationResult<ContentCatalog>> = OnceLock::new();
+        let content = match version.0 {
+            1 => CONTENT_V1.get_or_init(|| parse_content(CHARACTER_CONTENT_V1, 1, None)),
+            2 => CONTENT_V2.get_or_init(|| {
+                parse_content(
+                    CHARACTER_CONTENT_V2,
+                    2,
+                    Some(CHARACTER_CONTENT_V2_ADDITIONS),
+                )
+            }),
+            _ => {
+                return Err(content_error(
+                    ValidationCode::UnsupportedVersion,
+                    "content_version",
+                    format!("unsupported Character content version {}", version.0),
+                ));
+            }
+        };
+        match content {
             Ok(catalog) => Ok(catalog),
             Err(errors) => Err(errors.clone()),
         }
@@ -196,23 +216,25 @@ impl ContentCatalog {
     }
 }
 
-fn parse_content() -> ValidationResult<ContentCatalog> {
-    let document: ContentDocument =
-        serde_json::from_str(CHARACTER_CONTENT_V1).map_err(|error| {
-            ValidationErrors::one(ValidationError::new(
-                ValidationCode::Serialization,
-                "character_content",
-                format!("invalid embedded Character content: {error}"),
-            ))
-        })?;
-    if document.content_version != 1 {
+fn parse_content(
+    source: &str,
+    expected_version: u16,
+    additions: Option<&str>,
+) -> ValidationResult<ContentCatalog> {
+    let document: ContentDocument = serde_json::from_str(source).map_err(|error| {
+        ValidationErrors::one(ValidationError::new(
+            ValidationCode::Serialization,
+            "character_content",
+            format!("invalid embedded Character content: {error}"),
+        ))
+    })?;
+    if document.content_version != expected_version {
         return Err(content_error(
             ValidationCode::UnsupportedVersion,
             "character_content.content_version",
-            "only Character content version 1 is supported",
+            format!("expected Character content version {expected_version}"),
         ));
     }
-    let version = ContentVersion(document.content_version);
     let mut presets = BTreeMap::new();
     for preset in document.presets {
         let preset = preset.into_content()?;
@@ -227,6 +249,50 @@ fn parse_content() -> ValidationResult<ContentCatalog> {
             ));
         }
     }
+    if let Some(additions) = additions {
+        let document: ContentExpansionDocument =
+            serde_json::from_str(additions).map_err(|error| {
+                ValidationErrors::one(ValidationError::new(
+                    ValidationCode::Serialization,
+                    "character_content.expansions",
+                    format!("invalid embedded Character content expansion: {error}"),
+                ))
+            })?;
+        if document.content_version != expected_version {
+            return Err(content_error(
+                ValidationCode::UnsupportedVersion,
+                "character_content.expansions.content_version",
+                format!("expected Character content version {expected_version}"),
+            ));
+        }
+        let mut seen = BTreeMap::new();
+        for expansion in document.presets {
+            let id = PresetId::new(&expansion.id)?;
+            if seen.insert(id.as_str().to_owned(), ()).is_some() {
+                return Err(content_error(
+                    ValidationCode::InvalidIdentifier,
+                    "character_content.expansions.presets",
+                    "each preset can be expanded only once",
+                ));
+            }
+            let preset = presets.get_mut(id.as_str()).ok_or_else(|| {
+                content_error(
+                    ValidationCode::UnsupportedPreset,
+                    "character_content.expansions.presets",
+                    format!("expansion references unknown preset '{id}'"),
+                )
+            })?;
+            expansion.append_to(preset)?;
+        }
+        if seen.len() != CORE_PRESETS.len() || CORE_PRESETS.iter().any(|id| !seen.contains_key(*id))
+        {
+            return Err(content_error(
+                ValidationCode::MissingField,
+                "character_content.expansions.presets",
+                "version 2 must expand every canonical Character preset exactly once",
+            ));
+        }
+    }
     if presets.len() != CORE_PRESETS.len()
         || CORE_PRESETS.iter().any(|id| !presets.contains_key(*id))
     {
@@ -236,7 +302,105 @@ fn parse_content() -> ValidationResult<ContentCatalog> {
             "content must define every canonical v1 Character preset exactly once",
         ));
     }
-    Ok(ContentCatalog { version, presets })
+    for preset in presets.values() {
+        preset.validate_unique_choices()?;
+    }
+    Ok(ContentCatalog { presets })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ContentExpansionDocument {
+    content_version: u16,
+    presets: Vec<PresetExpansionDocument>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PresetExpansionDocument {
+    id: String,
+    roles: Vec<ChoiceDocument>,
+    titles: Vec<ChoiceDocument>,
+    appearances: Vec<ChoiceDocument>,
+    personalities: Vec<ChoiceDocument>,
+    desires: Vec<ChoiceDocument>,
+    fears: Vec<ChoiceDocument>,
+    flaws: Vec<ChoiceDocument>,
+    secrets: Vec<ChoiceDocument>,
+    skills: Vec<ChoiceDocument>,
+    abilities: Vec<ChoiceDocument>,
+    factions: Vec<ChoiceDocument>,
+    gear: Vec<ChoiceDocument>,
+    relationships: Vec<ChoiceDocument>,
+    backstories: Vec<ChoiceDocument>,
+    hooks: Vec<ChoiceDocument>,
+}
+
+impl PresetExpansionDocument {
+    fn append_to(self, preset: &mut PresetContent) -> ValidationResult<()> {
+        macro_rules! append_choices {
+            ($field:ident) => {
+                preset.$field.extend(convert_choices(
+                    concat!("expansions.", stringify!($field)),
+                    self.$field,
+                )?);
+            };
+        }
+        append_choices!(roles);
+        append_choices!(titles);
+        append_choices!(appearances);
+        append_choices!(personalities);
+        append_choices!(desires);
+        append_choices!(fears);
+        append_choices!(flaws);
+        append_choices!(secrets);
+        append_choices!(skills);
+        append_choices!(abilities);
+        append_choices!(factions);
+        append_choices!(gear);
+        append_choices!(relationships);
+        append_choices!(backstories);
+        append_choices!(hooks);
+        Ok(())
+    }
+}
+
+impl PresetContent {
+    pub(crate) fn validate_unique_choices(&self) -> ValidationResult<()> {
+        macro_rules! validate_field {
+            ($field:ident) => {{
+                let mut values = std::collections::BTreeSet::new();
+                for choice in &self.$field {
+                    if !values.insert(choice.value.as_str()) {
+                        return Err(content_error(
+                            ValidationCode::InvalidConstraint,
+                            format!("character_content.{}.{}", self.id, stringify!($field)),
+                            "choice values must be unique within a semantic content family",
+                        ));
+                    }
+                }
+            }};
+        }
+        validate_field!(given_names);
+        validate_field!(family_names);
+        validate_field!(archetypes);
+        validate_field!(roles);
+        validate_field!(titles);
+        validate_field!(appearances);
+        validate_field!(personalities);
+        validate_field!(desires);
+        validate_field!(fears);
+        validate_field!(flaws);
+        validate_field!(secrets);
+        validate_field!(skills);
+        validate_field!(abilities);
+        validate_field!(factions);
+        validate_field!(gear);
+        validate_field!(relationships);
+        validate_field!(backstories);
+        validate_field!(hooks);
+        Ok(())
+    }
 }
 
 fn convert_choices(path: &str, choices: Vec<ChoiceDocument>) -> ValidationResult<Vec<Choice>> {

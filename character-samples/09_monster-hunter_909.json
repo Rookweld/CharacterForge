@@ -1,0 +1,371 @@
+{
+  "character": {
+    "envelope": {
+      "id": "b14afcfe-15aa-5704-b93a-36beb8dee8eb",
+      "project_id": "d095c878-66c7-5286-98d7-ed8e46bdbf62",
+      "entity_type": "character",
+      "name": "Elsa Marek",
+      "schema_version": 1,
+      "canon_state": "candidate",
+      "origin": "generated",
+      "favorite": false,
+      "created_at_unix_ms": 0,
+      "updated_at_unix_ms": 0,
+      "tags": [
+        "preset:monster-hunter"
+      ],
+      "notes": null,
+      "generation_provenance": {
+        "generation_id": "201245de-7551-59d9-921a-bee81a458178",
+        "generated_at_unix_ms": 0,
+        "action": "forge",
+        "parent_generation_id": null,
+        "dna": {
+          "schema_version": 1,
+          "generator_version": 1,
+          "content_version": 1,
+          "recipe": {
+            "kind": "character",
+            "recipe_version": 1,
+            "root_seed": "000000000000038d",
+            "universe_preset": "monster-hunter",
+            "creative_axes": {
+              "levels": {
+                "bleak": 50,
+                "mythic": 50,
+                "chaos": 50,
+                "epic": 50,
+                "ambiguity": 50,
+                "surreal": 50,
+                "technology": 50,
+                "mysticism": 50
+              }
+            },
+            "constraints": {},
+            "field_controls": {
+              "01-archetype": {
+                "nonce": 0,
+                "locked": false
+              },
+              "02-role": {
+                "nonce": 0,
+                "locked": false
+              },
+              "03-name": {
+                "nonce": 0,
+                "locked": false
+              },
+              "04-title": {
+                "nonce": 0,
+                "locked": false
+              },
+              "05-appearance": {
+                "nonce": 0,
+                "locked": false
+              },
+              "06-personality": {
+                "nonce": 0,
+                "locked": false
+              },
+              "07-desire": {
+                "nonce": 0,
+                "locked": false
+              },
+              "08-fear": {
+                "nonce": 0,
+                "locked": false
+              },
+              "09-flaw": {
+                "nonce": 0,
+                "locked": false
+              },
+              "10-secret": {
+                "nonce": 0,
+                "locked": false
+              },
+              "11-skills": {
+                "nonce": 0,
+                "locked": false
+              },
+              "12-abilities": {
+                "nonce": 0,
+                "locked": false
+              },
+              "13-faction-hint": {
+                "nonce": 0,
+                "locked": false
+              },
+              "14-signature-gear": {
+                "nonce": 0,
+                "locked": false
+              },
+              "15-relationship-hook": {
+                "nonce": 0,
+                "locked": false
+              },
+              "16-backstory-hook": {
+                "nonce": 0,
+                "locked": false
+              },
+              "17-story-hooks": {
+                "nonce": 0,
+                "locked": false
+              }
+            },
+            "dependencies": {
+              "02-role": [
+                "01-archetype"
+              ],
+              "03-name": [
+                "01-archetype"
+              ],
+              "04-title": [
+                "01-archetype"
+              ],
+              "05-appearance": [
+                "01-archetype"
+              ],
+              "06-personality": [
+                "01-archetype"
+              ],
+              "07-desire": [
+                "01-archetype"
+              ],
+              "08-fear": [
+                "01-archetype"
+              ],
+              "09-flaw": [
+                "01-archetype"
+              ],
+              "10-secret": [
+                "01-archetype"
+              ],
+              "11-skills": [
+                "01-archetype"
+              ],
+              "12-abilities": [
+                "01-archetype"
+              ],
+              "13-faction-hint": [
+                "01-archetype"
+              ],
+              "14-signature-gear": [
+                "01-archetype"
+              ],
+              "15-relationship-hook": [
+                "01-archetype",
+                "07-desire"
+              ],
+              "16-backstory-hook": [
+                "01-archetype",
+                "07-desire"
+              ],
+              "17-story-hooks": [
+                "01-archetype",
+                "07-desire"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "aliases": [],
+    "title": "The Hunter Who Waited",
+    "archetype": "Witness-First Exorcist",
+    "role": "tracker who measures a creature by what it refuses to eat",
+    "appearance": "A field coat is patched with hide that does not match any known animal.",
+    "faction_hint": "the Field License Office, which taxes every confirmed kill",
+    "signature_gear": "a short hunting rifle marked with the names of spared quarries",
+    "personality": [
+      "keeps a spare blanket for witnesses",
+      "asks what the creature protects before asking what it killed"
+    ],
+    "desire": "to discover who keeps releasing tagged creatures near settlements",
+    "fear": "a fresh track that circles their own camp from inside",
+    "flaw": "trusts a specimen jar more than a witness",
+    "secret": "their shadow carries a set of claws no lamp can explain",
+    "skills": [
+      "casting a track in wet plaster",
+      "securing a carcass without contaminating its spoor"
+    ],
+    "abilities": [
+      "can tell a fresh molt from a false skin by touch"
+    ],
+    "gear_links": [],
+    "faction_links": [],
+    "relationship_links": [],
+    "relationship_hook": "a village healer keeps treating the creature they are licensed to kill",
+    "backstory_hook": "they once tracked a monster to find it guarding a missing child",
+    "story_hooks": [
+      "Every track around the village ends at the hunter's own front door.",
+      "A tagged carcass returns to the forest with the license still attached.",
+      "The creature leaves a tool from the hunter's first expedition."
+    ]
+  },
+  "dna": {
+    "schema_version": 1,
+    "generator_version": 1,
+    "content_version": 1,
+    "recipe": {
+      "kind": "character",
+      "recipe_version": 1,
+      "root_seed": "000000000000038d",
+      "universe_preset": "monster-hunter",
+      "creative_axes": {
+        "levels": {
+          "bleak": 50,
+          "mythic": 50,
+          "chaos": 50,
+          "epic": 50,
+          "ambiguity": 50,
+          "surreal": 50,
+          "technology": 50,
+          "mysticism": 50
+        }
+      },
+      "constraints": {},
+      "field_controls": {
+        "01-archetype": {
+          "nonce": 0,
+          "locked": false
+        },
+        "02-role": {
+          "nonce": 0,
+          "locked": false
+        },
+        "03-name": {
+          "nonce": 0,
+          "locked": false
+        },
+        "04-title": {
+          "nonce": 0,
+          "locked": false
+        },
+        "05-appearance": {
+          "nonce": 0,
+          "locked": false
+        },
+        "06-personality": {
+          "nonce": 0,
+          "locked": false
+        },
+        "07-desire": {
+          "nonce": 0,
+          "locked": false
+        },
+        "08-fear": {
+          "nonce": 0,
+          "locked": false
+        },
+        "09-flaw": {
+          "nonce": 0,
+          "locked": false
+        },
+        "10-secret": {
+          "nonce": 0,
+          "locked": false
+        },
+        "11-skills": {
+          "nonce": 0,
+          "locked": false
+        },
+        "12-abilities": {
+          "nonce": 0,
+          "locked": false
+        },
+        "13-faction-hint": {
+          "nonce": 0,
+          "locked": false
+        },
+        "14-signature-gear": {
+          "nonce": 0,
+          "locked": false
+        },
+        "15-relationship-hook": {
+          "nonce": 0,
+          "locked": false
+        },
+        "16-backstory-hook": {
+          "nonce": 0,
+          "locked": false
+        },
+        "17-story-hooks": {
+          "nonce": 0,
+          "locked": false
+        }
+      },
+      "dependencies": {
+        "02-role": [
+          "01-archetype"
+        ],
+        "03-name": [
+          "01-archetype"
+        ],
+        "04-title": [
+          "01-archetype"
+        ],
+        "05-appearance": [
+          "01-archetype"
+        ],
+        "06-personality": [
+          "01-archetype"
+        ],
+        "07-desire": [
+          "01-archetype"
+        ],
+        "08-fear": [
+          "01-archetype"
+        ],
+        "09-flaw": [
+          "01-archetype"
+        ],
+        "10-secret": [
+          "01-archetype"
+        ],
+        "11-skills": [
+          "01-archetype"
+        ],
+        "12-abilities": [
+          "01-archetype"
+        ],
+        "13-faction-hint": [
+          "01-archetype"
+        ],
+        "14-signature-gear": [
+          "01-archetype"
+        ],
+        "15-relationship-hook": [
+          "01-archetype",
+          "07-desire"
+        ],
+        "16-backstory-hook": [
+          "01-archetype",
+          "07-desire"
+        ],
+        "17-story-hooks": [
+          "01-archetype",
+          "07-desire"
+        ]
+      }
+    }
+  },
+  "field_origins": {
+    "01-archetype": "generated",
+    "02-role": "generated",
+    "03-name": "generated",
+    "04-title": "generated",
+    "05-appearance": "generated",
+    "06-personality": "generated",
+    "07-desire": "generated",
+    "08-fear": "generated",
+    "09-flaw": "generated",
+    "10-secret": "generated",
+    "11-skills": "generated",
+    "12-abilities": "generated",
+    "13-faction-hint": "generated",
+    "14-signature-gear": "generated",
+    "15-relationship-hook": "generated",
+    "16-backstory-hook": "generated",
+    "17-story-hooks": "generated"
+  }
+}

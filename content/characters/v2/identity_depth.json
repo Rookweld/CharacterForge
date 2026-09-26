@@ -1,0 +1,982 @@
+{
+  "content_version": 2,
+  "presets": [
+    {
+      "id": "dark-fantasy",
+      "roles": [
+        "undertaker escorting the condemned through unmapped lanes",
+        "keeper of parish keys that fit no church",
+        "surgeon for pilgrims returning from the wrong graveyard"
+      ],
+      "titles": [
+        "The Smoke Beneath the Chapel Door",
+        "Keeper of the Unlit Mile",
+        "The Widow's Last Lantern"
+      ],
+      "appearances": [
+        "Bone buttons fasten a coat whose hem is wet with river silt.",
+        "Funeral linen covers one eye and bears a fresh name each dawn.",
+        "Their boots leave wax prints on stone untouched by flame."
+      ],
+      "personalities": [
+        "asks the dead person's name before hearing the accusation",
+        "offers practical help before asking what it costs",
+        "keeps one chair empty even at a crowded table"
+      ],
+      "desires": [
+        "to return a stolen burial bell before the next thaw",
+        "to learn why the chapel ledger lists them as already mourned",
+        "to give one condemned soul a road home"
+      ],
+      "fears": [
+        "finding their handwriting inside a sealed coffin",
+        "being asked to bury someone who is still speaking",
+        "a blue candle burning in the house where they were born"
+      ],
+      "flaws": [
+        "keeps a promise long after it hurts the living",
+        "uses a warning instead of asking permission",
+        "saves evidence when a grieving family asks for silence"
+      ],
+      "secrets": [
+        "they move one grave marker a handspan every night",
+        "the bell beneath the hill rings only when they lie",
+        "they know which elder is buried under the wrong name"
+      ],
+      "skills": [
+        "cutting a safe path through a collapsed ossuary",
+        "matching grave soil to the parish map",
+        "binding a wound with clean funeral linen"
+      ],
+      "abilities": [
+        "can hear which nearby grave was opened recently",
+        "can keep a lantern lit in air that snuffs every flame",
+        "can recognize a borrowed voice by its last breath"
+      ],
+      "factions": [
+        "the Grey Ferrymen, who collect no fare from the grieving",
+        "the Ash Ledger, which records each burial twice",
+        "the Bellwardens of Low Parish, sworn to wake the living"
+      ],
+      "gear": [
+        "a blackthorn stick with a map hidden in its ferrule",
+        "a hand bell cast from melted wedding rings",
+        "a medical roll stitched with parish boundary marks"
+      ],
+      "relationships": [
+        "a gravedigger lights a lantern whenever they are expected",
+        "a novice priest keeps removing their name from the death roll",
+        "a ferryman asks them to carry one sealed letter across the marsh"
+      ],
+      "backstories": [
+        "they grew up in a parish house that appears only during funerals",
+        "their first patient woke with a second shadow and no memory",
+        "they guided a funeral to a grave that had not been dug"
+      ],
+      "hooks": [
+        "A grave marker moves to the other side of the road each night.",
+        "The parish bell rings from beneath a house with no cellar.",
+        "An old ledger records a burial scheduled for tomorrow.",
+        "A mourner brings flowers that root themselves in stone.",
+        "A sealed chapel door opens for everyone except the priest.",
+        "The river returns a funeral lantern with its wick still warm.",
+        "A village requests a burial permit for someone still alive."
+      ]
+    },
+    {
+      "id": "pirate",
+      "roles": [
+        "navigator hunting a harbor that disowns its ships",
+        "ship's cook who keeps the crew's secret vote",
+        "salvager who dives after cargo before treasure"
+      ],
+      "titles": [
+        "The Compass at Low Tide",
+        "Captain of the Unclaimed Wake",
+        "The Last Share on Deck"
+      ],
+      "appearances": [
+        "A torn sail is worn as a sash, patched with flags from vanished crews.",
+        "Salt has whitened one side of their hair like a coastline.",
+        "Their coat carries empty buttons for people lost at sea."
+      ],
+      "personalities": [
+        "counts the crew before counting the cargo",
+        "prefers a blunt warning to a polished threat",
+        "keeps a joke ready for the person who has none"
+      ],
+      "desires": [
+        "to recover a ship's log before a rival sells its final page",
+        "to return a captured harbor bell to its island",
+        "to give the crew a vote that cannot be bought"
+      ],
+      "fears": [
+        "a calm sea reflecting a ship that is not overhead",
+        "being rescued by the crew they left behind",
+        "the tide returning a message they burned"
+      ],
+      "flaws": [
+        "turns every disagreement into a vote they can win",
+        "keeps sailing because shore means settling accounts",
+        "mistakes a rescued enemy for a future ally"
+      ],
+      "secrets": [
+        "they send provisions to the navy crew they escaped",
+        "their map tattoo ends at a port they deny visiting",
+        "they know who cut the anchor line during the last storm"
+      ],
+      "skills": [
+        "splicing a signal flag into a false distress call",
+        "finding fresh water beneath a coral shelf",
+        "keeping a damaged compass true with a sliver of iron"
+      ],
+      "abilities": [
+        "can taste a coming squall on a brass coin",
+        "can follow a ship by its wake after sunset",
+        "can hear a distress bell through a reef at low tide"
+      ],
+      "factions": [
+        "the Black Keel Assembly, which votes before every chase",
+        "the Shoal Runners, couriers between ports that deny trade",
+        "the Widows' Chart Room, a refuge for lost crews"
+      ],
+      "gear": [
+        "a signal lamp with shutters cut from rival charts",
+        "a boarding axe balanced for rigging, not bodies",
+        "a tide table inked inside a waterproof coat"
+      ],
+      "relationships": [
+        "a rival quartermaster keeps their share in a locked chest",
+        "a harbor pilot flashes a code whenever patrols change",
+        "a former captive mails pages from the missing ship's log"
+      ],
+      "backstories": [
+        "they learned to sail by following a ship visible only in fog",
+        "their first mutiny began over who would carry an injured enemy",
+        "they survived a wreck with no broken planks"
+      ],
+      "hooks": [
+        "A chart marks a harbor vanished from every sailor's memory.",
+        "The crew's vote book records a mutiny not yet held.",
+        "A lighthouse flashes the private signal of a ship still at sea.",
+        "A rival asks them to identify a body wearing their captain's coat.",
+        "A floating cask holds a meal and a dated apology.",
+        "The navy offers pardon signed by a captain they buried.",
+        "The harbor bell rings whenever the crew tells the truth."
+      ]
+    },
+    {
+      "id": "steampunk",
+      "roles": [
+        "inspector certifying machines built from confiscated homes",
+        "clockmaker summoned when public clocks disagree",
+        "union advocate assigned to a factory with no workers"
+      ],
+      "titles": [
+        "The Valve That Would Not Close",
+        "Auditor of Borrowed Hours",
+        "Keeper of the Brass Witness"
+      ],
+      "appearances": [
+        "A brass ear trumpet is engraved with names of people ignored.",
+        "Blueprints printed on cheap news sheets stain both cuffs.",
+        "A pressure dial sits where a coat button should be."
+      ],
+      "personalities": [
+        "asks the apprentice what the machine is for before how it works",
+        "keeps a ledger of favors owed by powerful people",
+        "would rather repair a tool than replace its owner"
+      ],
+      "desires": [
+        "to publish the factory's true readings before inspection day",
+        "to build a lift serving the tenants who paid for it",
+        "to find the hour missing from the public clock"
+      ],
+      "fears": [
+        "a machine running after every gear is removed",
+        "being praised for making exploitation quieter",
+        "a train arriving with no passengers"
+      ],
+      "flaws": [
+        "assumes every failure has one accountable operator",
+        "takes machinery apart before securing the room",
+        "keeps old designs because admitting failure feels wasteful"
+      ],
+      "secrets": [
+        "they sold safety-valve plans to pay the workers' rent",
+        "one gauge records pressure in a demolished district",
+        "they know why the public clock skips the night shift"
+      ],
+      "skills": [
+        "tracing a steam leak by its pattern in soot",
+        "making a replacement gear from a tram token",
+        "reading a shift schedule hidden in a hymn wheel"
+      ],
+      "abilities": [
+        "can feel when a mechanism is about to repeat a mistake",
+        "can quiet a boiler by matching its rhythm with a wrench",
+        "can spot a machine fed a false reading"
+      ],
+      "factions": [
+        "the Municipal Gauge Office, which rents inspectors by the hour",
+        "the Foundry Widows' Fund, which buys back workers' names",
+        "the Night Shift Cooperative, keeping one engine for everyone"
+      ],
+      "gear": [
+        "a pocket gauge sealed with a union stamp",
+        "a folding wrench made from a decommissioned lift cable",
+        "a brass notebook clasp that doubles as a pipe key"
+      ],
+      "relationships": [
+        "a foreman keeps a second set of books for their inspection",
+        "a clock singer sends one wrong note when danger is near",
+        "their former apprentice now owns the factory they escaped"
+      ],
+      "backstories": [
+        "they were raised in a boarding house built around a steam main",
+        "their first patent was filed under a dead apprentice's name",
+        "they survived a boiler blast by following a map scratched into brick"
+      ],
+      "hooks": [
+        "A sealed gauge registers a heartbeat inside a brick wall.",
+        "The night shift receives wages dated before the factory opened.",
+        "A brass hymn wheel plays a warning when workers leave.",
+        "The clock skips only minutes spent underground.",
+        "A lift opens between floors onto a forgotten workshop.",
+        "A replacement gear bears the inspector's childhood initials.",
+        "The foundry smoke spells a name no worker recognizes."
+      ]
+    },
+    {
+      "id": "cyberpunk",
+      "roles": [
+        "data broker returning stolen records without charging the subject",
+        "technician for clinics that cannot appear on the grid",
+        "auditor tracing rent increases to a line of code"
+      ],
+      "titles": [
+        "The Cache Nobody Claimed",
+        "Witness to the Last Offline Hour",
+        "The Password Under the Tongue"
+      ],
+      "appearances": [
+        "A dead screen is stitched into their sleeve as a neighborhood map.",
+        "Their prosthetic fingertips carry scratches from old physical keys.",
+        "A collar QR code redirects to a handwritten apology."
+      ],
+      "personalities": [
+        "asks who can revoke consent before asking who owns the data",
+        "keeps a paper address book for people who disappear online",
+        "shares a tool before explaining its risk"
+      ],
+      "desires": [
+        "to restore a neighborhood archive erased during an update",
+        "to learn who keeps buying their unused biometric profile",
+        "to hide clinic patients from the billing model"
+      ],
+      "fears": [
+        "a service notification addressed to who they used to be",
+        "losing the paper copy that proves a friend existed",
+        "a clean log with no record of the people harmed"
+      ],
+      "flaws": [
+        "stores evidence in one place because every backup feels like betrayal",
+        "trusts a clever exploit more than a frightened witness",
+        "keeps improving a tool after its users leave"
+      ],
+      "secrets": [
+        "they still receive alerts from a missing parent's account",
+        "a patch they wrote restored a tenant's deleted identity",
+        "they sold a false profile to protect the person it copied"
+      ],
+      "skills": [
+        "recovering a transit pass from a damaged kiosk cache",
+        "spotting a deepfake by its mismatched room echo",
+        "building a clean device from discarded clinic parts"
+      ],
+      "abilities": [
+        "can find a dead zone by listening for overlapping alerts",
+        "can trace a memory edit through a pause in a familiar story",
+        "can turn a queueing system into a shelter roster"
+      ],
+      "factions": [
+        "the Paper Key Network, exchanging credentials face to face",
+        "the Unlicensed Clinic Mesh, a chain of battery-backed rooms",
+        "the Tenant Data Union, bargaining over what the city remembers"
+      ],
+      "gear": [
+        "a pocket signal sniffer hidden in a transit-card sleeve",
+        "a cracked tablet charged by a hand crank",
+        "fiber cable braided into a belt"
+      ],
+      "relationships": [
+        "an engineer sends logs with the victim's name removed",
+        "a former patient leaves food beside the backup generator",
+        "their old handler asks for a password that no longer exists"
+      ],
+      "backstories": [
+        "they rebuilt a clinic terminal from discarded parts",
+        "their first leak exposed a landlord and erased their own lease",
+        "they lived a month in an account the city marked deceased"
+      ],
+      "hooks": [
+        "A kiosk prints a receipt for a transaction no one remembers.",
+        "A backup battery is registered to a person born next year.",
+        "A risk score falls whenever the character leaves home.",
+        "An archived voice asks them to restore a name, not a file.",
+        "A transit gate opens for a card revoked years ago.",
+        "The city map adds a room inside their apartment wall.",
+        "A dead device receives a patch signed by its former owner."
+      ]
+    },
+    {
+      "id": "nordic-myth",
+      "roles": [
+        "keeper of guest-right at a hall shared by rival clans",
+        "shipwright repairing vessels named in old songs",
+        "messenger carrying disputes between mountain farms"
+      ],
+      "titles": [
+        "The Guest Beneath the Snowline",
+        "Bearer of the Unfinished Verse",
+        "The Hearth's Other Witness"
+      ],
+      "appearances": [
+        "A cloak pin is shaped like a fish from a sea that no longer freezes.",
+        "Their mittens carry a thread from every household they visited.",
+        "Frost follows the edge of their shadow indoors."
+      ],
+      "personalities": [
+        "offers food before asking which side a guest serves",
+        "keeps a promise only after naming its cost aloud",
+        "remembers who was missing from the last feast"
+      ],
+      "desires": [
+        "to return a borrowed name before the next saga is sung",
+        "to stop a feud passing to unborn children",
+        "to find the hearth whose smoke appears beneath the fjord ice"
+      ],
+      "fears": [
+        "a feast where every cup is set for someone absent",
+        "their own voice making a promise they never chose",
+        "the old boundary stones agreeing with one another"
+      ],
+      "flaws": [
+        "treats a public challenge as stronger than a private plea",
+        "waits for a witness when a friend needs an answer",
+        "keeps a feud alive by remembering every slight"
+      ],
+      "secrets": [
+        "they know which verse was removed from the clan's founding song",
+        "their oath-ring fits the hand of someone not yet born",
+        "they crossed the fjord under their enemy's name"
+      ],
+      "skills": [
+        "finding a sheltered crossing by watching snow settle",
+        "mending a longship seam with pine pitch and wool",
+        "remembering a lineage through its shared debts"
+      ],
+      "abilities": [
+        "can hear a broken oath in a house beam's creak",
+        "can read a stranger's path from frost on their boots",
+        "can keep a cooking fire through a night of sea wind"
+      ],
+      "factions": [
+        "the Fjord Guest-Moot, offering shelter before testimony",
+        "the Red Wool Carriers, moving messages between hearths",
+        "the Old Shore Compact, guarding the coast markers"
+      ],
+      "gear": [
+        "a seal-bone needle for mending sails and winter clothes",
+        "a small iron pot engraved with absent guests' names",
+        "red oath-wool tied around a weathered compass"
+      ],
+      "relationships": [
+        "a rival singer refuses the verse about their first meeting",
+        "a farmstead lights one lamp whenever the fjord closes",
+        "an old enemy asks them to witness a marriage between feuding houses"
+      ],
+      "backstories": [
+        "they carried messages between halls buried in snow",
+        "their first voyage returned with a passenger no one invited",
+        "two households each claim the other abandoned them"
+      ],
+      "hooks": [
+        "A feast invitation is addressed to the hall's founder.",
+        "A ship returns with its anchor wrapped in fresh red wool.",
+        "The mountain path opens for travelers carrying an enemy's name.",
+        "A skald's verse changes whenever the fire is fed.",
+        "A boundary stone is found inside a house that never moved.",
+        "The fjord freezes around one small boat and leaves the rest open.",
+        "A guest asks shelter from a storm visible only in reflection."
+      ]
+    },
+    {
+      "id": "post-apocalyptic",
+      "roles": [
+        "pump mechanic keeping rival settlements on one ration schedule",
+        "courier carrying seed samples between guarded roofs",
+        "radio host reading names of people found alive"
+      ],
+      "titles": [
+        "The Tin Roof's Last Guest",
+        "Keeper of the Long Walk Home",
+        "The Waterline Witness"
+      ],
+      "appearances": [
+        "A child's red mitten is tied around a cracked water gauge.",
+        "Medicine labels patch their mask, though the medicines are gone.",
+        "Reflective road sign runs down one trouser leg."
+      ],
+      "personalities": [
+        "shares the last clean cup before asking who brought it",
+        "measures a promise by whether it can be carried",
+        "keeps a quiet seat for people who return late"
+      ],
+      "desires": [
+        "to bring two water crews together before the dry season",
+        "to find the school-bus route beneath the new road",
+        "to plant a seed where no settlement has claimed the ground"
+      ],
+      "fears": [
+        "a full cistern with no one willing to test the water",
+        "the radio answering in a voice from the evacuation list",
+        "being the only survivor who knows the route is unsafe"
+      ],
+      "flaws": [
+        "makes ration decisions before hearing from those who wait",
+        "keeps walking instead of asking a settlement for help",
+        "trusts a patched machine because it failed them before"
+      ],
+      "secrets": [
+        "they divert one clean-water barrel to a rival camp",
+        "their route map includes a settlement they called empty",
+        "they know who silenced the old siren"
+      ],
+      "skills": [
+        "testing well water with copper and a clean jar",
+        "repairing a wind pump with bicycle chain and boot lace",
+        "marking a safe route by the noon shade"
+      ],
+      "abilities": [
+        "can hear a dry pump's failing valve across a compound",
+        "can find an occupied shelter by its night vent",
+        "can coax one more signal from a weather receiver"
+      ],
+      "factions": [
+        "the Shared Cistern Council, recording every bucket drawn",
+        "the Red Roof Couriers, carrying medicine and seeds",
+        "the Night Radio Cooperative, naming the missing"
+      ],
+      "gear": [
+        "a hand-cranked receiver wrapped in a school map",
+        "a water tester made from a cut-down brass cartridge",
+        "a seed tin sealed with old road sign metal"
+      ],
+      "relationships": [
+        "a rival well keeper sends the first bucket after every storm",
+        "a roof-school child saves them a place on each visit",
+        "a radio operator keeps names they asked not to broadcast"
+      ],
+      "backstories": [
+        "they crossed the salt flats following a school timetable",
+        "their first pump repair saved a settlement that later barred them",
+        "they grew up where the evacuation siren never sounded"
+      ],
+      "hooks": [
+        "A dry well returns clean water only at night.",
+        "The radio names a settlement with no recorded survivors.",
+        "A seed tin arrives labeled for next year's harvest.",
+        "A new road sign points to a town erased from every map.",
+        "A pump ledger lists an extra bucket drawn by an unknown hand.",
+        "The old school bus is parked outside a newer shelter.",
+        "A receiver broadcasts in the voice of a missing child."
+      ]
+    },
+    {
+      "id": "occult",
+      "roles": [
+        "records clerk for complaints submitted by the missing",
+        "caretaker of a hotel room that rents itself",
+        "interviewer asking witnesses what the room forgot"
+      ],
+      "titles": [
+        "The Drawer That Would Not Stay Shut",
+        "Custodian of the Second Appointment",
+        "The Name Behind the Glass"
+      ],
+      "appearances": [
+        "A paper wristband bears an admission date from next week.",
+        "Their umbrella drips upward when a stranger says their name.",
+        "A brass key is pinned inside a lapel, though no lock claims it."
+      ],
+      "personalities": [
+        "asks before touching an object left by the missing",
+        "keeps a straight face until the kettle answers",
+        "trusts a witness who admits what they do not know"
+      ],
+      "desires": [
+        "to find who keeps reserving the archive's windowless room",
+        "to return a recording to the person who has not made it",
+        "to learn why the registry lists their childhood address"
+      ],
+      "fears": [
+        "a telephone ringing inside a sealed evidence bag",
+        "being recognized by a stranger who cannot see them",
+        "a visitor leaving with one more shadow"
+      ],
+      "flaws": [
+        "keeps a case open because an ending feels like evidence",
+        "asks one more question after a witness answers plainly",
+        "catalogues danger before helping the person in it"
+      ],
+      "secrets": [
+        "they remove one appointment card from the registry each year",
+        "a locked room at home still sends rent receipts",
+        "their handwriting appears on returned photographs"
+      ],
+      "skills": [
+        "matching a key to scratches hidden under paint",
+        "recognizing a séance by dust left around its chairs",
+        "cataloguing voices from a damaged reel-to-reel"
+      ],
+      "abilities": [
+        "can tell which door opened by a change in room temperature",
+        "can hear a lie repeated by the walls after everyone leaves",
+        "can find the empty chair in a photograph first"
+      ],
+      "factions": [
+        "the After-Hours Registry, filing visitors who deny arriving",
+        "the Quiet Room Society, supporting returned witnesses",
+        "the Basement Key Exchange, lending keys to unknown doors"
+      ],
+      "gear": [
+        "a pocket recorder that captures a room after it is emptied",
+        "a velvet key roll embroidered with vanished street names",
+        "blank appointment cards held by a funeral clip"
+      ],
+      "relationships": [
+        "a night porter signs them into a hotel that burned down",
+        "a detective sends a case number when their reflection vanishes",
+        "a medium refuses to read the name inside their coat"
+      ],
+      "backstories": [
+        "they indexed records from a town with no postal code",
+        "their first interview was with a witness who remembered their future",
+        "they inherited keys from a relative whose house had no doors"
+      ],
+      "hooks": [
+        "A guest book gains a signature whenever the archive closes.",
+        "A sealed room sends a maintenance request in the caretaker's name.",
+        "A séance is scheduled for a date removed from the calendar.",
+        "A photograph returns with an extra chair and no extra person.",
+        "A hotel key fits a room that has never been built.",
+        "A witness remembers an interview the clerk has not held.",
+        "The key exchange receives a key made of warm bone."
+      ]
+    },
+    {
+      "id": "monster-hunter",
+      "roles": [
+        "examiner recording what a creature leaves untouched",
+        "keeper of a sanctuary for beasts named in old licenses",
+        "guide escorting witnesses after hunters depart"
+      ],
+      "titles": [
+        "The Hunter's Unspent Cartridge",
+        "Keeper of the Quiet Track",
+        "The Witness Beyond the Fence"
+      ],
+      "appearances": [
+        "A leather sleeve is patched with tags from quarries they released.",
+        "Their field glasses are scratched by something that never approached.",
+        "Red cloth marks the hand they use to calm frightened animals."
+      ],
+      "personalities": [
+        "asks what the creature protected before counting the damage",
+        "keeps one blanket for witnesses and one for tracks",
+        "does not call a hunt successful until all return"
+      ],
+      "desires": [
+        "to close a license that renews after its quarry is gone",
+        "to learn who baits creatures toward the village",
+        "to prove a so-called monster guards the water source"
+      ],
+      "fears": [
+        "a trap triggered by something too small to leave a track",
+        "mistaking a warning call for a charge",
+        "finding a familiar name carved into the quarry's den"
+      ],
+      "flaws": [
+        "keeps a specimen after its owner asks for it back",
+        "waits for a second witness while the first is in danger",
+        "treats every unknown animal as a problem to classify"
+      ],
+      "secrets": [
+        "they mark a safe trail around a creature's nesting ground",
+        "a license they signed names their missing mentor as witness",
+        "they reported a kill that was actually a negotiated retreat"
+      ],
+      "skills": [
+        "reading tracks where stone was dragged across soil",
+        "setting a cage that closes only when the animal is safe",
+        "calming a village after a false alarm"
+      ],
+      "abilities": [
+        "can hear a warning call differ from a distress call",
+        "can track a creature by insects avoiding its path",
+        "can hold a frightened beast still long enough to understand it"
+      ],
+      "factions": [
+        "the Unspent License Bureau, auditing hunts that never happened",
+        "the Boundary Kennel, a network of sanctuaries and handlers",
+        "the Village Witness Board, able to halt a hunt without a permit"
+      ],
+      "gear": [
+        "a field cage whose latch opens from the inside",
+        "chalk for marking trails without disturbing spoor",
+        "a specimen case repurposed for medical blankets"
+      ],
+      "relationships": [
+        "a village teacher sends drawings of tracks near the school",
+        "a rival hunter leaves a warning marker instead of taking the quarry",
+        "a former witness keeps the creature's scale in a tea tin"
+      ],
+      "backstories": [
+        "they followed an animal that led them out of a blizzard",
+        "their first hunt ended when the quarry returned a lost child's shoe",
+        "they grew up where hunters were paid to keep one beast alive"
+      ],
+      "hooks": [
+        "A license arrives signed by the creature it names.",
+        "Every village trap is opened from the outside.",
+        "Their mentor witnesses a quarry not yet born.",
+        "A creature returns a field notebook with one page missing.",
+        "The village asks them to protect a beast from its guardian.",
+        "Tracks circle the hunter's camp without crossing the fence.",
+        "A shed skin contains a wedding ring and a fresh permit."
+      ]
+    },
+    {
+      "id": "rogue-assassin",
+      "roles": [
+        "courier carrying exit plans instead of messages",
+        "accountant tracking contracts never accepted",
+        "bodyguard hired by the witness after the client disappears"
+      ],
+      "titles": [
+        "The Door Left Open",
+        "Keeper of the Unpaid Exit",
+        "The Signature in Pencil"
+      ],
+      "appearances": [
+        "Tailor's chalk crosses their sleeve and ends at a hidden pocket.",
+        "One glove is new; the other bears a dozen lock scratches.",
+        "Their polished shoes carry brick dust from an old escape route."
+      ],
+      "personalities": [
+        "lets a silence finish before deciding it is a threat",
+        "learns who cleans a room before asking who owns it",
+        "checks who pays for a promise before making one"
+      ],
+      "desires": [
+        "to remove a witness's name from a contract without harming its author",
+        "to recover the key to the guild's sealed accounts",
+        "to leave the city without making someone else take the blame"
+      ],
+      "fears": [
+        "a familiar knock from inside a locked door",
+        "being hired by someone they taught to escape",
+        "the guild recognizing their handwriting in a warning"
+      ],
+      "flaws": [
+        "keeps a contingency for every friend and calls it care",
+        "turns a simple request into a loyalty test",
+        "leaves before hearing how a rescued person feels"
+      ],
+      "secrets": [
+        "they pay the watch to leave one alley unpatrolled",
+        "a contract in their pocket names no client but them",
+        "they taught a rival the route used in their first betrayal"
+      ],
+      "skills": [
+        "copying a seal from its pressure mark on paper",
+        "finding the quiet stairwell in a crowded building",
+        "refitting a coat with two stitches and a borrowed pin"
+      ],
+      "abilities": [
+        "can spot who has already chosen an exit",
+        "can pause a pursuit by asking the right person a direct question",
+        "can remember a lock's sound after hearing it once"
+      ],
+      "factions": [
+        "the Open Door Exchange, trading safe exits for honest warnings",
+        "the Gray Accountants, reconciling jobs no one admits ordering",
+        "the Witness Cartel, protection run by former targets"
+      ],
+      "gear": [
+        "a wax seal kit whose stamp carries no house crest",
+        "a folding mirror backed with a route map",
+        "fine wire hidden inside a tailor's chalk case"
+      ],
+      "relationships": [
+        "a watch officer leaves a door unlatched on their route",
+        "a former target sends names of people needing an exit",
+        "a guild clerk edits their old score by one point each month"
+      ],
+      "backstories": [
+        "they entered a room by the person assigned to guard it",
+        "their first contract paid them to protect its named target",
+        "they escaped a locked house by following a child who lived there"
+      ],
+      "hooks": [
+        "A signed contract names a client dead for ten years.",
+        "The guild's exit map shows a new door in their wall.",
+        "A witness seeks protection from the person who taught them to vanish.",
+        "A watch ledger records an arrest that has not happened.",
+        "A seal bears the pressure mark of their first contract.",
+        "A former target leaves a key at the open door.",
+        "A job is canceled by the person meant to be removed."
+      ]
+    },
+    {
+      "id": "contemporary-weird",
+      "roles": [
+        "after-hours clerk for buildings with duplicate addresses",
+        "caseworker assigned to complaints from future tenants",
+        "bus dispatcher for a route appearing only in rain"
+      ],
+      "titles": [
+        "The Call Waiting After Midnight",
+        "Keeper of the Extra Copy",
+        "The Tenant Who Wasn't There"
+      ],
+      "appearances": [
+        "Their badge uses a font the city stopped using decades ago.",
+        "A bus transfer peeks from a pocket stitched shut from outside.",
+        "Their raincoat is dry except for one sleeve smelling of a lake."
+      ],
+      "personalities": [
+        "records a caller's preferred name even when forms have no field",
+        "keeps an umbrella for the person who always arrives soaked",
+        "apologizes to the elevator before pressing the wrong floor"
+      ],
+      "desires": [
+        "to return a library book checked out by the building itself",
+        "to learn who keeps adding a stop to the late bus",
+        "to finish one ordinary repair request before it becomes a mystery"
+      ],
+      "fears": [
+        "a reminder for an appointment they already attended",
+        "being the only one who notices a familiar storefront is gone",
+        "a neighbor's doorbell ringing inside their apartment"
+      ],
+      "flaws": [
+        "takes a complaint home because the office closed too soon",
+        "keeps the peace by agreeing to needless meetings",
+        "trusts a printed notice more than someone standing nearby"
+      ],
+      "secrets": [
+        "they forward mail to a tenant moving in next year",
+        "their old number appears on the city's emergency form",
+        "they once filed a complaint against their present home"
+      ],
+      "skills": [
+        "finding an apartment through the sound of its plumbing",
+        "remembering bus stops that have no signs",
+        "getting a straight answer from a municipal switchboard"
+      ],
+      "abilities": [
+        "can tell a street was renamed by how locals give directions",
+        "can hear a voicemail before the phone rings",
+        "can find the missing floor by counting elevator pauses"
+      ],
+      "factions": [
+        "the Tenants' Hotline, staffed by people with changing leases",
+        "the Night Bus Union, recording stops riders insist are real",
+        "the Office of Misdelivered Objects, a volunteer lost-property desk"
+      ],
+      "gear": [
+        "a paper street map with handwritten temporary addresses",
+        "a thermos stamped with a bus stop that closed years ago",
+        "apartment keys labeled with tenant names, not numbers"
+      ],
+      "relationships": [
+        "a crossing guard saves them a place beside an empty curb",
+        "a neighbor returns their umbrella from another season",
+        "a bus driver waves whenever the route skips a stop"
+      ],
+      "backstories": [
+        "they grew up in a building with one extra family in its directory",
+        "their first office had no front door",
+        "they took the wrong bus and arrived at a street bearing their childhood name"
+      ],
+      "hooks": [
+        "A repair request describes a leak on a floor absent from the plans.",
+        "The late bus announces a stop named for a departed tenant.",
+        "A library book returns with a receipt dated tomorrow.",
+        "Every mailbox receives the same key except theirs.",
+        "A caller cancels a meeting they have not scheduled.",
+        "The elevator pauses on a floor the city says was removed.",
+        "A store window reflects a road before it was built."
+      ]
+    },
+    {
+      "id": "chaos-blend",
+      "roles": [
+        "keeper of a ferry route across a dry rail yard",
+        "witness for contracts signed during eclipses",
+        "repairer of radios tuned by whale songs",
+        "guide between settlements sharing one calendar",
+        "broker of spare names for people erased from maps",
+        "auditor for a lighthouse whose beam runs underground",
+        "cook on a convoy traveling by tide and timetable",
+        "archivist tracking ruins that appear in different seasons"
+      ],
+      "titles": [
+        "The Oath at Platform Nine",
+        "The Lighthouse Beneath the Salt",
+        "Keeper of the Unmoored Clock",
+        "The Signal with Two Shadows",
+        "Last Passenger on the Whale Road",
+        "Cartographer of Borrowed Years",
+        "The Brass Door in the Dunes",
+        "The Tide That Missed Its Century"
+      ],
+      "appearances": [
+        "A railman's coat fastens with a seal from a drowned court.",
+        "Wool gloves carry tiny radio dials on each fingertip.",
+        "A weather vane strapped to their pack points underground.",
+        "A salt line crosses their boots at a ship's deck height.",
+        "Their map case is stitched from an old lighthouse uniform.",
+        "A brass hearing aid plays a saga when a train passes.",
+        "Neon thread marks constellations on their sailcloth hood.",
+        "Their shadow wears a coat from a different season."
+      ],
+      "personalities": [
+        "asks who is missing before counting arrivals",
+        "trusts a tool after hearing what it remembers",
+        "offers compromises with their cost written plainly",
+        "keeps weather notes for places with no sky",
+        "waits for the quietest witness to finish",
+        "treats an impossible map as a promise to investigate",
+        "laughs at a plan without mocking its maker",
+        "checks whether the rescued person wants to be carried"
+      ],
+      "desires": [
+        "to return a lighthouse key to the rail station that forged it",
+        "to settle a feud between crews living in different years",
+        "to chart the desert tide that crosses at noon",
+        "to find the signal tower answering only to old names",
+        "to reunite a convoy with the shore it left before the war",
+        "to deliver a weather report to a village beneath the sea",
+        "to learn whether the compass points to a place or person",
+        "to find who moves the calendar in the northern camp"
+      ],
+      "fears": [
+        "a train whistle rising from a dry well",
+        "an oath changing words whenever the tide turns",
+        "a lighthouse beam sweeping inside a sealed room",
+        "a settlement welcoming them before they arrive",
+        "a radio carrying tomorrow's voice",
+        "a safe route crossing through someone else's home",
+        "a whale song repeating a missing train number",
+        "a brass clock keeping time for a vanished crew"
+      ],
+      "flaws": [
+        "keeps promises after everyone involved has changed",
+        "uses a clever machine to avoid a plain conversation",
+        "trusts a map instead of asking for directions",
+        "assigns uncertainty to someone else",
+        "collects witnesses but forgets to ask what they need",
+        "saves a broken tool because it once chose correctly",
+        "turns rescue into debt without noticing",
+        "keeps moving whenever a place feels like home"
+      ],
+      "secrets": [
+        "they altered a timetable to give a ship one more night at sea",
+        "the oldest map was drawn by their future self",
+        "they traded a family oath for a lighthouse lens",
+        "their radio carries a station never built",
+        "they know who erased the northern settlement",
+        "one name belongs to a person beneath the desert tide",
+        "they followed the wrong star to a town that thanked them",
+        "the compass points to a promise not yet made"
+      ],
+      "skills": [
+        "reading tide marks on a railway bridge",
+        "repairing a field radio with a ship's bell spring",
+        "finding shelter by the warm side of a rune",
+        "keeping a convoy ledger across competing calendars",
+        "mending sailcloth with wire from a signal mast",
+        "negotiating passage between court and rail union",
+        "identifying a false star in a dry well",
+        "charting a path from echoes inside a brass tunnel"
+      ],
+      "abilities": [
+        "can hear a route change in an engine's beat",
+        "can send a message through a tide and signal wire",
+        "can calibrate a compass by listening to its silent needle",
+        "can tell which oath a machine was built to keep",
+        "can find a living crew by warmth left in a map",
+        "can read storms from clouds and boiler pressure",
+        "can point a lighthouse beam through solid stone",
+        "can recognize a familiar voice in a whale song"
+      ],
+      "factions": [
+        "the Northbound Compact, uniting longship crews and rail haulers",
+        "the Brass-Tide Assembly, licensing weather engines",
+        "the Ashen Relay, remembering lost settlements by radio",
+        "the Salt Calendar Court, arbitrating overlapping dates",
+        "the Whale-Road Carriers, crossing between moving shores",
+        "the Lantern Gauge Union, keeping public weather instruments",
+        "the Mapless Refuge, sheltering people erased from records",
+        "the Oath Engine Fellowship, repairing what its members break"
+      ],
+      "gear": [
+        "a tide-compass inside a salvaged signal lamp",
+        "a folding map case stitched from a timetable and sailcloth",
+        "a weather vane pointing toward the nearest broken promise",
+        "a brass lantern fueled with timetable scraps",
+        "a ship's bell fitted with a radio receiver",
+        "a rail spike wrapped in oath-thread and whale leather",
+        "a gauge measuring the depth of shadows",
+        "a navigation lens cut from a lighthouse window"
+      ],
+      "relationships": [
+        "a rival captain keeps the other half of their shared machine",
+        "a radio operator warns them as a future self",
+        "a settlement elder trusts their warnings but keeps their own map",
+        "a railway singer omits their first crossing from the saga",
+        "a mechanic repairs their gear but leaves one screw wrong",
+        "a convoy child asks them to map a moving home",
+        "a tide-court clerk writes messages in weather-chart margins",
+        "an old enemy leaves a lantern burning at every border"
+      ],
+      "backstories": [
+        "they guided an engine convoy across an overnight frozen sea",
+        "their first map showed two ports on the same shore",
+        "they rebuilt a lighthouse from three different eras",
+        "they were born during a rail strike that stopped every clock",
+        "they learned to navigate by whale song through radio static",
+        "they negotiated peace between a ship and its remembered harbor",
+        "they crossed the desert carrying a drowned kingdom's court seal",
+        "they wintered at a station whose trains came from other years"
+      ],
+      "hooks": [
+        "A ship's crew is listed in the local birth registry.",
+        "The desert tide brings an anchor stamped with tomorrow's date.",
+        "A saga describes the exact machine they are carrying.",
+        "Two maps show the lighthouse beam coming from inside.",
+        "A timetable lists a stop beneath a sea not yet returned.",
+        "The convoy receives a weather warning from a starless noon.",
+        "A court summons asks them to testify about a machine's oath.",
+        "A whale song repeats the station number of a missing train.",
+        "A train passes through a lighthouse beam underground.",
+        "The compass points to a name erased from every settlement.",
+        "A ship arrives carrying a dry well of warm seawater.",
+        "An engine refuses to move until the crew changes calendars."
+      ]
+    }
+  ]
+}

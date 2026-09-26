@@ -3,10 +3,10 @@
 use crate::character_content::{Choice, ContentCatalog, PresetContent, validate_choice_axes};
 use crate::{FieldStream, FieldValues};
 use forge_contracts::{
-    CanonState, Character, CreativeAxes, EntityEnvelope, EntityId, EntityOrigin, EntityType,
-    FieldKey, ForgeDNA, GenerationAction, GenerationKind, GenerationMetadata, GenerationRecipe,
-    PresetId, ProjectId, RootSeed, ValidationCode, ValidationError, ValidationErrors,
-    ValidationResult,
+    CanonState, Character, ContentVersion, CreativeAxes, EntityEnvelope, EntityId, EntityOrigin,
+    EntityType, FieldKey, ForgeDNA, GenerationAction, GenerationKind, GenerationMetadata,
+    GenerationRecipe, PresetId, ProjectId, RootSeed, ValidationCode, ValidationError,
+    ValidationErrors, ValidationResult,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,6 +30,7 @@ const CHARACTER_FIELD_ORDER: [CharacterField; 17] = [
     CharacterField::BackstoryHook,
     CharacterField::StoryHooks,
 ];
+const CURRENT_CHARACTER_CONTENT_VERSION: ContentVersion = ContentVersion(2);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -175,7 +176,7 @@ impl CharacterForge {
         constraints: forge_contracts::Constraints,
     ) -> ValidationResult<ForgeDNA> {
         let preset = PresetId::new(preset)?;
-        let catalog = ContentCatalog::load()?;
+        let catalog = ContentCatalog::load(CURRENT_CHARACTER_CONTENT_VERSION)?;
         catalog.preset(&preset)?;
         let mut recipe = GenerationRecipe::new(GenerationKind::Character, root_seed, preset);
         recipe.creative_axes = creative_axes;
@@ -199,6 +200,7 @@ impl CharacterForge {
             recipe.set_dependencies(field.key()?, dependencies)?;
         }
         let mut dna = ForgeDNA::new(recipe);
+        dna.content_version = CURRENT_CHARACTER_CONTENT_VERSION;
         dna.normalize()?;
         validate_constraints(&dna.recipe.constraints)?;
         validate_character_dna(&dna)?;
@@ -219,14 +221,7 @@ impl CharacterForge {
         validate_character_dna(&canonical_dna)?;
         project_id.validate("project_id")?;
 
-        let catalog = ContentCatalog::load()?;
-        if canonical_dna.content_version != catalog.version {
-            return Err(error(
-                ValidationCode::UnsupportedVersion,
-                "content_version",
-                "ForgeDNA content version does not match the embedded Character corpus",
-            ));
-        }
+        let catalog = ContentCatalog::load(canonical_dna.content_version)?;
         let preset = catalog.preset(&canonical_dna.recipe.universe_preset)?;
         let constraints = ConstraintSet::parse(&canonical_dna.recipe.constraints)?;
         let values = generate_all_fields(&canonical_dna, preset, &constraints)?;
@@ -278,7 +273,7 @@ impl CharacterForge {
     ) -> ValidationResult<Vec<CharacterField>> {
         let mut updated = candidate.clone();
         updated.validate()?;
-        let catalog = ContentCatalog::load()?;
+        let catalog = ContentCatalog::load(updated.dna.content_version)?;
         let preset = catalog.preset(&updated.dna.recipe.universe_preset)?;
         let constraints = ConstraintSet::parse(&updated.dna.recipe.constraints)?;
         let mut dna = updated.dna.clone();
@@ -336,7 +331,7 @@ impl CharacterForge {
     ) -> ValidationResult<Vec<CharacterField>> {
         let mut updated = candidate.clone();
         updated.validate()?;
-        let catalog = ContentCatalog::load()?;
+        let catalog = ContentCatalog::load(updated.dna.content_version)?;
         let preset = catalog.preset(&updated.dna.recipe.universe_preset)?;
         let constraints = ConstraintSet::parse(&updated.dna.recipe.constraints)?;
         let mut dna = updated.dna.clone();
@@ -871,7 +866,7 @@ fn apply_changed_values(
 }
 
 fn refresh_character_tags(character: &mut Character, dna: &ForgeDNA) -> ValidationResult<()> {
-    let catalog = ContentCatalog::load()?;
+    let catalog = ContentCatalog::load(dna.content_version)?;
     let preset = catalog.preset(&dna.recipe.universe_preset)?;
     let mut tags = vec![format!("preset:{}", preset.id)];
     if let Some(choice) = preset
@@ -1064,13 +1059,37 @@ mod tests {
         .unwrap()
     }
 
+    fn legacy_v1_dna(seed: u64, preset: &str) -> ForgeDNA {
+        let mut dna = dna(seed, preset, CreativeAxes::neutral());
+        dna.content_version = ContentVersion(1);
+        dna.normalize().unwrap();
+        dna
+    }
+
     #[test]
     fn canonical_core_preset_list_matches_embedded_content_catalog() {
-        let catalog = ContentCatalog::load().unwrap();
+        let catalog = ContentCatalog::load(CURRENT_CHARACTER_CONTENT_VERSION).unwrap();
         let actual: Vec<_> = catalog.presets().map(|preset| preset.id.as_str()).collect();
         assert_eq!(actual.len(), CORE_PRESETS.len());
         for id in CORE_PRESETS {
             assert!(actual.contains(&id), "missing preset {id}");
+        }
+    }
+
+    #[test]
+    fn v2_semantic_choice_families_are_expanded_and_unique() {
+        let v1 = ContentCatalog::load(ContentVersion(1)).unwrap();
+        let v2 = ContentCatalog::load(ContentVersion(2)).unwrap();
+        for id in CORE_PRESETS {
+            let old = v1.preset(&PresetId::new(id).unwrap()).unwrap();
+            let expanded = v2.preset(&PresetId::new(id).unwrap()).unwrap();
+            assert!(expanded.roles.len() > old.roles.len(), "roles for {id}");
+            assert!(
+                expanded.personalities.len() > old.personalities.len(),
+                "personalities for {id}"
+            );
+            assert!(expanded.hooks.len() > old.hooks.len(), "hooks for {id}");
+            expanded.validate_unique_choices().unwrap();
         }
     }
 
@@ -1097,7 +1116,10 @@ mod tests {
                 CharacterForge::generate(&dna(index as u64 + 1, preset, CreativeAxes::neutral()))
                     .unwrap_or_else(|error| panic!("{preset}: {error}"));
             candidate.validate().unwrap();
-            assert_eq!(candidate.dna.content_version.0, 1);
+            assert_eq!(
+                candidate.dna.content_version,
+                CURRENT_CHARACTER_CONTENT_VERSION
+            );
             assert!(
                 candidate
                     .character
@@ -1110,7 +1132,7 @@ mod tests {
     }
 
     #[test]
-    fn golden_seed_42_preserves_core_preset_archetype_outputs() {
+    fn golden_seed_42_preserves_v1_core_preset_archetype_outputs() {
         let expected = [
             ("dark-fantasy", "Lantern Warden"),
             ("pirate", "Mutiny-Script Quartermaster"),
@@ -1125,6 +1147,30 @@ mod tests {
             ("chaos-blend", "Tide-Court Signal Witch"),
         ];
         for (preset, archetype) in expected {
+            let candidate = CharacterForge::generate(&legacy_v1_dna(42, preset)).unwrap();
+            assert_eq!(
+                candidate.character.archetype, archetype,
+                "golden preset {preset}"
+            );
+        }
+    }
+
+    #[test]
+    fn golden_seed_42_records_v2_core_preset_archetype_outputs() {
+        let expected = [
+            ("dark-fantasy", "Lantern Warden"),
+            ("pirate", "Tide-Court Interpreter"),
+            ("steampunk", "Pressure-Ledger Inspector"),
+            ("cyberpunk", "Memory-Bank Salvager"),
+            ("nordic-myth", "Oath-Weight Bearer"),
+            ("post-apocalyptic", "Water-Ration Mediator"),
+            ("occult", "Threshold Locksmith"),
+            ("monster-hunter", "Molt-Pattern Tracker"),
+            ("rogue-assassin", "Witness-Sparing Cutpurse"),
+            ("contemporary-weird", "Substitute for an Unlisted Neighbor"),
+            ("chaos-blend", "Tide-Court Signal Witch"),
+        ];
+        for (preset, archetype) in expected {
             let candidate =
                 CharacterForge::generate(&dna(42, preset, CreativeAxes::neutral())).unwrap();
             assert_eq!(
@@ -1132,6 +1178,14 @@ mod tests {
                 "golden preset {preset}"
             );
         }
+    }
+
+    #[test]
+    fn content_v1_remains_generatable_from_its_frozen_corpus() {
+        let candidate = CharacterForge::generate(&legacy_v1_dna(42, "pirate")).unwrap();
+        assert_eq!(candidate.dna.content_version, ContentVersion(1));
+        assert_eq!(candidate.character.archetype, "Mutiny-Script Quartermaster");
+        assert!(candidate.validate().is_ok());
     }
 
     #[test]
@@ -1228,6 +1282,51 @@ mod tests {
                 .count()
         };
         assert!(sample(100) > sample(0));
+    }
+
+    #[test]
+    fn controlled_creative_axis_comparison_keeps_seed_and_other_axes_fixed() {
+        let mut low_axes = CreativeAxes::neutral();
+        low_axes.levels.insert(CreativeAxis::Technology, 0);
+        let mut high_axes = CreativeAxes::neutral();
+        high_axes.levels.insert(CreativeAxis::Technology, 100);
+        let mut low_biased = 0;
+        let mut high_biased = 0;
+        for seed in 0..256 {
+            let low_dna = dna(seed, "cyberpunk", low_axes.clone());
+            let high_dna = dna(seed, "cyberpunk", high_axes.clone());
+            let low = CharacterForge::generate(&low_dna).unwrap();
+            let high = CharacterForge::generate(&high_dna).unwrap();
+            assert_eq!(low, CharacterForge::generate(&low_dna).unwrap());
+            assert_eq!(high, CharacterForge::generate(&high_dna).unwrap());
+            low_biased += usize::from(low.character.archetype == "Memory-Bank Salvager");
+            high_biased += usize::from(high.character.archetype == "Memory-Bank Salvager");
+        }
+        assert!(
+            high_biased > low_biased,
+            "controlled sample low={low_biased}, high={high_biased}"
+        );
+    }
+
+    #[test]
+    fn canonical_json_roundtrip_preserves_utf8_unicode() {
+        let mut candidate =
+            CharacterForge::generate(&dna(31415, "occult", CreativeAxes::neutral())).unwrap();
+        let unicode = "séance refusing—and 雪の狐 🌙";
+        candidate
+            .manual_edit(
+                CharacterField::BackstoryHook,
+                CharacterFieldValue::Text(unicode.into()),
+            )
+            .unwrap();
+        let bytes = serde_json::to_vec(&candidate).unwrap();
+        let json = std::str::from_utf8(&bytes).unwrap();
+        assert!(json.contains("séance"));
+        assert!(json.contains("refusing—and"));
+        assert!(json.contains("雪の狐 🌙"));
+        let restored: CharacterCandidate = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(restored, candidate);
+        assert_eq!(restored.character.backstory_hook, unicode);
     }
 
     #[test]
@@ -1365,7 +1464,7 @@ mod tests {
         constraints.insert(ConstraintKey::new("no_magic").unwrap(), "true".into());
         constraints.insert(ConstraintKey::new("no_firearms").unwrap(), "true".into());
         constraints.insert(ConstraintKey::new("urban_only").unwrap(), "true".into());
-        let catalog = ContentCatalog::load().unwrap();
+        let catalog = ContentCatalog::load(CURRENT_CHARACTER_CONTENT_VERSION).unwrap();
         let mut observed = BTreeSet::new();
         for seed in 0..64 {
             let candidate = CharacterForge::generate(
