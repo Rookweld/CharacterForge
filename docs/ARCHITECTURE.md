@@ -36,4 +36,14 @@ Future provider or expansion support may use these boundaries if later authorize
 
 ## Data and safety
 
-SQLite remains the v1.0 project source of truth. Project/archive handling must validate inputs and preserve recoverability. Detailed schemas, migrations, generation contracts, and import/export behavior belong to their later missions and are intentionally not defined by this bootstrap.
+SQLite remains the v1.0 project source of truth when persistence is implemented. Mission 01 establishes versioned project/entity contracts and ForgeDNA, but adds no persistence workflow.
+
+## Mission 01 — contracts and deterministic field streams
+
+- Shared contracts use explicit version wrappers. The initial supported schema, generator, content, and recipe versions are each `1`; unsupported ForgeDNA versions return structured validation errors.
+- Canonical ForgeDNA uses compact JSON: struct declaration order, sorted `BTreeMap` keys, lowercase hyphenated UUID text, lowercase fixed-width hexadecimal root seeds, normalized ASCII identifiers, and trimmed constraint values. The strict decoder accepts only the canonical representation.
+- A field stream uses BLAKE3 derive-key context `character-forge/forge-dna/field-stream/v1`. Its input includes the version tuple, root seed, preset, normalized axes and constraints, target field and nonce, and sorted explicit dependency field/nonces. It excludes time, process state, UI ordering, unrelated field nonces, and global randomness.
+- Lock/unlock changes only the lock flag. A single-field reroll increments the target and its transitive, explicitly dependent unlocked fields. A locked dependent and its descendants are preserved. Reroll-all increments all unlocked fields. Nonce and generated-value changes commit together only after every requested field succeeds.
+- The core owns deterministic stream derivation and reroll orchestration; callers supply a pure field generator. These contracts do not add content packs, persistence, UI workflows, or AI.
+
+See [ADR 0002](adr/0002-forge-dna-and-field-streams.md) for the serialization and stream compatibility decision.
