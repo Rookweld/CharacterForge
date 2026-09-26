@@ -55,3 +55,9 @@ See [ADR 0002](adr/0002-forge-dna-and-field-streams.md) for the serialization an
 - Character generation owns a canonical field registry and explicit dependency graph. Archetype is the shared context dependency; relationship, backstory, and story hooks also depend on desire. Existing ForgeDNA field streams and reroll orchestration remain authoritative for deterministic selection, nonce advancement, lock behavior, and atomic updates.
 - Direct user edits are represented by per-field origin metadata and retained generation provenance. Reroll-all temporarily protects manually edited fields, then restores their original lock settings.
 - The developer harness is `cargo run -p forge-app-core --example character_forge -- --seed 42 --preset cyberpunk --axis technology=100`; it emits the complete candidate and ForgeDNA as JSON. This is a developer demonstration, not UI functionality.
+
+## Mission 03 — Quest prototype (partial)
+
+- Quest generation is implemented in `forge-app-core` and reuses the existing ForgeDNA streams, nonce controls, and lock/reroll functions. The developer harness is `cargo run -p forge-app-core --example quest_forge -- --seed 42 --preset cyberpunk --axis technology=100`.
+- New Quest recipes use content version 2. Quest content version 1 is currently rejected; no historical Quest corpus was created before Mission 03.
+- The Quest preset thematic data is currently embedded in Rust source and the prose pools remain small. The intended declarative, versioned Quest corpus and complete quality/coherence gates remain unfinished. See the Mission 03 report.

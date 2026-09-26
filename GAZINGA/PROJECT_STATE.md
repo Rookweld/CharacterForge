@@ -4,11 +4,11 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** 02 — SOUL
-**Current status:** PASS
+**Current mission:** 03 — CALLING
+**Current status:** PARTIAL — Quest Forge prototype added; mission gates remain open
 **Target release:** v1.0.0 FOUNDATION
-**Last verified HEAD:** `0593a01de54be9857d5689c57abcd338db3904cc`
-**Branch:** `master` (dirty; audit changes are uncommitted; supplied character samples are preserved)
+**Last verified HEAD:** `8f18d3e09d53c4fb92708f0717922ab35e011165` (starting baseline; Mission 03 changes uncommitted)
+**Branch:** `master` (dirty from Mission 03; started clean; supplied character samples are preserved)
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 2 (v1 retained for replay)
@@ -38,6 +38,8 @@
 - Mission 02 added the typed Character candidate pipeline, declarative original content for all eleven v1 presets, axis-weighted deterministic selection, supported Character constraints, provenance-preserving manual edits, field rerolls, lock-aware reroll-all, and a JSON CLI harness. At that closeout the corpus used content version 1; the later diversity audit added v2 while preserving v1 replay.
 - Mission 02 quality tests cover same-DNA reproducibility, no input DNA mutation, fixed seed outputs across all presets, 64-seed repetition sweeps, creative-axis extremes and distribution shifts, Chaos Blend, field cardinalities, structured invalid-input errors, dependency rerolls/firewalls, explicit locks, manual edits, and stable JSON serialization.
 - Mission 02 verification passed: `./scripts/verify.ps1` (frontend checks/test/build, Rust fmt/clippy/workspace tests, optimized Tauri build); 43 Rust unit tests passed (33 app-core, 10 contracts); `git diff --check` passed. Details are in `docs/missions/MISSION_02_REPORT.md`.
+- Mission 03 prototype adds a deterministic Quest candidate pipeline, CLI, all eleven core preset identifiers, and shared lock/reroll integration. Current quality evidence shows substantial exact multi-field similarity (up to 13/14 matching fields in seed sweeps), sparse three-choice fields, incomplete axis semantics, and coherence defects in reviewed preset samples. Mission 03 is **PARTIAL** and must not be closed.
+- Quest content version 2 is used for new Quest DNA; version 1 Quest generation is rejected because no frozen v1 Quest corpus existed. Character content versions 1 and 2 are unchanged.
 - Pre-Mission-03 SOUL diversity audit expanded the current corpus to content version 2 while preserving the v1 corpus and ForgeDNA stream/reroll semantics. Deterministic field-level, archetype-cluster, Chaos Blend, controlled-axis, and UTF-8 evidence is recorded in `docs/CONTENT_QUALITY_REPORT.md`; Mission 02 remains PASS after audit verification.
 
 ## Mission 00 closeout
@@ -54,8 +56,8 @@
 
 ## Deferred by design
 
-Quest generation, persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features.
+Persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features. Quest Forge is only partially implemented; see `docs/missions/MISSION_03_REPORT.md`.
 
 ## Handoff
 
-Mission 00 report: `docs/missions/MISSION_00_REPORT.md`. Mission 01 report: `docs/missions/MISSION_01_REPORT.md`. Mission 02 report: `docs/missions/MISSION_02_REPORT.md`. Mission 02 is closed; stop here and do not begin Mission 03.
+Mission 00 report: `docs/missions/MISSION_00_REPORT.md`. Mission 01 report: `docs/missions/MISSION_01_REPORT.md`. Mission 02 report: `docs/missions/MISSION_02_REPORT.md`. Mission 03 report: `docs/missions/MISSION_03_REPORT.md`. Do not begin Mission 04 until Mission 03's open gates are resolved.
