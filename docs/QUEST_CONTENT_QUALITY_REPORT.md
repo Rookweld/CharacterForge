@@ -191,3 +191,37 @@ Mission 03 therefore remains **PARTIAL**. The cluster regression and both axis p
 - `cargo metadata --no-deps --format-version 1`: passed.
 - `./scripts/verify.ps1`: passed; frontend format/lint/typecheck, 1 frontend test, frontend build, Rust workspace checks/tests, and optimized Tauri no-bundle build passed.
 - `git diff --check`: passed.
+
+## Final Remediation — pre-expansion content-depth inventory (2026-09-26)
+
+This inventory was completed against the clean committed `004973e649ffd4babe4b7b2840730057635f32c1` baseline before any corpus edits. The existing deterministic audit ran 256 seeds for each of the ten ordinary presets and 1,024 for Chaos Blend. In every one of the 22 corpus threads, each of the 14 authored prose arrays (title, location, giver, premise, objective, stakes, threat, complication, clue, twist, reward, consequence, moral pressure, follow-up) contained exactly two nonempty entries.
+
+### Source and compatible counts
+
+For every ordinary preset and every listed prose field, source count was **4 per preset** (2 choices in each of its 2 threads); after the selected Frame/thread, the compatible pool was **2**. Chaos Blend likewise has 4 source items per prose field: core-spine roles had 2 Frame-compatible values; the secondary roles had 4 compatible values across the two explicitly mix-compatible threads (2 from the spine and 2 from the alternate source). No content filter reduced a larger pool. Giver and premise each had four source items per preset and two per selected Frame; Briefing composed those components and had eight observed combinations per preset (four per thread).
+
+The rendered counts and most-common frequencies below are the observed 256-seed baseline for all 12 required fields. Cells are `unique / top-one frequency`:
+
+| Preset | Title | Location | Giver | Objective | Stakes | Threat | Complication | Clue | Reward | Consequence | Moral pressure | Briefing |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Dark fantasy | 4/32.0% | 4/31.6% | 4/29.7% | 4/30.9% | 4/34.4% | 4/37.1% | 4/30.1% | 4/30.1% | 4/32.4% | 4/30.9% | 4/29.7% | 8/16.0% |
+| Pirate | 4/27.3% | 4/28.9% | 4/27.7% | 4/28.1% | 4/28.1% | 4/28.9% | 4/28.5% | 4/29.7% | 4/28.5% | 4/28.5% | 4/27.7% | 8/14.8% |
+| Steampunk | 4/41.4% | 4/41.8% | 4/46.1% | 4/43.4% | 4/43.0% | 4/42.6% | 4/44.9% | 4/41.0% | 4/41.8% | 4/44.9% | 4/41.0% | 8/23.8% |
+| Cyberpunk | 4/36.3% | 4/40.2% | 4/38.7% | 4/35.9% | 4/36.3% | 4/39.5% | 4/37.9% | 4/37.5% | 4/35.9% | 4/36.7% | 4/38.7% | 8/20.3% |
+| Nordic myth | 4/32.4% | 4/30.9% | 4/27.7% | 4/27.7% | 4/28.5% | 4/28.5% | 4/27.3% | 4/29.3% | 4/30.9% | 4/34.8% | 4/29.3% | 8/14.5% |
+| Post-apocalyptic | 4/34.4% | 4/31.6% | 4/32.4% | 4/32.4% | 4/33.6% | 4/33.2% | 4/32.0% | 4/32.4% | 4/32.0% | 4/32.0% | 4/33.6% | 8/18.0% |
+| Occult | 4/30.9% | 4/32.4% | 4/29.3% | 4/31.2% | 4/30.1% | 4/31.2% | 4/28.9% | 4/28.5% | 4/28.5% | 4/31.6% | 4/28.5% | 8/16.0% |
+| Monster hunter | 4/34.4% | 4/34.8% | 4/37.9% | 4/36.3% | 4/37.1% | 4/36.7% | 4/35.9% | 4/36.7% | 4/42.6% | 4/35.2% | 4/37.5% | 8/19.1% |
+| Rogue assassin | 4/27.7% | 4/26.2% | 4/27.0% | 4/25.8% | 4/27.3% | 4/27.7% | 4/27.3% | 4/25.8% | 4/27.7% | 4/27.0% | 4/27.0% | 8/16.0% |
+| Contemporary weird | 4/44.1% | 4/42.6% | 4/43.0% | 4/42.2% | 4/43.4% | 4/48.0% | 4/44.1% | 4/43.8% | 4/49.6% | 4/43.4% | 4/48.4% | 8/22.3% |
+| Chaos Blend | 4/26.0% | 4/25.9% | 4/32.5% | 4/31.3% | 4/31.2% | 4/31.4% | 4/26.5% | 4/32.2% | 4/26.9% | 4/32.4% | 4/26.2% | 8/17.2% |
+
+**Cause classification:** every ordinary identity field is case A: only four source entries exist, two per thread. The Chaos secondary fields also have only four source entries; the compatible-source rule does not further collapse their pool. Cases B (a larger pool filtered down), C (weighting suppresses existing alternatives), and D (distinct items rendered identically) were not supported by the evidence. Both alternatives from each source thread appear in the measured sample. Thus the first correction belongs in the corpus; the existing Frame/source architecture is not an obstacle to deeper authored families.
+
+## Authoring Batch A (2026-09-26)
+
+Expanded the six threads in Dark Fantasy (`claim-of-the-dead`, `winter-lanterns`), Pirate (`drowned-roll`, `mutiny-debt`), and Steampunk (`foundry-pressure`, `clockwork-inheritance`) in the existing v3 corpus. All 14 authored pools per thread now contain **6 distinct choices**, up from 2: title, location, giver, premise, objective, stakes, threat, complication, clue, twist, reward, consequence, moral pressure, and follow-up. That is 12 source choices per field per preset instead of 4. Briefing remains composed from giver and premise; each selected thread now supports 36 pairings instead of 4. No field was intentionally left smaller. No generator or protocol code changed.
+
+Validation: the JSON parsed; all 22 thread IDs remain globally unique; the authored pools have no exact duplicates, empty values, or placeholder strings. The six expanded threads retain their existing tags and compatibility rules. The temporary deterministic smoke runner generated and validated 64/64 candidates for each target preset (192/192 total). Nine complete samples (seeds 0, 17, and 42 per preset) were inspected for joins and thematic fit; no broken template sentence or invalid Quest was observed. The samples retain recognizable grave/winter obligation, harbor/crew law, and civic machinery/inheritance motifs. This was a focused spot check, not the final 52-Quest human review; broader coherence, repetition, rendered-field concentration, and cross-preset quality remain open for later batches and the final audit.
+
+Focused verification: `cargo test -p forge-app-core` passed **52 tests, 0 failed** (0 doc tests); the relevant Quest core subset passed 13/13; all three 64-seed generation sweeps passed; `cargo fmt --all -- --check` passed; `git diff --check` passed. Mission 03 remains **PARTIAL**.
