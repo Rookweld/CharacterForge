@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
 import {
   api,
+  type CharacterCandidate,
   type EntityRecord,
   type ForgePayload,
   type Project,
@@ -289,6 +290,56 @@ describe('desktop creative workflows', () => {
     expect(
       await screen.findByText('Fear locked. Rerolls will leave it unchanged.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows the canonical Name lock and renders preserved values from a reroll response', async () => {
+    const source = character.value as CharacterCandidate;
+    const withNameLock = (
+      value: CharacterCandidate,
+      locked: boolean,
+      archetype = value.character.archetype,
+    ): ForgePayload => ({
+      kind: 'character_candidate',
+      value: {
+        ...value,
+        dna: {
+          ...value.dna,
+          recipe: {
+            ...value.dna.recipe,
+            field_controls: {
+              ...value.dna.recipe.field_controls,
+              '03-name': { nonce: 0, locked },
+            },
+          },
+        },
+        character: {
+          ...value.character,
+          archetype,
+          envelope: { ...value.character.envelope, name: 'Mara Vale' },
+        },
+      },
+    });
+    const locked = withNameLock(source, true);
+    const rerolled = withNameLock(source, true, 'A different archetype');
+    vi.mocked(api.setLock).mockResolvedValue(locked);
+    vi.mocked(api.reroll).mockResolvedValue(rerolled);
+
+    await forgeCharacterResult();
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Name' }));
+    await waitFor(() => expect(api.setLock).toHaveBeenCalledWith('name', true));
+    expect(
+      await screen.findByRole('button', { name: 'Unlock Name' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reroll Archetype' }));
+    await waitFor(() => expect(api.reroll).toHaveBeenCalledWith('archetype'));
+    expect(
+      await screen.findByText('A different archetype'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Unlock Name' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Mara Vale').length).toBeGreaterThan(0);
   });
 
   it('rerolls a single requested field', async () => {

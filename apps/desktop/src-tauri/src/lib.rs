@@ -1,5 +1,6 @@
 use forge_app_core::{
-    CharacterField, CharacterFieldValue, CharacterForge, QuestField, QuestFieldValue, QuestForge,
+    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, QuestField,
+    QuestFieldValue, QuestForge,
 };
 use forge_contracts::{
     CreativeAxes, CreativeAxis, EntityId, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -268,6 +269,112 @@ fn get_project(state: State<'_, AppState>) -> Result<Option<ProjectInfo>, UiErro
     }
 }
 
+fn set_entity_field_lock(
+    entity: &mut StoredEntity,
+    field: &str,
+    locked: bool,
+) -> Result<(), UiError> {
+    match entity {
+        StoredEntity::CharacterCandidate(candidate) => {
+            let target = character_field(field)?;
+            if locked {
+                CharacterForge::lock(candidate, target)?
+            } else {
+                CharacterForge::unlock(candidate, target)?
+            }
+        }
+        StoredEntity::QuestCandidate(candidate) => {
+            let target = quest_field(field)?;
+            if locked {
+                QuestForge::lock(candidate, target)?
+            } else {
+                QuestForge::unlock(candidate, target)?
+            }
+        }
+        _ => {
+            return Err(invalid_candidate_operation(
+                "Canon records cannot be edited as candidates.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reroll_entity_field(entity: &mut StoredEntity, field: &str) -> Result<(), UiError> {
+    match entity {
+        StoredEntity::CharacterCandidate(candidate) => {
+            CharacterForge::reroll_field(candidate, character_field(field)?)?;
+        }
+        StoredEntity::QuestCandidate(candidate) => {
+            QuestForge::reroll_field(candidate, quest_field(field)?)?;
+        }
+        _ => {
+            return Err(invalid_candidate_operation(
+                "Canon records cannot be rerolled.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reroll_entity_unlocked(entity: &mut StoredEntity) -> Result<(), UiError> {
+    match entity {
+        StoredEntity::CharacterCandidate(candidate) => {
+            CharacterForge::reroll_all_unlocked(candidate)?;
+        }
+        StoredEntity::QuestCandidate(candidate) => {
+            QuestForge::reroll_all(candidate)?;
+        }
+        _ => {
+            return Err(invalid_candidate_operation(
+                "Canon records cannot be rerolled.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn edit_entity_field(entity: &mut StoredEntity, field: &str, value: Value) -> Result<(), UiError> {
+    match entity {
+        StoredEntity::CharacterCandidate(candidate) => {
+            let target = character_field(field)?;
+            candidate.manual_edit(target, character_value(target, value)?)?;
+        }
+        StoredEntity::QuestCandidate(candidate) => {
+            let target = quest_field(field)?;
+            candidate.manual_edit(target, quest_value(target, value)?)?;
+        }
+        _ => {
+            return Err(invalid_candidate_operation(
+                "Canon records must be revised explicitly.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn invalid_candidate_operation(message: &str) -> UiError {
+    UiError {
+        kind: "invalid_operation",
+        message: message.into(),
+        expected: None,
+        actual: None,
+    }
+}
+
+fn generate_character_candidate(
+    project_id: ProjectId,
+    preset: &str,
+    seed: u64,
+    axes: BTreeMap<CreativeAxis, u8>,
+    constraints: BTreeMap<forge_contracts::ConstraintKey, String>,
+) -> Result<CharacterCandidate, UiError> {
+    let mut creative_axes = CreativeAxes { levels: axes };
+    creative_axes.normalize()?;
+    let dna = CharacterForge::new_dna(RootSeed::new(seed), preset, creative_axes, constraints)?;
+    Ok(CharacterForge::generate_in_project(&dna, project_id)?)
+}
+
 #[tauri::command]
 fn forge_character(
     state: State<'_, AppState>,
@@ -285,11 +392,8 @@ fn forge_character(
             expected: None,
             actual: None,
         })?;
-    let mut creative_axes = CreativeAxes { levels: axes };
-    creative_axes.normalize()?;
-    let dna = CharacterForge::new_dna(RootSeed::new(seed), &preset, creative_axes, constraints)?;
-    let mut candidate = CharacterForge::generate_in_project(&dna, project.envelope.id)?;
-    candidate.character.envelope.name = candidate.character.title.clone();
+    let candidate =
+        generate_character_candidate(project.envelope.id, &preset, seed, axes, constraints)?;
     let entity = StoredEntity::CharacterCandidate(candidate);
     session.working = Some(entity.clone());
     session.write_version = None;
@@ -336,32 +440,7 @@ fn set_field_lock(
         expected: None,
         actual: None,
     })?;
-    match entity {
-        StoredEntity::CharacterCandidate(candidate) => {
-            let target = character_field(&field)?;
-            if locked {
-                CharacterForge::lock(candidate, target)?
-            } else {
-                CharacterForge::unlock(candidate, target)?
-            }
-        }
-        StoredEntity::QuestCandidate(candidate) => {
-            let target = quest_field(&field)?;
-            if locked {
-                QuestForge::lock(candidate, target)?
-            } else {
-                QuestForge::unlock(candidate, target)?
-            }
-        }
-        _ => {
-            return Err(UiError {
-                kind: "invalid_operation",
-                message: "Canon records cannot be edited as candidates.".into(),
-                expected: None,
-                actual: None,
-            });
-        }
-    }
+    set_entity_field_lock(entity, &field, locked)?;
     Ok(entity.clone())
 }
 
@@ -374,23 +453,7 @@ fn reroll_field(state: State<'_, AppState>, field: String) -> Result<StoredEntit
         expected: None,
         actual: None,
     })?;
-    match entity {
-        StoredEntity::CharacterCandidate(candidate) => {
-            CharacterForge::reroll_field(candidate, character_field(&field)?)?;
-            candidate.character.envelope.name = candidate.character.title.clone();
-        }
-        StoredEntity::QuestCandidate(candidate) => {
-            QuestForge::reroll_field(candidate, quest_field(&field)?)?;
-        }
-        _ => {
-            return Err(UiError {
-                kind: "invalid_operation",
-                message: "Canon records cannot be rerolled.".into(),
-                expected: None,
-                actual: None,
-            });
-        }
-    }
+    reroll_entity_field(entity, &field)?;
     Ok(entity.clone())
 }
 
@@ -403,23 +466,7 @@ fn reroll_unlocked(state: State<'_, AppState>) -> Result<StoredEntity, UiError> 
         expected: None,
         actual: None,
     })?;
-    match entity {
-        StoredEntity::CharacterCandidate(candidate) => {
-            CharacterForge::reroll_all_unlocked(candidate)?;
-            candidate.character.envelope.name = candidate.character.title.clone();
-        }
-        StoredEntity::QuestCandidate(candidate) => {
-            QuestForge::reroll_all(candidate)?;
-        }
-        _ => {
-            return Err(UiError {
-                kind: "invalid_operation",
-                message: "Canon records cannot be rerolled.".into(),
-                expected: None,
-                actual: None,
-            });
-        }
-    }
+    reroll_entity_unlocked(entity)?;
     Ok(entity.clone())
 }
 
@@ -436,29 +483,7 @@ fn edit_field(
         expected: None,
         actual: None,
     })?;
-    match entity {
-        StoredEntity::CharacterCandidate(candidate) => {
-            let target = character_field(&field)?;
-            let value = character_value(target, value)?;
-            candidate.manual_edit(target, value)?;
-            if target == CharacterField::Title {
-                candidate.character.envelope.name = candidate.character.title.clone();
-            }
-        }
-        StoredEntity::QuestCandidate(candidate) => {
-            let target = quest_field(&field)?;
-            let value = quest_value(target, value)?;
-            candidate.manual_edit(target, value)?;
-        }
-        _ => {
-            return Err(UiError {
-                kind: "invalid_operation",
-                message: "Canon records must be revised explicitly.".into(),
-                expected: None,
-                actual: None,
-            });
-        }
-    }
+    edit_entity_field(entity, &field, value)?;
     Ok(entity.clone())
 }
 
@@ -722,6 +747,205 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn character_candidate(seed: u64) -> CharacterCandidate {
+        generate_character_candidate(
+            ProjectId::from_bytes([seed as u8; 16]),
+            "dark-fantasy",
+            seed,
+            BTreeMap::new(),
+            BTreeMap::new(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn locked_name_survives_title_dependent_reroll_at_command_boundary() {
+        let mut candidate = character_candidate(991);
+        candidate.character.title = "Title Reroll Sentinel".into();
+        let mut entity = StoredEntity::CharacterCandidate(candidate);
+        edit_entity_field(
+            &mut entity,
+            "name",
+            Value::String("The Operator's Locked Name".into()),
+        )
+        .unwrap();
+        let name_key = CharacterField::Name.key().unwrap();
+        let title_key = CharacterField::Title.key().unwrap();
+        let StoredEntity::CharacterCandidate(candidate) = &entity else {
+            panic!("Character edit returned the wrong entity type");
+        };
+        let locked_name = candidate.character.envelope.name.clone();
+        let name_nonce = candidate.dna.recipe.field_controls[&name_key].nonce;
+        let name_origin = candidate.field_origins[&name_key];
+        let title_nonce = candidate.dna.recipe.field_controls[&title_key].nonce;
+
+        set_entity_field_lock(&mut entity, "name", true).unwrap();
+        reroll_entity_field(&mut entity, "archetype").unwrap();
+
+        let StoredEntity::CharacterCandidate(candidate) = entity else {
+            panic!("Character reroll returned the wrong entity type");
+        };
+        assert_eq!(candidate.character.envelope.name, locked_name);
+        assert_eq!(
+            candidate.dna.recipe.field_controls[&name_key].nonce,
+            name_nonce
+        );
+        assert_eq!(candidate.field_origins[&name_key], name_origin);
+        assert!(candidate.dna.recipe.field_controls[&name_key].locked);
+        assert!(candidate.dna.recipe.field_controls[&title_key].nonce > title_nonce);
+    }
+
+    #[test]
+    fn locked_name_survives_reroll_all_and_full_candidate_serialization() {
+        let mut candidate = character_candidate(992);
+        candidate.character.title = "Title Reroll Sentinel".into();
+        let mut entity = StoredEntity::CharacterCandidate(candidate);
+        edit_entity_field(
+            &mut entity,
+            "name",
+            Value::String("A Name Held Fast".into()),
+        )
+        .unwrap();
+        let name_key = CharacterField::Name.key().unwrap();
+        let title_key = CharacterField::Title.key().unwrap();
+        let StoredEntity::CharacterCandidate(candidate) = &entity else {
+            panic!("Character edit returned the wrong entity type");
+        };
+        let locked_name = candidate.character.envelope.name.clone();
+        let name_nonce = candidate.dna.recipe.field_controls[&name_key].nonce;
+        let name_origin = candidate.field_origins[&name_key];
+        let title_nonce = candidate.dna.recipe.field_controls[&title_key].nonce;
+
+        set_entity_field_lock(&mut entity, "name", true).unwrap();
+        let command_response: StoredEntity =
+            serde_json::from_value(serde_json::to_value(&entity).unwrap()).unwrap();
+        entity = command_response;
+        reroll_entity_unlocked(&mut entity).unwrap();
+
+        let StoredEntity::CharacterCandidate(candidate) = entity else {
+            panic!("Character reroll returned the wrong entity type");
+        };
+        assert_eq!(candidate.character.envelope.name, locked_name);
+        assert_eq!(
+            candidate.dna.recipe.field_controls[&name_key].nonce,
+            name_nonce
+        );
+        assert_eq!(candidate.field_origins[&name_key], name_origin);
+        assert!(candidate.dna.recipe.field_controls[&name_key].locked);
+        assert!(candidate.dna.recipe.field_controls[&title_key].nonce > title_nonce);
+    }
+
+    #[test]
+    fn unlocking_name_restores_reroll_eligibility() {
+        let mut candidate = character_candidate(993);
+        candidate.character.envelope.name = "A Name Eligible to Change".into();
+        let name_key = CharacterField::Name.key().unwrap();
+        let original_name = candidate.character.envelope.name.clone();
+        let original_nonce = candidate.dna.recipe.field_controls[&name_key].nonce;
+        let mut entity = StoredEntity::CharacterCandidate(candidate);
+
+        assert_eq!(character_field("name").unwrap(), CharacterField::Name);
+        set_entity_field_lock(&mut entity, "name", true).unwrap();
+        set_entity_field_lock(&mut entity, "name", false).unwrap();
+        reroll_entity_field(&mut entity, "name").unwrap();
+
+        let StoredEntity::CharacterCandidate(candidate) = entity else {
+            panic!("Character reroll returned the wrong entity type");
+        };
+        assert_ne!(candidate.character.envelope.name, original_name);
+        assert_eq!(
+            candidate.dna.recipe.field_controls[&name_key].nonce.0,
+            original_nonce.0 + 1
+        );
+        assert!(!candidate.dna.recipe.field_controls[&name_key].locked);
+    }
+
+    #[test]
+    fn editing_title_does_not_replace_locked_name() {
+        let mut candidate = character_candidate(994);
+        candidate.character.envelope.name = "An Independently Kept Name".into();
+        let name_key = CharacterField::Name.key().unwrap();
+        let original_name = candidate.character.envelope.name.clone();
+        let name_nonce = candidate.dna.recipe.field_controls[&name_key].nonce;
+        let mut entity = StoredEntity::CharacterCandidate(candidate);
+
+        set_entity_field_lock(&mut entity, "name", true).unwrap();
+        edit_entity_field(
+            &mut entity,
+            "title",
+            Value::String("A New Title Only".into()),
+        )
+        .unwrap();
+
+        let StoredEntity::CharacterCandidate(candidate) = entity else {
+            panic!("Character edit returned the wrong entity type");
+        };
+        assert_eq!(candidate.character.envelope.name, original_name);
+        assert_eq!(candidate.character.title, "A New Title Only");
+        assert_eq!(
+            candidate.dna.recipe.field_controls[&name_key].nonce,
+            name_nonce
+        );
+        assert!(candidate.dna.recipe.field_controls[&name_key].locked);
+    }
+
+    #[test]
+    fn quest_lock_still_survives_the_shared_command_reroll_path() {
+        let dna = QuestForge::new_dna(
+            RootSeed::new(995),
+            "occult",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let candidate =
+            QuestForge::generate_in_project(&dna, ProjectId::from_bytes([9; 16])).unwrap();
+        let mut entity = StoredEntity::QuestCandidate(candidate);
+        let objective_key = QuestField::Objective.key().unwrap();
+        set_entity_field_lock(&mut entity, "objective", true).unwrap();
+        let StoredEntity::QuestCandidate(before) = &entity else {
+            panic!("Quest lock returned the wrong entity type");
+        };
+        let objective = before.quest.objective.clone();
+        let nonce = before.dna.recipe.field_controls[&objective_key].nonce;
+
+        reroll_entity_field(&mut entity, "title").unwrap();
+
+        let StoredEntity::QuestCandidate(after) = entity else {
+            panic!("Quest reroll returned the wrong entity type");
+        };
+        assert_eq!(after.quest.objective, objective);
+        assert_eq!(after.dna.recipe.field_controls[&objective_key].nonce, nonce);
+        assert!(after.dna.recipe.field_controls[&objective_key].locked);
+    }
+
+    #[test]
+    fn character_generation_keeps_name_and_title_as_separate_core_fields() {
+        let project_id = ProjectId::from_bytes([8; 16]);
+        let axes = BTreeMap::new();
+        let constraints = BTreeMap::new();
+        let actual = generate_character_candidate(
+            project_id,
+            "dark-fantasy",
+            996,
+            axes.clone(),
+            constraints.clone(),
+        )
+        .unwrap();
+        let mut creative_axes = CreativeAxes { levels: axes };
+        creative_axes.normalize().unwrap();
+        let dna = CharacterForge::new_dna(
+            RootSeed::new(996),
+            "dark-fantasy",
+            creative_axes,
+            constraints,
+        )
+        .unwrap();
+        let expected = CharacterForge::generate_in_project(&dna, project_id).unwrap();
+        assert_eq!(actual, expected);
+        assert_ne!(actual.character.envelope.name, actual.character.title);
+    }
 
     #[test]
     fn quest_field_mapping_covers_v3_fields_and_rejects_unknown_values() {

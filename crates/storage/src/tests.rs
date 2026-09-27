@@ -286,6 +286,48 @@ fn quest_v2_and_v3_metadata_and_character_manual_origin_roundtrip() {
 }
 
 #[test]
+fn character_locked_name_value_nonce_and_origin_survive_close_reopen() {
+    let db = TestDb::new("character-name-lock-reopen");
+    let mut store = create_store(&db);
+    let mut candidate = character_candidate(4005);
+    candidate.character.envelope.name = "A Name Kept Across Reopen".into();
+    CharacterForge::lock(&mut candidate, CharacterField::Name).unwrap();
+    let name_key = CharacterField::Name.key().unwrap();
+    let title_key = CharacterField::Title.key().unwrap();
+    let original_name = candidate.character.envelope.name.clone();
+    let name_nonce = candidate.dna.recipe.field_controls[&name_key].nonce;
+    let name_origin = candidate.field_origins[&name_key];
+    let id = candidate.character.envelope.id;
+    store
+        .persist_candidate(StoredEntity::CharacterCandidate(candidate))
+        .unwrap();
+    drop(store);
+
+    let reopened = ProjectStore::open(db.path()).unwrap();
+    let row = reopened.get_entity(id).unwrap().unwrap();
+    let StoredEntity::CharacterCandidate(mut candidate) = row.entity else {
+        panic!("Reopened record is not a Character candidate");
+    };
+    assert_eq!(candidate.character.envelope.name, original_name);
+    assert_eq!(
+        candidate.dna.recipe.field_controls[&name_key].nonce,
+        name_nonce
+    );
+    assert_eq!(candidate.field_origins[&name_key], name_origin);
+    assert!(candidate.dna.recipe.field_controls[&name_key].locked);
+
+    let title_nonce = candidate.dna.recipe.field_controls[&title_key].nonce;
+    CharacterForge::reroll_field(&mut candidate, CharacterField::Archetype).unwrap();
+    assert_eq!(candidate.character.envelope.name, original_name);
+    assert_eq!(
+        candidate.dna.recipe.field_controls[&name_key].nonce,
+        name_nonce
+    );
+    assert_eq!(candidate.field_origins[&name_key], name_origin);
+    assert!(candidate.dna.recipe.field_controls[&title_key].nonce > title_nonce);
+}
+
+#[test]
 fn promoting_and_revising_canon_preserves_inspectable_prior_snapshots() {
     let db = TestDb::new("canon");
     let mut store = create_store(&db);
