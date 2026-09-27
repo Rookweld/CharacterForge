@@ -1,8 +1,8 @@
-# Mission 03 — CALLING Remediation II report
+# Mission 03 — CALLING Final Quality Audit / Closeout
 
 ## Status
 
-**PARTIAL.** The structural cluster remediation and controlled Mythic/Chaos axis proofs pass, but Mission 03 exit gates remain open. Mission 04 — MEMORY has not started. No persistence, ForgeDNA protocol change, or Character Forge redesign was made. No commit was created.
+**PASS — final quality audit completed 2026-09-27.** Historical remediation notes below describe the state at that checkpoint; the closeout section supersedes its PARTIAL decision. Mission 04 — MEMORY has not started. No persistence, ForgeDNA protocol change, or Character Forge redesign was made. No commit was created for audit changes.
 
 The work began from clean committed checkpoint `8395f07647d823681f1fcd4c9fec628a7f324942` (`wip: checkpoint Mission 03 declarative Quest Forge`) on `master`. Quest v2 replay is frozen. The checkpoint does not promise v3 compatibility, so the unfinished v3 path was refined in place; no v4 was introduced.
 
@@ -48,6 +48,37 @@ The final >=10 set contains only same-primary-thread pairs: 856 mythic-spine and
 - `./scripts/verify.ps1`: PASS; frontend format/lint/typecheck, 1 frontend test, frontend production build, Rust workspace checks/tests, and optimized Tauri no-bundle build passed.
 - `git diff --check`: PASS.
 
-## Exit decision
+## Exit decision at the Remediation II checkpoint (superseded)
 
-Mission 03 remains **PARTIAL**. Structural high-overlap counts fell 92.7% from previous v3 and below the original v2 count, and both Mythic and Chaos axes now have controlled measurable effects. The shallow four-choice field pools, remaining same-spine high-similarity pairs, Chaos seam review, broader constraint policy, and human acceptance keep the mission open. Stop here; do not begin Mission 04.
+At that checkpoint Mission 03 was **PARTIAL** pending the authoring batches and final audit. The following final closeout supersedes that historical status.
+
+
+## Final Quality Audit / Closeout (2026-09-27)
+
+**Status: PASS.** The Batch D baseline was clean at `c61b0701fb8629d049675a8b1e3f41fbc0beea9b` on `master`. This audit changed only a v3 constrained-briefing punctuation join, the developer audit example, and the quality reports/sample packet. No ForgeDNA protocol, generator architecture, Quest v2 path, corpus semantics, or Character content changed.
+
+### Audit outcomes
+
+- Corpus: 11 presets, 22 globally unique thread IDs, all 14 authored pools per thread populated; no blank entries, within-pool exact duplicates, placeholders, or UTF-8 decoding failures. Two retained pools have eight choices (Post-Apocalyptic `seed-vault` complications; Monster Hunter `brood-migration` moral pressures); other applicable pools have six.
+- Generation: the 256-seed matrix covered all eleven presets (2,816 candidates); its Chaos subset was extended through seed 1,023 for the dedicated 1,024 run. The main v3 audit validated 2,560 ordinary plus 1,024 Chaos candidates (3,584 unique); **0 invalid**. All eleven presets had zero exact expanded clones.
+- Contemporary Weird: `route-that-stops` 215/256 (84.0%), `vanishing-floor` 41/256 (16.0%). The neutral tag weights explicitly favor route-that-stops 4:1 (80/20 expected); the observed finite sweep is consistent. Both threads appear in the review set.
+- Chaos similarity over 1,024 seeds / 523,776 pairs: **0 exact clones; 0 ≥12/14; 0 ≥10/14; 17 ≥8/14; mean 1.186; median 1; max 9**. Largest ≥8/14 connected cluster: 3 seeds `[90, 349, 393]`; no ≥10/14 cluster. This improves on the structural-remediation count (1,162 ≥10/14, mean 3.409).
+- Prior spot-checks: Post-Apocalyptic complication mode 24/256 (9.4%); Brood Migration moral-pressure mode 27/256 (10.5%); Rogue-Assassin has 71 premise/stakes pairs and the most frequent appears 9/256 (3.5%). These are small-sample coincidences, not corpus concentration defects. The Contemporary Weird route recurrence follows its explicit weighting and remains an acceptable institutional theme.
+- Axes: Mythic changes `mythic-salvage` selection from 99/256 to 194/256 at same seeds. Chaos shifts secondary location mixing from 0/256 to 256/256; primary-thread counts remain comparable (150/106 to 145/111).
+- Constraints: `inspiration` is the only recognized Quest constraint, accepts 1–200 non-whitespace characters, and is exercised for all presets by tests. Invalid lengths, unknown keys, and Character-only keys yield structured errors. The six constrained human samples remain distinct.
+- Sample review: [the 52-Quest review packet](../quality/MISSION_03_FINAL_QUEST_SAMPLES.md) contains all complete structured outputs, seeds, axis/constraint metadata, and labels. Every sample was read against the requested rubric: **45 usable as-is, 7 usable with minor editing, 0 weak/substantial rewrite**. Minor-edit reasons are recorded per sample. The constrained briefing join defect found on first read was fixed (`. Inspiration:`) and the six affected candidates were regenerated. No other systemic coherence, compatibility, or grammar defect was found. This is a reviewer read-through, not a player playtest; the packet is preserved for independent external review.
+- Quest v2 replay: Pirate seed 42, content version 2, generated twice from identical DNA; candidates matched, caller DNA remained unchanged, and v2 clue/briefing remain absent. Version-2 generation remains on its existing procedural path.
+- Unicode: the Quest constraint test checks `séance`, em dash, emoji, and candidate JSON serialization/deserialization.
+- Reroll/lock/manual-edit behavior: relevant Quest regression tests pass for dependency scope, locked descendants, reroll-all locks, manual edits, and briefing dependencies; shared atomic-failure and nonce-overflow tests pass.
+
+### Verification
+
+- `cargo test -p forge-app-core quest::tests::` — **13 passed, 0 failed**.
+- `cargo test --workspace` — **62 unit tests passed (52 app-core, 10 contracts), 0 failed**; doc-test targets completed with 0 tests.
+- `cargo fmt --all -- --check` — PASS.
+- `cargo clippy --workspace --all-targets -- -D warnings` — PASS.
+- `cargo metadata --no-deps --format-version 1` — PASS.
+- `scripts/verify.ps1` — PASS; Biome format/lint, TypeScript, Vitest **1/1**, frontend build, Rust checks/tests, and optimized no-bundle Tauri build.
+- `git diff --check` — PASS.
+
+No known P0/P1 Quest defect remains in this audit. Mission 03 is closed as **PASS**. Mission 04 — MEMORY has not started; stop here.

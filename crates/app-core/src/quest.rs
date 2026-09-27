@@ -770,7 +770,7 @@ fn generate_versioned_value(
             .get(&forge_contracts::ConstraintKey::new("inspiration")?)
     {
         return Ok(QuestFieldValue::Text(format!(
-            "{value} Inspiration: {inspiration}"
+            "{value}. Inspiration: {inspiration}"
         )));
     }
     if matches!(
@@ -1481,7 +1481,15 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        assert!(candidate.briefing.unwrap().contains("雪の港 — séance 🗝️"));
+        let serialized = serde_json::to_string(&candidate).unwrap();
+        assert!(serialized.contains("séance"));
+        assert!(serialized.contains("—"));
+        assert_eq!(
+            serde_json::from_str::<QuestCandidate>(&serialized).unwrap(),
+            candidate
+        );
+        let briefing = candidate.briefing.unwrap();
+        assert!(briefing.contains(". Inspiration: 雪の港 — séance 🗝️"));
     }
     #[test]
     fn quest_reroll_obeys_locks() {

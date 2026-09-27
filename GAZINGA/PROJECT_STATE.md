@@ -5,10 +5,10 @@
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
 **Current mission:** 03 — CALLING
-**Current status:** PARTIAL — Quest Forge prototype added; mission gates remain open
+**Current status:** PASS — Mission 03 final Quest quality audit and closeout completed 2026-09-27
 **Target release:** v1.0.0 FOUNDATION
-**Last committed baseline:** `8395f07647d823681f1fcd4c9fec628a7f324942` (`wip: checkpoint Mission 03 declarative Quest Forge`)
-**Branch:** `master` (Remediation II changes are currently uncommitted in the working tree)
+**Last committed baseline:** `c61b0701fb8629d049675a8b1e3f41fbc0beea9b` (Batch D content expansion)
+**Branch:** `master` (final audit/report artifacts are uncommitted; no commit was created)
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -38,9 +38,8 @@
 - Mission 02 added the typed Character candidate pipeline, declarative original content for all eleven v1 presets, axis-weighted deterministic selection, supported Character constraints, provenance-preserving manual edits, field rerolls, lock-aware reroll-all, and a JSON CLI harness. At that closeout the corpus used content version 1; the later diversity audit added v2 while preserving v1 replay.
 - Mission 02 quality tests cover same-DNA reproducibility, no input DNA mutation, fixed seed outputs across all presets, 64-seed repetition sweeps, creative-axis extremes and distribution shifts, Chaos Blend, field cardinalities, structured invalid-input errors, dependency rerolls/firewalls, explicit locks, manual edits, and stable JSON serialization.
 - Mission 02 verification passed: `./scripts/verify.ps1` (frontend checks/test/build, Rust fmt/clippy/workspace tests, optimized Tauri build); 43 Rust unit tests passed (33 app-core, 10 contracts); `git diff --check` passed. Details are in `docs/missions/MISSION_02_REPORT.md`.
-- Mission 03 prototype adds a deterministic Quest candidate pipeline, CLI, all eleven core preset identifiers, and shared lock/reroll integration. Current quality evidence shows substantial exact multi-field similarity (up to 13/14 matching fields in seed sweeps), sparse three-choice fields, incomplete axis semantics, and coherence defects in reviewed preset samples. Mission 03 is **PARTIAL** and must not be closed.
-- Mission 03 remediation adds `content/quests/v3/core.json`, a deterministic declarative Quest path with semantic threads, clue, and briefing. Quest v2 generation remains available for replay; new Quest DNA uses v3. Character content versions 1 and 2 are unchanged.
-- Mission 03 Remediation II remains PARTIAL. Chaos Blend v3 now records zero exact clones, 23 >=12/14 pairs, 1,162 >=10/14 pairs, 18,071 >=8/14 pairs, mean 3.409, median 3, and max 13 over 1,024 seeds. Mythic shifts the intended family from 99/256 to 194/256; Chaos moves secondary location source from spine in 256/256 low cases to compatible alternate in 256/256 high cases while primary-thread counts remain similar. Four-value ordinary identity pools, remaining same-spine similarity, Chaos seam review, broader semantic constraint policy, and human acceptance remain open. Quest v2 replay is preserved; unfinished v3 is refined in place without a v4. No Mission 04 work has begun. See `docs/QUEST_CONTENT_QUALITY_REPORT.md` and `docs/missions/MISSION_03_REPORT.md`.
+- Mission 03 added deterministic Quest generation on the shared ForgeDNA field-stream foundation, with Quest v2 replay retained and v3 declarative content for all eleven presets. The final 256-seed per-preset audit and 1,024-seed Chaos audit passed with zero invalid candidates and zero exact expanded clones. Chaos recorded 0 >=10/14 pairs, 17 >=8/14 pairs, mean 1.186, median 1, maximum 9; largest >=8 connected cluster size was 3. Mythic and Chaos controlled influence remained measurable. Full results and the 52-Quest review set are in `docs/QUEST_CONTENT_QUALITY_REPORT.md` and `docs/quality/MISSION_03_FINAL_QUEST_SAMPLES.md`.
+- The sample review found and corrected missing punctuation before v3 inspiration text. Review ratings: 45 usable as-is, 7 usable with minor editing, 0 weak/substantial rewrite. Quest v2 replay, constraints, UTF-8 roundtrip, locks/rerolls/manual edits, workspace verification, and the no-bundle Tauri build passed. Independent player playtesting was not part of this audit; the review packet is retained for external review.
 - Pre-Mission-03 SOUL diversity audit expanded the current corpus to content version 2 while preserving the v1 corpus and ForgeDNA stream/reroll semantics. Deterministic field-level, archetype-cluster, Chaos Blend, controlled-axis, and UTF-8 evidence is recorded in `docs/CONTENT_QUALITY_REPORT.md`; Mission 02 remains PASS after audit verification.
 
 ## Mission 00 closeout
@@ -57,8 +56,8 @@
 
 ## Deferred by design
 
-Persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features. Quest Forge remains PARTIAL; do not begin Mission 04 until the remaining Mission 03 gates are resolved. See `docs/missions/MISSION_03_REPORT.md`.
+Persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features. Mission 03 is PASS and Quest Forge is closed for this mission. Mission 04 — MEMORY has not started and requires a separate authorized task. See `docs/missions/MISSION_03_REPORT.md`.
 
 ## Handoff
 
-Mission 00 report: `docs/missions/MISSION_00_REPORT.md`. Mission 01 report: `docs/missions/MISSION_01_REPORT.md`. Mission 02 report: `docs/missions/MISSION_02_REPORT.md`. Mission 03 report: `docs/missions/MISSION_03_REPORT.md`. Do not begin Mission 04 until Mission 03's open gates are resolved.
+Mission 00 report: `docs/missions/MISSION_00_REPORT.md`. Mission 01 report: `docs/missions/MISSION_01_REPORT.md`. Mission 02 report: `docs/missions/MISSION_02_REPORT.md`. Mission 03 report: `docs/missions/MISSION_03_REPORT.md`. Mission 03 is closed PASS. Mission 04 has not started; wait for separate authorization.

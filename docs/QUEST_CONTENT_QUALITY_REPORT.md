@@ -255,3 +255,277 @@ Six complete Contemporary Weird samples were inspected, balanced across both thr
 Ten complete Chaos samples were inspected, five from each thread. The 128-seed frame count was 86 Mythic Salvage and 42 Tide Memory Archive; selection IDs showed secondary-source mixing across titles, locations, complications, twists, rewards, follow-ups, and moral pressure. Outputs combined harbor memory/identity systems with oath law, ration machinery, drowned boundaries, and salvage claims; no separate fixed bundle was observed. Some titles and premises recurred across samples, but the complete title/premise/stakes packages varied. Corpus validation caught exact duplicates among several newly authored Chaos choices; those choices were replaced and the full validation and 128-seed run were repeated. Sample review also found one Mythic moral-pressure choice duplicated its selected consequence, so it was rewritten as a separate convoy-versus-settlement dilemma. No broken joins remained in the final ten samples.
 
 Focused verification: `cargo test -p forge-app-core` passed **52 tests, 0 failed** (0 doc tests), including the existing Chaos mixing and Mythic influence tests; both generation sweeps passed; `cargo fmt --all -- --check` passed; `git diff --check` passed. The 256-seed all-preset field audit, 1,024-seed Chaos audit, similarity analysis, and final 52+ Quest matrix are deferred to the explicitly requested final quality audit. Mission 03 remains **PARTIAL**.
+
+## Final Mission 03 Quality Audit / Closeout (2026-09-27)
+
+### Corpus and deterministic sweep
+
+The committed Batch D baseline was clean at `c61b0701fb8629d049675a8b1e3f41fbc0beea9b` on `master`. The v3 JSON parsed as UTF-8: 11 presets, 22 globally unique thread IDs, 14 authored arrays per thread, no empty strings, local duplicate entries, or placeholder tokens. Tags remained present; all 22 threads generated successfully across the sweep, so all field pools survived selection/compatibility. The 256-seed matrix covers all eleven presets (2,816 candidates): all ten ordinary presets at 256 each, and Chaos seeds 0–255. The extended Chaos run covers seeds 0–1,023 (1,024 total, including that matrix subset). Thus the main v3 audit validated 2,560 ordinary plus 1,024 Chaos candidates (**3,584 unique candidates; 0 invalid**). An additional 1,024 content-version-2 Chaos candidates supported the historical comparison. Exact expanded duplicates in each preset sweep: **0**.
+
+All 14 authored choice pools contain six choices per thread, except the retained expansions: Post-Apocalyptic `seed-vault` complications (8), Monster Hunter `brood-migration` moral pressures (8). These are deliberate broadening additions recorded in their batch notes. Thus source pools usually aggregate to 12 choices per ordinary preset/field across its two threads and 12 across the two Chaos-compatible threads; the two expanded pools aggregate to 14. Quest type is derived from semantic tags, not one of the 14 text arrays. Briefing is composed from giver and premise (36 combinations per thread; 72 across two threads).
+
+### Thread selection distribution
+
+Expected shares below are the selector’s explicit tag-derived weights at neutral axes (50); observed values use the 256-seed run. Differences reflect this bounded deterministic seed set; the observed counts remain consistent with the declared weighting. Contemporary Weird’s `route-that-stops` has 4× `vanishing-floor` weight at neutral axes because the transit/memory tags activate three axis-affinity additions; expected 80%/20%. It selected 215/256 (84.0%) versus 41/256 (16.0%), so the Batch D 59/64 spot check was a small-sample skew, not a 50/50 expectation or a defect.
+
+| Preset | Thread | Observed | Observed % | Expected % |
+|---|---|---:|---:|---:|
+| dark-fantasy | `claim-of-the-dead` | 105/256 | 41.0% | 44.4% |
+| dark-fantasy | `winter-lanterns` | 151/256 | 59.0% | 55.6% |
+| pirate | `drowned-roll` | 139/256 | 54.3% | 57.1% |
+| pirate | `mutiny-debt` | 117/256 | 45.7% | 42.9% |
+| steampunk | `foundry-pressure` | 51/256 | 19.9% | 25.0% |
+| steampunk | `clockwork-inheritance` | 205/256 | 80.1% | 75.0% |
+| cyberpunk | `identity-override` | 184/256 | 71.9% | 75.0% |
+| cyberpunk | `synthetic-rights` | 72/256 | 28.1% | 25.0% |
+| nordic-myth | `boundary-oath` | 116/256 | 45.3% | 40.0% |
+| nordic-myth | `saga-debt` | 140/256 | 54.7% | 60.0% |
+| post-apocalyptic | `water-allocation` | 97/256 | 37.9% | 40.0% |
+| post-apocalyptic | `seed-vault` | 159/256 | 62.1% | 60.0% |
+| occult | `missing-register` | 144/256 | 56.2% | 50.0% |
+| occult | `borrowed-hour` | 112/256 | 43.8% | 50.0% |
+| monster-hunter | `brood-migration` | 175/256 | 68.4% | 66.7% |
+| monster-hunter | `false-trophy` | 81/256 | 31.6% | 33.3% |
+| rogue-assassin | `false-contract` | 126/256 | 49.2% | 50.0% |
+| rogue-assassin | `missing-informant` | 130/256 | 50.8% | 50.0% |
+| contemporary-weird | `vanishing-floor` | 41/256 | 16.0% | 20.0% |
+| contemporary-weird | `route-that-stops` | 215/256 | 84.0% | 80.0% |
+| chaos-blend | `tide-memory-archive` | 389/1,024 | 38.0% | 38.5% |
+| chaos-blend | `mythic-salvage` | 635/1,024 | 62.0% | 61.5% |
+
+Largest absolute observed deviation from the explicit neutral-axis weights was 2.00 binomial standard deviations (computed using 256 seeds for ordinary presets and 1,024 for Chaos). No weighting or selection change was warranted.
+
+### Rendered field depth and concentration
+
+For each direct authored field, “source choices” is the total number of entries across the preset’s two threads; each thread contributes six unless the expanded exceptions above apply. `Briefing` is a composed field; `Quest type` comes from tags. Every row reports unique rendered values, mode count and share, and the combined top-three share across the 256 seeds (1,024 for Chaos).
+
+| Preset | Field | Source choices | Rendered unique | Mode count (%) | Top 3 (%) |
+|---|---|---:|---:|---:|---:|
+| dark-fantasy | briefing | 72 pairings max | 69 | 8 (3.1%) | 9.4% |
+| dark-fantasy | clue | 12 | 12 | 28 (10.9%) | 32.4% |
+| dark-fantasy | complication | 12 | 12 | 27 (10.5%) | 30.9% |
+| dark-fantasy | consequence | 12 | 12 | 32 (12.5%) | 34.4% |
+| dark-fantasy | follow_up | 12 | 12 | 30 (11.7%) | 34.4% |
+| dark-fantasy | location | 12 | 12 | 34 (13.3%) | 34.8% |
+| dark-fantasy | moral_pressure | 12 | 12 | 32 (12.5%) | 34.4% |
+| dark-fantasy | objective | 12 | 12 | 31 (12.1%) | 33.6% |
+| dark-fantasy | premise | 12 | 12 | 30 (11.7%) | 34.0% |
+| dark-fantasy | quest_giver | 12 | 12 | 29 (11.3%) | 32.8% |
+| dark-fantasy | quest_type | semantic tags | 6 | 55 (21.5%) | 59.0% |
+| dark-fantasy | reward | 12 | 12 | 34 (13.3%) | 33.6% |
+| dark-fantasy | stakes | 12 | 12 | 33 (12.9%) | 34.4% |
+| dark-fantasy | threat | 12 | 12 | 36 (14.1%) | 37.1% |
+| dark-fantasy | title | 12 | 12 | 32 (12.5%) | 34.0% |
+| dark-fantasy | twist | 12 | 12 | 28 (10.9%) | 32.4% |
+| pirate | briefing | 72 pairings max | 68 | 9 (3.5%) | 10.2% |
+| pirate | clue | 12 | 12 | 26 (10.2%) | 29.7% |
+| pirate | complication | 12 | 12 | 34 (13.3%) | 34.0% |
+| pirate | consequence | 12 | 12 | 30 (11.7%) | 34.0% |
+| pirate | follow_up | 12 | 12 | 29 (11.3%) | 30.5% |
+| pirate | location | 12 | 12 | 28 (10.9%) | 32.0% |
+| pirate | moral_pressure | 12 | 12 | 27 (10.5%) | 28.9% |
+| pirate | objective | 12 | 12 | 27 (10.5%) | 30.1% |
+| pirate | premise | 12 | 12 | 28 (10.9%) | 32.8% |
+| pirate | quest_giver | 12 | 12 | 31 (12.1%) | 34.8% |
+| pirate | quest_type | semantic tags | 5 | 78 (30.5%) | 68.0% |
+| pirate | reward | 12 | 12 | 28 (10.9%) | 30.1% |
+| pirate | stakes | 12 | 12 | 29 (11.3%) | 32.4% |
+| pirate | threat | 12 | 12 | 28 (10.9%) | 31.6% |
+| pirate | title | 12 | 12 | 28 (10.9%) | 30.1% |
+| pirate | twist | 12 | 12 | 32 (12.5%) | 30.9% |
+| steampunk | briefing | 72 pairings max | 62 | 12 (4.7%) | 11.7% |
+| steampunk | clue | 12 | 12 | 40 (15.6%) | 44.9% |
+| steampunk | complication | 12 | 12 | 44 (17.2%) | 45.7% |
+| steampunk | consequence | 12 | 12 | 41 (16.0%) | 44.9% |
+| steampunk | follow_up | 12 | 12 | 42 (16.4%) | 43.8% |
+| steampunk | location | 12 | 12 | 45 (17.6%) | 44.9% |
+| steampunk | moral_pressure | 12 | 12 | 40 (15.6%) | 43.4% |
+| steampunk | objective | 12 | 12 | 45 (17.6%) | 43.4% |
+| steampunk | premise | 12 | 12 | 41 (16.0%) | 43.8% |
+| steampunk | quest_giver | 12 | 12 | 49 (19.1%) | 48.4% |
+| steampunk | quest_type | semantic tags | 6 | 70 (27.3%) | 80.1% |
+| steampunk | reward | 12 | 12 | 43 (16.8%) | 44.5% |
+| steampunk | stakes | 12 | 12 | 41 (16.0%) | 44.9% |
+| steampunk | threat | 12 | 12 | 45 (17.6%) | 46.1% |
+| steampunk | title | 12 | 12 | 38 (14.8%) | 43.0% |
+| steampunk | twist | 12 | 12 | 38 (14.8%) | 43.0% |
+| cyberpunk | briefing | 72 pairings max | 68 | 10 (3.9%) | 11.3% |
+| cyberpunk | clue | 12 | 12 | 35 (13.7%) | 38.3% |
+| cyberpunk | complication | 12 | 12 | 41 (16.0%) | 42.2% |
+| cyberpunk | consequence | 12 | 12 | 34 (13.3%) | 38.7% |
+| cyberpunk | follow_up | 12 | 12 | 35 (13.7%) | 38.7% |
+| cyberpunk | location | 12 | 12 | 38 (14.8%) | 42.2% |
+| cyberpunk | moral_pressure | 12 | 12 | 39 (15.2%) | 43.0% |
+| cyberpunk | objective | 12 | 12 | 37 (14.5%) | 39.8% |
+| cyberpunk | premise | 12 | 12 | 35 (13.7%) | 39.5% |
+| cyberpunk | quest_giver | 12 | 12 | 34 (13.3%) | 39.1% |
+| cyberpunk | quest_type | semantic tags | 6 | 62 (24.2%) | 71.9% |
+| cyberpunk | reward | 12 | 12 | 33 (12.9%) | 38.3% |
+| cyberpunk | stakes | 12 | 12 | 35 (13.7%) | 39.5% |
+| cyberpunk | threat | 12 | 12 | 45 (17.6%) | 41.4% |
+| cyberpunk | title | 12 | 12 | 34 (13.3%) | 38.7% |
+| cyberpunk | twist | 12 | 12 | 39 (15.2%) | 42.2% |
+| nordic-myth | briefing | 72 pairings max | 71 | 8 (3.1%) | 8.6% |
+| nordic-myth | clue | 12 | 12 | 30 (11.7%) | 32.4% |
+| nordic-myth | complication | 12 | 12 | 28 (10.9%) | 30.5% |
+| nordic-myth | consequence | 12 | 12 | 32 (12.5%) | 34.8% |
+| nordic-myth | follow_up | 12 | 12 | 29 (11.3%) | 32.0% |
+| nordic-myth | location | 12 | 12 | 30 (11.7%) | 32.8% |
+| nordic-myth | moral_pressure | 12 | 12 | 32 (12.5%) | 31.6% |
+| nordic-myth | objective | 12 | 12 | 27 (10.5%) | 30.5% |
+| nordic-myth | premise | 12 | 12 | 29 (11.3%) | 31.2% |
+| nordic-myth | quest_giver | 12 | 12 | 30 (11.7%) | 31.2% |
+| nordic-myth | quest_type | semantic tags | 6 | 52 (20.3%) | 55.9% |
+| nordic-myth | reward | 12 | 12 | 31 (12.1%) | 34.0% |
+| nordic-myth | stakes | 12 | 12 | 32 (12.5%) | 31.2% |
+| nordic-myth | threat | 12 | 12 | 29 (11.3%) | 31.6% |
+| nordic-myth | title | 12 | 12 | 32 (12.5%) | 32.4% |
+| nordic-myth | twist | 12 | 12 | 33 (12.9%) | 33.6% |
+| post-apocalyptic | briefing | 72 pairings max | 67 | 10 (3.9%) | 10.5% |
+| post-apocalyptic | clue | 12 | 12 | 32 (12.5%) | 35.9% |
+| post-apocalyptic | complication | 14 | 14 | 24 (9.4%) | 25.8% |
+| post-apocalyptic | consequence | 12 | 12 | 33 (12.9%) | 36.3% |
+| post-apocalyptic | follow_up | 12 | 12 | 32 (12.5%) | 37.5% |
+| post-apocalyptic | location | 12 | 12 | 32 (12.5%) | 34.8% |
+| post-apocalyptic | moral_pressure | 12 | 12 | 35 (13.7%) | 34.8% |
+| post-apocalyptic | objective | 12 | 12 | 31 (12.1%) | 34.0% |
+| post-apocalyptic | premise | 12 | 12 | 40 (15.6%) | 38.3% |
+| post-apocalyptic | quest_giver | 12 | 12 | 33 (12.9%) | 36.3% |
+| post-apocalyptic | quest_type | semantic tags | 6 | 56 (21.9%) | 62.1% |
+| post-apocalyptic | reward | 12 | 12 | 32 (12.5%) | 34.0% |
+| post-apocalyptic | stakes | 12 | 12 | 38 (14.8%) | 36.3% |
+| post-apocalyptic | threat | 12 | 12 | 38 (14.8%) | 35.9% |
+| post-apocalyptic | title | 12 | 12 | 31 (12.1%) | 34.4% |
+| post-apocalyptic | twist | 12 | 12 | 32 (12.5%) | 35.9% |
+| occult | briefing | 72 pairings max | 70 | 7 (2.7%) | 7.8% |
+| occult | clue | 12 | 12 | 29 (11.3%) | 32.8% |
+| occult | complication | 12 | 12 | 32 (12.5%) | 32.8% |
+| occult | consequence | 12 | 12 | 32 (12.5%) | 31.6% |
+| occult | follow_up | 12 | 12 | 30 (11.7%) | 32.4% |
+| occult | location | 12 | 12 | 32 (12.5%) | 33.6% |
+| occult | moral_pressure | 12 | 12 | 31 (12.1%) | 32.4% |
+| occult | objective | 12 | 12 | 31 (12.1%) | 31.2% |
+| occult | premise | 12 | 12 | 29 (11.3%) | 31.6% |
+| occult | quest_giver | 12 | 12 | 30 (11.7%) | 32.4% |
+| occult | quest_type | semantic tags | 6 | 53 (20.7%) | 57.0% |
+| occult | reward | 12 | 12 | 33 (12.9%) | 33.2% |
+| occult | stakes | 12 | 12 | 29 (11.3%) | 32.4% |
+| occult | threat | 12 | 12 | 32 (12.5%) | 34.8% |
+| occult | title | 12 | 12 | 32 (12.5%) | 34.0% |
+| occult | twist | 12 | 12 | 31 (12.1%) | 32.0% |
+| monster-hunter | briefing | 72 pairings max | 69 | 11 (4.3%) | 10.9% |
+| monster-hunter | clue | 12 | 12 | 36 (14.1%) | 39.1% |
+| monster-hunter | complication | 12 | 12 | 34 (13.3%) | 37.1% |
+| monster-hunter | consequence | 12 | 12 | 34 (13.3%) | 38.7% |
+| monster-hunter | follow_up | 12 | 12 | 36 (14.1%) | 37.9% |
+| monster-hunter | location | 12 | 12 | 35 (13.7%) | 39.1% |
+| monster-hunter | moral_pressure | 14 | 14 | 27 (10.5%) | 28.9% |
+| monster-hunter | objective | 12 | 12 | 38 (14.8%) | 39.5% |
+| monster-hunter | premise | 12 | 12 | 39 (15.2%) | 40.6% |
+| monster-hunter | quest_giver | 12 | 12 | 35 (13.7%) | 38.3% |
+| monster-hunter | quest_type | semantic tags | 6 | 63 (24.6%) | 68.4% |
+| monster-hunter | reward | 12 | 12 | 44 (17.2%) | 42.6% |
+| monster-hunter | stakes | 12 | 12 | 34 (13.3%) | 37.1% |
+| monster-hunter | threat | 12 | 12 | 33 (12.9%) | 37.5% |
+| monster-hunter | title | 12 | 12 | 40 (15.6%) | 40.2% |
+| monster-hunter | twist | 12 | 12 | 36 (14.1%) | 37.9% |
+| rogue-assassin | briefing | 72 pairings max | 69 | 9 (3.5%) | 9.4% |
+| rogue-assassin | clue | 12 | 12 | 29 (11.3%) | 30.9% |
+| rogue-assassin | complication | 12 | 12 | 27 (10.5%) | 30.5% |
+| rogue-assassin | consequence | 12 | 12 | 29 (11.3%) | 31.6% |
+| rogue-assassin | follow_up | 12 | 12 | 29 (11.3%) | 29.3% |
+| rogue-assassin | location | 12 | 12 | 29 (11.3%) | 29.3% |
+| rogue-assassin | moral_pressure | 12 | 12 | 26 (10.2%) | 28.5% |
+| rogue-assassin | objective | 12 | 12 | 27 (10.5%) | 29.7% |
+| rogue-assassin | premise | 12 | 12 | 29 (11.3%) | 32.4% |
+| rogue-assassin | quest_giver | 12 | 12 | 33 (12.9%) | 33.2% |
+| rogue-assassin | quest_type | semantic tags | 6 | 48 (18.8%) | 55.1% |
+| rogue-assassin | reward | 12 | 12 | 31 (12.1%) | 31.6% |
+| rogue-assassin | stakes | 12 | 12 | 25 (9.8%) | 28.9% |
+| rogue-assassin | threat | 12 | 12 | 27 (10.5%) | 30.5% |
+| rogue-assassin | title | 12 | 12 | 26 (10.2%) | 28.5% |
+| rogue-assassin | twist | 12 | 12 | 30 (11.7%) | 32.0% |
+| contemporary-weird | briefing | 72 pairings max | 60 | 10 (3.9%) | 10.9% |
+| contemporary-weird | clue | 12 | 12 | 43 (16.8%) | 44.9% |
+| contemporary-weird | complication | 12 | 12 | 44 (17.2%) | 48.0% |
+| contemporary-weird | consequence | 12 | 12 | 46 (18.0%) | 45.7% |
+| contemporary-weird | follow_up | 12 | 12 | 46 (18.0%) | 46.9% |
+| contemporary-weird | location | 12 | 12 | 43 (16.8%) | 48.8% |
+| contemporary-weird | moral_pressure | 12 | 12 | 44 (17.2%) | 48.4% |
+| contemporary-weird | objective | 12 | 12 | 45 (17.6%) | 46.9% |
+| contemporary-weird | premise | 12 | 12 | 38 (14.8%) | 43.8% |
+| contemporary-weird | quest_giver | 12 | 12 | 47 (18.4%) | 47.7% |
+| contemporary-weird | quest_type | semantic tags | 6 | 74 (28.9%) | 84.0% |
+| contemporary-weird | reward | 12 | 12 | 47 (18.4%) | 49.6% |
+| contemporary-weird | stakes | 12 | 12 | 45 (17.6%) | 48.4% |
+| contemporary-weird | threat | 12 | 12 | 44 (17.2%) | 48.8% |
+| contemporary-weird | title | 12 | 12 | 41 (16.0%) | 46.1% |
+| contemporary-weird | twist | 12 | 12 | 43 (16.8%) | 46.9% |
+| chaos-blend | briefing | 72 pairings max | 72 | 30 (2.9%) | 8.0% |
+| chaos-blend | clue | 12 | 12 | 121 (11.8%) | 32.6% |
+| chaos-blend | complication | 12 | 12 | 99 (9.7%) | 27.7% |
+| chaos-blend | consequence | 12 | 12 | 118 (11.5%) | 32.4% |
+| chaos-blend | follow_up | 12 | 12 | 105 (10.3%) | 28.2% |
+| chaos-blend | location | 12 | 12 | 95 (9.3%) | 27.5% |
+| chaos-blend | moral_pressure | 12 | 12 | 102 (10.0%) | 27.4% |
+| chaos-blend | objective | 12 | 12 | 118 (11.5%) | 33.2% |
+| chaos-blend | premise | 12 | 12 | 135 (13.2%) | 34.4% |
+| chaos-blend | quest_giver | 12 | 12 | 132 (12.9%) | 33.7% |
+| chaos-blend | quest_type | semantic tags | 15 | 109 (10.6%) | 30.2% |
+| chaos-blend | reward | 12 | 12 | 97 (9.5%) | 27.6% |
+| chaos-blend | stakes | 12 | 12 | 112 (10.9%) | 32.3% |
+| chaos-blend | threat | 12 | 12 | 118 (11.5%) | 32.0% |
+| chaos-blend | title | 12 | 12 | 102 (10.0%) | 29.0% |
+| chaos-blend | twist | 12 | 12 | 104 (10.2%) | 29.4% |
+
+The major directly authored fields render 12 or 14 distinct values per ordinary preset in the sweep, compared with four before expansion. Chaos Blend renders 12 values for the direct pools, with 72 possible giver/premise briefing combinations (72 observed). Across ordinary presets, modal source-choice concentration is generally 9.4–19.1%; briefing concentration is lower because it composes two independent selections. The audit does not require every authored choice to appear in every 256-seed range.
+
+### Prior spot-check observations
+
+- **Batch B — Post-Apocalyptic complication:** the repeated choice is now 24/256 (9.4%); 14 complication values rendered, top three combined 25.8%. This is an ordinary small-sample recurrence, not a concentration defect.
+- **Batch C — Brood Migration moral dilemma:** the leading moral-pressure value is 27/256 (10.5%); 14 values rendered, top three combined 28.9%. Two of three in the earlier spot check is not corpus concentration.
+- **Batch C — Rogue-Assassin premise/stakes pairing:** 71 distinct pairs occur in 256 seeds; the most frequent pair occurs 9 times (3.5%). The earlier repeated pair is a small-sample coincidence.
+- **Batch D — Contemporary Weird 59/5 thread split:** the 256-seed split is 215/41 and follows expected 80/20 tag weighting (84/16 observed). No weight change was made.
+- **Batch D — repeated bus-route setup:** it is the intentionally favored transit/memory thread, not a generic random city threat. The audit renders 12 values for each direct ordinary pool, and the human matrix includes both route and vanishing-floor examples. The repeated setup is acceptable thematic recurrence under the documented weight.
+
+### Chaos Blend similarity evolution
+
+| Audit | Exact clones | ≥12/14 | ≥10/14 | ≥8/14 | Mean | Median | Max |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Initial baseline | 0 | — | 2,083 | 30,149 | 4.668 | — | 13 |
+| Early v3 | 4 | — | 15,990 | 88,856 | 3.528 | — | 14 |
+| Structural remediation | 0 | 23 | 1,162 | 18,071 | 3.409 | 3 | 13 |
+| Current expanded v3, 1,024 seeds / 523,776 pairs | 0 | 0 | 0 | 17 | 1.186 | 1 | 9 |
+
+Current similarity is below the structural-remediation tail. At the ≥8/14 edge threshold, the largest connected component has 3 seeds (90, 349, 393); at ≥10/14 there are no edges and no clusters. This indicates no severe remaining similarity cluster in this bounded run.
+
+### Human-readable matrix and full read-through
+
+Saved 52 complete outputs in `docs/quality/MISSION_03_FINAL_QUEST_SAMPLES.md`: 30 ordinary (three for each of ten non-Chaos presets), 10 neutral Chaos, six paired Mythic/Chaos/Epic low/high examples at identical seed 42, and six constrained examples. Contemporary Weird’s three include two `route-that-stops` outputs and one `vanishing-floor` output (seed 6), so both institutional setups were inspected. The 52 full Quest objects, clue and briefing were read against the rubric; results: **45 usable as-is, 7 usable with minor editing, 0 weak/substantial rewrite**. The seven minor cases are individually identified in the artifact.
+
+The initial matrix review found a systemic punctuation join in constrained briefings: inspiration text followed the premise without a sentence boundary. The v3 composer now inserts a period before `Inspiration:`; the existing Unicode constraint test asserts the punctuation and a UTF-8 JSON round-trip. The six constrained samples were regenerated and re-read after the correction. No further systemic grammar, compatibility, or content defect was found.
+
+Representative strengths include procedural occult record restoration (sample 19), evidence-led migration and bait preparation (samples 23–24), witness leverage and contract extraction (samples 25–27), institutional weirdness across both transit and housing (samples 28–30), and coherent oath-law / machine-memory collision (Chaos sample 42). Seven cases would benefit from minor editorial tightening; none requires substantial rewrite. This is a full sample-by-sample reviewer read, not a player playtest. The saved packet is ready for independent external review.
+
+### Axis, constraints, state-safety, replay, and Unicode
+
+- **Mythic:** same 256 Chaos seeds, all other inputs fixed: `mythic-salvage` 99/256 at Mythic 0 → 194/256 at Mythic 100.
+- **Chaos:** same 256 seeds: secondary location-source mix 0/256 at Chaos 0 → 256/256 at Chaos 100; primary thread counts remain comparable (150/106 → 145/111).
+- **Constraints:** Quest recognizes only `inspiration` (1–200 non-whitespace characters). Existing tests verify valid generation and visible inclusion for all eleven presets; six varied constrained examples are in the review packet. Whitespace-only, >200-character, unknown, and Character-only keys return structured `InvalidConstraint` errors. Constrained samples remain diverse across presets and threads.
+- **Reroll/lock/manual edits:** Quest tests cover single-field dependency scope, locked descendant firewall, reroll-all lock preservation, manual edits across unrelated rerolls, and briefing recomposition after giver/premise changes. Shared reroll tests cover atomic failure and nonce overflow. The generator receives DNA immutably; the audit confirmed unchanged caller DNA during v2 replay and the v3 extreme-axis test does the same.
+- **Quest v2 replay:** a version-2 Pirate candidate at seed 42 was validated twice from identical DNA; candidates matched, caller DNA was unchanged, and v2 clue/briefing remain absent. Batch A–D touched declarative v3 data only; the narrowly fixed v3 inspiration briefing path does not alter v2.
+- **Unicode:** full corpus decoded and generated as UTF-8; the Quest constraint test verifies `séance`, em dash, emoji, serialization, and deserialization preserve the candidate. Existing corpus Unicode remains intact.
+
+### Verification
+
+- Targeted Quest suite: `cargo test -p forge-app-core quest::tests::` — **13 passed, 0 failed**.
+- Full workspace suite: `cargo test --workspace` — **62 unit tests passed (52 app-core, 10 contracts), 0 failed; all doc-test targets passed (0 tests)**.
+- `cargo fmt --all -- --check` — PASS.
+- `cargo clippy --workspace --all-targets -- -D warnings` — PASS.
+- `cargo metadata --no-deps --format-version 1` — PASS.
+- `scripts/verify.ps1` — PASS; Biome format (11 files), lint (12 files), TypeScript, Vitest (1/1), production frontend build, Rust checks/tests, and optimized no-bundle Tauri build.
+- `git diff --check` — PASS after the closeout documentation was written.
+
+### Closeout decision
+
+**Mission 03: PASS.** All requested quality and verification gates completed. Mission 04 has not started.

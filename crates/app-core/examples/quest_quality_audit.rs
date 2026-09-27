@@ -24,19 +24,39 @@ fn thread(q: &forge_contracts::Quest) -> String {
         .unwrap_or("v2")
         .to_owned()
 }
-fn sample(c: &forge_app_core::QuestCandidate) -> Value {
-    json!({"title":c.quest.envelope.name,"quest_type":c.quest.quest_type,"briefing":c.briefing,"quest_giver":c.quest.patron,"premise":c.quest.premise,"objective":c.quest.objective,"stakes":c.quest.stakes,"threat":c.quest.opposition,"complications":c.quest.complications,"clue":c.clue,"twist":c.quest.twist,"moral_pressure":c.quest.moral_pressure,"locations":c.quest.locations,"rewards":c.quest.rewards,"consequences":c.quest.failure_consequences,"followups":c.quest.follow_up_hooks,"thread":thread(&c.quest)})
+fn sample(
+    preset: &str,
+    seed: u64,
+    axes: &CreativeAxes,
+    c: &forge_app_core::QuestCandidate,
+) -> Value {
+    json!({"preset":preset,"root_seed":seed,"axis_overrides":axes.levels,"constraints":c.dna.recipe.constraints,"thread":thread(&c.quest),"quest":c.quest,"briefing":c.briefing,"clue":c.clue})
+}
+fn generated_sample(
+    preset: &str,
+    seed: u64,
+    axes: CreativeAxes,
+    constraints: BTreeMap<forge_contracts::ConstraintKey, String>,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let dna = QuestForge::new_dna(RootSeed::new(seed), preset, axes.clone(), constraints)?;
+    let c = QuestForge::generate(&dna)?;
+    c.validate()?;
+    Ok(sample(preset, seed, &axes, &c))
 }
 fn metrics(candidates: &[forge_app_core::QuestCandidate]) -> Value {
     let mut pool: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     let mut value_frequency: BTreeMap<&str, BTreeMap<String, usize>> = BTreeMap::new();
     let mut id_frequency: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
+    let mut premise_stakes_frequency: BTreeMap<(String, String), usize> = BTreeMap::new();
     let mut clusters = BTreeMap::<String, usize>::new();
     let mut sigs = BTreeSet::new();
     let mut rows = Vec::new();
     let mut public_rows = Vec::new();
     for c in candidates {
         let q = &c.quest;
+        *premise_stakes_frequency
+            .entry((q.premise.clone(), q.stakes.clone()))
+            .or_default() += 1;
         let values = [
             ("title", q.envelope.name.clone()),
             ("location", q.locations.join("|")),
@@ -117,9 +137,12 @@ fn metrics(candidates: &[forge_app_core::QuestCandidate]) -> Value {
     };
     let concentration=value_frequency.iter().map(|(field,freq)|{let mut ordered=freq.iter().collect::<Vec<_>>();ordered.sort_by(|a,b|b.1.cmp(a.1));let top3=ordered.iter().take(3).map(|(_,count)|**count).sum::<usize>();(*field,json!({"unique":freq.len(),"most_common_count":ordered.first().map_or(0,|(_,n)|**n),"most_common_frequency":ordered.first().map_or(0.0,|(_,n)|**n as f64/candidates.len() as f64),"top3_combined_count":top3,"top3_combined_frequency":top3 as f64/candidates.len() as f64,"top_values":ordered.iter().take(3).map(|(value,count)|json!({"value":value,"count":count})).collect::<Vec<_>>()}))}).collect::<BTreeMap<_,_>>();
     let id_concentration=id_frequency.iter().map(|(field,freq)|{let mut ordered=freq.iter().collect::<Vec<_>>();ordered.sort_by(|a,b|b.1.cmp(a.1));(field.clone(),json!({"unique_ids":freq.len(),"top3_ids":ordered.iter().take(3).map(|(id,count)|json!({"id":id,"count":count})).collect::<Vec<_>>()}))}).collect::<BTreeMap<_,_>>();
-    json!({"seeds":candidates.len(),"unique_expanded":sigs.len(),"exact_expanded_duplicates":candidates.len()-sigs.len(),"public_14_pairs":pairs,"mean_equal_public_14":sum as f64/pairs.max(1) as f64,"median_equal_public_14":median,"max_equal_public_14":max,"pairs_ge_8_of_14":ge8,"pairs_ge_10_of_14":ge10,"pairs_ge_12_of_14":ge12,"field_distinct_values":pool.iter().map(|(k,v)|(*k,v.len())).collect::<BTreeMap<_,_>>(),"rendered_field_concentration":concentration,"internal_id_concentration":id_concentration,"thread_clusters":clusters})
+    let mut premise_stakes_top = premise_stakes_frequency.iter().collect::<Vec<_>>();
+    premise_stakes_top.sort_by(|a, b| b.1.cmp(a.1));
+    let premise_stakes = json!({"unique_pairs":premise_stakes_frequency.len(),"most_common_count":premise_stakes_top.first().map_or(0,|(_,count)|**count),"top_pairs":premise_stakes_top.iter().take(5).map(|((premise,stakes),count)|json!({"premise":premise,"stakes":stakes,"count":count})).collect::<Vec<_>>()});
+    json!({"seeds":candidates.len(),"unique_expanded":sigs.len(),"exact_expanded_duplicates":candidates.len()-sigs.len(),"public_14_pairs":pairs,"mean_equal_public_14":sum as f64/pairs.max(1) as f64,"median_equal_public_14":median,"max_equal_public_14":max,"pairs_ge_8_of_14":ge8,"pairs_ge_10_of_14":ge10,"pairs_ge_12_of_14":ge12,"field_distinct_values":pool.iter().map(|(k,v)|(*k,v.len())).collect::<BTreeMap<_,_>>(),"rendered_field_concentration":concentration,"internal_id_concentration":id_concentration,"premise_stakes_pair_concentration":premise_stakes,"thread_clusters":clusters})
 }
-fn cluster_analysis(candidates: &[forge_app_core::QuestCandidate]) -> Value {
+fn cluster_analysis(candidates: &[forge_app_core::QuestCandidate], threshold: usize) -> Value {
     let rows = candidates
         .iter()
         .map(|c| {
@@ -166,7 +189,7 @@ fn cluster_analysis(candidates: &[forge_app_core::QuestCandidate]) -> Value {
                 same_thread += 1;
                 same_thread_equal += equal;
             }
-            if equal >= 10 {
+            if equal >= threshold {
                 high += 1;
                 let mut root_a = i;
                 while parent[root_a] != root_a {
@@ -251,16 +274,17 @@ fn cluster_analysis(candidates: &[forge_app_core::QuestCandidate]) -> Value {
     let mut thread_clusters=by_thread.into_iter().map(|(thread,seeds)|json!({"thread":thread,"seed_count":seeds.len(),"seed_ids_preview":seeds.iter().take(64).copied().collect::<Vec<_>>()})).collect::<Vec<_>>();
     thread_clusters.sort_by(|a, b| b["seed_count"].as_u64().cmp(&a["seed_count"].as_u64()));
     let records=ids.iter().enumerate().map(|(seed,selection_ids)|json!({"seed":seed,"thread":thread(&candidates[seed].quest),"selection_ids":selection_ids})).collect::<Vec<_>>();
-    json!({"pairs_ge_10":high,"high_pairs_by_thread_pair":thread_pairs,"high_pair_matching_fields":identical_fields,"most_shared_internal_selection_ids_in_high_pairs":top_shared,"seeds_with_most_high_pair_neighbors":top_seeds,"largest_ge_10_connected_clusters":largest_clusters,"thread_clusters":thread_clusters,"mean_equal_fields_given_same_thread":same_thread_equal as f64/same_thread.max(1) as f64,"selection_records":records})
+    json!({"pair_threshold":threshold,"qualifying_pairs":high,"pairs_by_thread_pair":thread_pairs,"matching_fields_in_qualifying_pairs":identical_fields,"most_shared_internal_selection_ids":top_shared,"seeds_with_most_high_pair_neighbors":top_seeds,"largest_connected_clusters":largest_clusters,"thread_clusters":thread_clusters,"mean_equal_fields_given_same_thread":same_thread_equal as f64/same_thread.max(1) as f64,"selection_records":records})
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut report = Vec::new();
+    let mut human_samples = Vec::new();
     let mut chaos_before = Vec::new();
     let mut chaos_after = Vec::new();
     for preset in PRESETS {
         let count = if preset == "chaos-blend" { 1024 } else { 256 };
         let mut v3 = Vec::new();
-        let mut examples = Vec::new();
+        let mut sampled_vanishing_floor = false;
         for seed in 0..count {
             let dna = QuestForge::new_dna(
                 RootSeed::new(seed as u64),
@@ -269,14 +293,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 BTreeMap::new(),
             )?;
             let c = QuestForge::generate(&dna)?;
-            if seed < 2 {
-                examples.push(sample(&c));
+            c.validate()?;
+            let balanced_contemporary_sample = preset == "contemporary-weird"
+                && (seed < 2
+                    || (!sampled_vanishing_floor && thread(&c.quest) == "vanishing-floor"));
+            if (seed < 3 && preset != "chaos-blend" && preset != "contemporary-weird")
+                || balanced_contemporary_sample
+            {
+                human_samples.push(sample(preset, seed as u64, &CreativeAxes::neutral(), &c));
+            }
+            if balanced_contemporary_sample && thread(&c.quest) == "vanishing-floor" {
+                sampled_vanishing_floor = true;
+            }
+            if preset == "chaos-blend" && [0, 1, 2, 7, 42, 99, 127, 255, 512, 1023].contains(&seed)
+            {
+                human_samples.push(sample(preset, seed as u64, &CreativeAxes::neutral(), &c));
             }
             v3.push(c);
         }
         let summary = metrics(&v3);
         let cluster_report = if preset == "chaos-blend" {
-            Some(cluster_analysis(&v3))
+            Some(json!({"ge_8":cluster_analysis(&v3, 8),"ge_10":cluster_analysis(&v3, 10)}))
         } else {
             None
         };
@@ -295,11 +332,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     d.recipe.dependencies.remove(&key);
                 }
                 let c = QuestForge::generate(&d)?;
+                c.validate()?;
                 chaos_before.push(c);
             }
             chaos_after = v3.clone();
         }
-        report.push(json!({"preset":preset,"metrics":summary,"internal_selection_cluster_analysis":cluster_report,"representative_samples":examples}));
+        report.push(json!({"preset":preset,"metrics":summary,"internal_selection_cluster_analysis":cluster_report}));
     }
     let mut axis_report = BTreeMap::new();
     for axis in CreativeAxis::ALL {
@@ -315,6 +353,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     a,
                     BTreeMap::new(),
                 )?)?;
+                c.validate()?;
                 *dist
                     .entry(label.into())
                     .or_default()
@@ -355,23 +394,75 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         constraints,
     )?)?;
     let mut extremes = Vec::new();
-    for axis in CreativeAxis::ALL {
+    for axis in [
+        CreativeAxis::Mythic,
+        CreativeAxis::Chaos,
+        CreativeAxis::Epic,
+    ] {
         for level in [0, 100] {
             let mut a = CreativeAxes::neutral();
             a.levels.insert(axis, level);
             let c = QuestForge::generate(&QuestForge::new_dna(
                 RootSeed::new(42),
                 "chaos-blend",
-                a,
+                a.clone(),
                 BTreeMap::new(),
             )?)?;
-            extremes.push(json!({"axis":format!("{axis:?}"),"level":level,"sample":sample(&c)}));
+            let label = format!("{axis:?}").to_lowercase();
+            let sample = sample("chaos-blend", 42, &a, &c);
+            human_samples.push(sample.clone());
+            extremes.push(json!({"axis":label,"level":level,"sample":sample}));
         }
     }
+    let constraint_examples = [
+        ("dark-fantasy", 101),
+        ("pirate", 202),
+        ("occult", 303),
+        ("monster-hunter", 404),
+        ("contemporary-weird", 505),
+        ("chaos-blend", 606),
+    ]
+    .into_iter()
+    .map(|(preset, seed)| {
+        let mut constraints = forge_contracts::Constraints::new();
+        constraints.insert(
+            forge_contracts::ConstraintKey::new("inspiration")?,
+            [
+                "a bell that rings below the river",
+                "a witness who remembers tomorrow",
+                "an unclaimed key from the registry",
+                "a migration trail through winter glass",
+                "a maintenance ticket for a missing floor",
+                "a tide chart signed by a machine",
+            ][(seed as usize / 101 - 1) % 6]
+                .to_owned(),
+        );
+        let axes = CreativeAxes::neutral();
+        let sample = generated_sample(preset, seed, axes, constraints)?;
+        human_samples.push(sample.clone());
+        Ok::<_, Box<dyn std::error::Error>>(sample)
+    })
+    .collect::<Result<Vec<_>, _>>()?;
+    let mut v2_dna = QuestForge::new_dna(
+        RootSeed::new(42),
+        "pirate",
+        CreativeAxes::neutral(),
+        BTreeMap::new(),
+    )?;
+    v2_dna.content_version = ContentVersion(2);
+    for field in [QuestField::Clue, QuestField::Briefing] {
+        let key = field.key()?;
+        v2_dna.recipe.field_controls.remove(&key);
+        v2_dna.recipe.dependencies.remove(&key);
+    }
+    let v2_before = v2_dna.clone();
+    let v2_first = QuestForge::generate(&v2_dna)?;
+    let v2_second = QuestForge::generate(&v2_dna)?;
+    v2_first.validate()?;
     println!(
         "{}",
         serde_json::to_string_pretty(
-            &json!({"presets":report,"chaos_blend_before_v2":metrics(&chaos_before),"chaos_blend_after_v3":metrics(&chaos_after),"controlled_axis_thread_distributions_256_each":axis_report,"axis_extreme_samples":extremes,"constrained_sample":sample(&constrained)})
+            &json!({"presets":report,"chaos_blend_before_v2":metrics(&chaos_before),"chaos_blend_after_v3":metrics(&chaos_after),"controlled_axis_thread_distributions_256_each":axis_report,"axis_extreme_samples":extremes,"constraint_examples":constraint_examples,"human_samples":human_samples,"quest_v2_replay_check":{"preset":"pirate","seed":42,"content_version":2,"same_input_same_candidate":v2_first==v2_second,"caller_dna_unchanged":v2_dna==v2_before,"clue":v2_first.clue,"briefing":v2_first.briefing},"constrained_sample":sample("occult",31415,&CreativeAxes::neutral(),&constrained)})
         )?
     );
     Ok(())
