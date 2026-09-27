@@ -53,7 +53,7 @@ Mission 06 — VAULT: portable projects, export/import, backup/restore, and arch
 - Full Rust workspace: **101 passed, 0 failed** (desktop 8, app-core 53, contracts 10, export 14, storage 16). Export-specific suite: **14 passed, 0 failed**.
 - Frontend: **24 passed, 0 failed**; formatting, lint, typecheck, and production build passed. The nine CSS specificity warnings predate this mission's styling addition and are non-failing.
 - Recorded automated evidence: **101 Rust tests PASS**, **24 frontend tests PASS**, `scripts/verify.ps1` PASS, optimized Tauri build PASS, formatting PASS, strict Clippy PASS, Cargo metadata PASS, `git diff --check` PASS, and `pnpm test` PASS. The global `npm test` launcher still cannot start because its configured `npm-cli.js` is missing; this is an environment issue only, and the repository pnpm suite passed.
-- The operator completed the smoke workflow in `C:\dev\CharacterForge\target\release\character-forge-desktop.exe` and reported **PASS**. They exported a real persisted project containing saved Character and Quest data to `.forgeproject`; imported it to a different SQLite path; opened it and confirmed project identity/content, Character, Quest, manual edits, lock state, history, and canon state/revisions survived.
+- The operator completed the smoke workflow in `C:\dev\CharacterForge\target\release\character-forge-desktop.exe` and reported **PASS**. They exported a real persisted project containing saved Character and Quest data to `.forgeproject`, moved the portable project, and imported it to a different project location. They opened the imported project and confirmed project identity/content, Character, Quest, manual edits, lock state, history, and canon state/revisions survived. The operator described the result as **“rediscovered, moved, and relived.”**
 - The operator created a backup, made and saved a clearly visible project change, restored the backup, and confirmed the post-backup change disappeared and the pre-backup state returned. Character, Quest, history, and canon remained valid after restore.
 - The operator fully closed and relaunched the packaged app, reopened the restored project, and confirmed the restored state remained correct after process restart. No operator-visible P0/P1 VAULT defect was observed.
 
@@ -91,8 +91,8 @@ No Mission 06 exit criterion remains unsatisfied.
 ## Repository state
 
 - Branch: `master`.
-- HEAD: `99cc0e7e60eab143f7e16ec37ba00682c537f873` (`fix: preserve Character field independence across desktop workflows`).
-- Worktree: dirty with Mission 06 implementation, tests, and documentation; this closeout updates only this report and `GAZINGA/PROJECT_STATE.md`; no commit created.
+- HEAD: `66ce431d903615a99764d07bd29c4f41708d048b` (`feat: implement portable project vault workflows`).
+- Worktree: dirty only in `docs/missions/MISSION_06_REPORT.md` and `GAZINGA/PROJECT_STATE.md` from this closeout; Mission 06 implementation is committed at HEAD.
 
 ## Next mission readiness
 
