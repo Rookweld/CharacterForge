@@ -13,6 +13,7 @@ import {
   type EntityRecord,
   type ForgePayload,
   type Project,
+  type Revision,
 } from '../src/api';
 
 const clickNamedButton = (name: string, index: number) => {
@@ -201,6 +202,34 @@ beforeEach(() => {
   vi.mocked(api.history).mockResolvedValue([]);
   vi.mocked(api.snapshot).mockResolvedValue(character);
   vi.mocked(api.revisions).mockResolvedValue([]);
+  vi.mocked(api.userSettings).mockResolvedValue({
+    version: 1,
+    reducedMotion: false,
+  });
+  vi.mocked(api.updateUserSettings).mockImplementation(
+    async (settings) => settings,
+  );
+  vi.mocked(api.undo).mockResolvedValue({
+    entity: character,
+    canUndo: false,
+    canRedo: true,
+  });
+  vi.mocked(api.redo).mockResolvedValue({
+    entity: character,
+    canUndo: true,
+    canRedo: false,
+  });
+  vi.mocked(api.restoreHistoryToWorkingCopy).mockResolvedValue({
+    entity: character,
+    canUndo: false,
+    canRedo: false,
+  });
+  vi.mocked(api.loadCanonRevisionWorkingCopy).mockResolvedValue({
+    entity: character,
+    canUndo: false,
+    canRedo: false,
+  });
+  vi.mocked(api.reviseCanon).mockResolvedValue(record(character));
 });
 
 async function openWorkspace(items: EntityRecord[] = []) {
@@ -735,6 +764,108 @@ describe('desktop creative workflows', () => {
       await screen.findByRole('button', { name: /Edited a result/ }),
     );
     await waitFor(() => expect(api.snapshot).toHaveBeenCalledWith('run-1'));
+    expect(
+      await screen.findByRole('button', { name: 'Use as working copy' }),
+    ).toBeInTheDocument();
+  });
+
+  it('exposes session undo and redo as separate from persisted save', async () => {
+    vi.mocked(api.reroll).mockResolvedValue({
+      ...character,
+      value: {
+        ...character.value,
+        character: { ...character.value.character, title: 'Rerolled title' },
+      },
+    });
+    await forgeCharacterResult();
+    expect(
+      screen.getByRole('button', { name: 'Undo last session change' }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reroll Name' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Undo last session change' }),
+    );
+    await waitFor(() => expect(api.undo).toHaveBeenCalled());
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+  });
+
+  it('uses an inspected history snapshot as a new working copy', async () => {
+    vi.mocked(api.history).mockResolvedValue([
+      {
+        runId: 'run-restore',
+        entityId: 'character-1',
+        action: 'manual_edit',
+        createdAtUnixMs: 1234,
+      },
+    ]);
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Edited a result/ }),
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use as working copy' }),
+    );
+    await waitFor(() =>
+      expect(api.restoreHistoryToWorkingCopy).toHaveBeenCalledWith(
+        'run-restore',
+      ),
+    );
+    expect(
+      await screen.findByText(/History snapshot opened as a working copy/),
+    ).toBeInTheDocument();
+  });
+
+  it('inspects structured prior canon revisions and offers a working-copy action', async () => {
+    const canon = record({
+      ...character,
+      value: {
+        ...character.value,
+        character: {
+          ...character.value.character,
+          envelope: {
+            ...character.value.character.envelope,
+            canon_state: 'canon',
+          },
+        },
+      },
+    });
+    const prior: Revision = {
+      revisionNumber: 1,
+      reason: 'promoted to canon',
+      entity: character,
+      createdAtUnixMs: 1234,
+    };
+    vi.mocked(api.listEntities).mockResolvedValue([canon]);
+    vi.mocked(api.getEntity).mockResolvedValue(canon);
+    vi.mocked(api.revisions).mockResolvedValue([prior]);
+    await openWorkspace([canon]);
+    fireEvent.click(screen.getByRole('button', { name: 'Canon' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Inspect' }));
+    expect(
+      screen.getAllByText('READ-ONLY CANON REVISION').length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Use as working copy' }),
+    );
+    await waitFor(() =>
+      expect(api.loadCanonRevisionWorkingCopy).toHaveBeenCalledWith(
+        'character-1',
+        1,
+      ),
+    );
+  });
+
+  it('opens persisted application settings and saves reduced motion preference', async () => {
+    await openProjectSettings();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Reduce motion' }));
+    await waitFor(() =>
+      expect(api.updateUserSettings).toHaveBeenCalledWith({
+        version: 1,
+        reducedMotion: true,
+      }),
+    );
   });
 
   it('explains stale-write conflicts and requires reload', async () => {

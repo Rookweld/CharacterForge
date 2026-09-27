@@ -110,6 +110,12 @@ export type Revision = {
   entity: ForgePayload;
   createdAtUnixMs: number;
 };
+export type UserSettings = { version: 1; reducedMotion: boolean };
+export type WorkingState = {
+  entity: ForgePayload | null;
+  canUndo: boolean;
+  canRedo: boolean;
+};
 export type UiError =
   | { kind?: string; message?: string; expected?: number; actual?: number }
   | string;
@@ -252,6 +258,20 @@ export const api = {
   snapshot: (runId: string) =>
     invoke<ForgePayload | null>('get_history_snapshot', { runId }),
   revisions: (id: string) => invoke<Revision[]>('get_canon_revisions', { id }),
+  restoreHistoryToWorkingCopy: (runId: string) =>
+    invoke<WorkingState>('use_history_as_working_copy', { runId }),
+  loadCanonRevisionWorkingCopy: (id: string, revisionNumber: number) =>
+    invoke<WorkingState>('use_canon_revision_as_working_copy', {
+      id,
+      revisionNumber,
+    }),
+  undo: () => invoke<WorkingState>('undo_session'),
+  redo: () => invoke<WorkingState>('redo_session'),
+  reviseCanon: (reason: string) =>
+    invoke<EntityRecord>('revise_canon', { reason }),
+  userSettings: () => invoke<UserSettings>('get_user_settings'),
+  updateUserSettings: (settings: UserSettings) =>
+    invoke<UserSettings>('update_user_settings', { settings }),
 };
 
 export function errorMessage(error: UiError): {

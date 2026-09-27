@@ -3,16 +3,16 @@ use forge_app_core::{
     QuestFieldValue, QuestForge,
 };
 use forge_contracts::{
-    CreativeAxes, CreativeAxis, EntityId, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
-    INITIAL_SCHEMA_VERSION, ProjectEnvelope, ProjectId, RootSeed,
+    CanonState, CreativeAxes, CreativeAxis, EntityId, INITIAL_CONTENT_VERSION,
+    INITIAL_GENERATOR_VERSION, INITIAL_SCHEMA_VERSION, ProjectEnvelope, ProjectId, RootSeed,
 };
 use forge_export::{
     ExportError, create_backup, export_project, import_project_to_directory, project_database_path,
     restore_active, write_entity_json, write_entity_markdown,
 };
 use forge_storage::{
-    EntityRecord, EntityRevision, ForgeRunRecord, ProjectSession, ProjectStore, StoreError,
-    StoredEntity, StoredProject,
+    EntityRecord, EntityRevision, ForgeRunRecord, ProjectSession, ProjectStore, SessionHistory,
+    StoreError, StoredEntity, StoredProject,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -33,6 +33,75 @@ struct AppSession {
     project: ProjectSession,
     working: Option<StoredEntity>,
     write_version: Option<i64>,
+    history: Option<SessionHistory<StoredEntity>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UserSettings {
+    version: u8,
+    reduced_motion: bool,
+}
+
+impl Default for UserSettings {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            reduced_motion: false,
+        }
+    }
+}
+
+const USER_SETTINGS_FILE: &str = "user-settings.json";
+
+fn user_settings_path(app: &AppHandle) -> Result<PathBuf, UiError> {
+    app.path()
+        .app_config_dir()
+        .map(|directory| directory.join(USER_SETTINGS_FILE))
+        .map_err(|_| ui_storage_error("Could not locate local application settings."))
+}
+
+fn read_user_settings(path: &Path) -> UserSettings {
+    if path
+        .metadata()
+        .is_ok_and(|metadata| metadata.len() > 16 * 1024)
+    {
+        return UserSettings::default();
+    }
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return UserSettings::default();
+    };
+    serde_json::from_str::<UserSettings>(&contents)
+        .ok()
+        .filter(|settings| settings.version == 1)
+        .unwrap_or_default()
+}
+
+fn write_user_settings(path: &Path, settings: &UserSettings) -> Result<(), UiError> {
+    if settings.version != 1 {
+        return Err(UiError {
+            kind: "validation",
+            message: "These application settings use an unsupported version.".into(),
+            expected: Some(1),
+            actual: Some(i64::from(settings.version)),
+        });
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| ui_storage_error("Could not locate local application settings."))?;
+    std::fs::create_dir_all(parent)
+        .map_err(|_| ui_storage_error("Could not save application settings."))?;
+    let temporary = path.with_extension(format!("json.{}.tmp", std::process::id()));
+    let bytes = serde_json::to_vec(settings)
+        .map_err(|_| ui_storage_error("Could not save application settings."))?;
+    std::fs::write(&temporary, bytes)
+        .map_err(|_| ui_storage_error("Could not save application settings."))?;
+    if path.exists() {
+        std::fs::remove_file(path)
+            .map_err(|_| ui_storage_error("Could not update application settings."))?;
+    }
+    std::fs::rename(&temporary, path)
+        .map_err(|_| ui_storage_error("Could not update application settings."))
 }
 
 #[derive(Default)]
@@ -424,6 +493,7 @@ fn create_project(
     };
     session.working = None;
     session.write_version = None;
+    session.history = None;
     remember_recent_project(&app, &project);
     Ok(project)
 }
@@ -459,6 +529,7 @@ fn open_project(
     }
     session.working = None;
     session.write_version = None;
+    session.history = None;
     let project = project_info(&session)?;
     remember_recent_project(&app, &project);
     Ok(project)
@@ -473,6 +544,17 @@ fn default_project_directory(app: AppHandle) -> Result<String, UiError> {
         .join("Character Forge")
         .to_string_lossy()
         .into_owned())
+}
+
+#[tauri::command]
+fn get_user_settings(app: AppHandle) -> Result<UserSettings, UiError> {
+    Ok(read_user_settings(&user_settings_path(&app)?))
+}
+
+#[tauri::command]
+fn update_user_settings(app: AppHandle, settings: UserSettings) -> Result<UserSettings, UiError> {
+    write_user_settings(&user_settings_path(&app)?, &settings)?;
+    Ok(settings)
 }
 
 #[tauri::command]
@@ -507,6 +589,7 @@ fn close_project(state: State<'_, AppState>) -> Result<(), UiError> {
     session.project.close();
     session.working = None;
     session.write_version = None;
+    session.history = None;
     Ok(())
 }
 
@@ -558,6 +641,7 @@ fn import_project_command(
     }
     session.working = None;
     session.write_version = None;
+    session.history = None;
     let project = project_info(&session)?;
     debug_assert_eq!(project.name, imported.name);
     remember_recent_project(&app, &project);
@@ -570,6 +654,7 @@ fn restore_backup_command(state: State<'_, AppState>, archive_path: String) -> R
     restore_active(&mut session.project, Path::new(archive_path.trim()))?;
     session.working = None;
     session.write_version = None;
+    session.history = None;
     Ok(())
 }
 
@@ -745,6 +830,7 @@ fn forge_character(
     let entity = StoredEntity::CharacterCandidate(candidate);
     session.working = Some(entity.clone());
     session.write_version = None;
+    session.history = Some(SessionHistory::new(entity.clone()));
     Ok(entity)
 }
 
@@ -772,6 +858,7 @@ fn forge_quest(
     let entity = StoredEntity::QuestCandidate(candidate);
     session.working = Some(entity.clone());
     session.write_version = None;
+    session.history = Some(SessionHistory::new(entity.clone()));
     Ok(entity)
 }
 
@@ -782,40 +869,46 @@ fn set_field_lock(
     locked: bool,
 ) -> Result<StoredEntity, UiError> {
     let mut session = lock_state(&state)?;
-    let entity = session.working.as_mut().ok_or_else(|| UiError {
+    let mut entity = session.working.clone().ok_or_else(|| UiError {
         kind: "no_candidate",
         message: "Forge or open a candidate first.".into(),
         expected: None,
         actual: None,
     })?;
-    set_entity_field_lock(entity, &field, locked)?;
-    Ok(entity.clone())
+    let previous = entity.clone();
+    set_entity_field_lock(&mut entity, &field, locked)?;
+    push_session_state(&mut session, previous, entity.clone());
+    Ok(entity)
 }
 
 #[tauri::command]
 fn reroll_field(state: State<'_, AppState>, field: String) -> Result<StoredEntity, UiError> {
     let mut session = lock_state(&state)?;
-    let entity = session.working.as_mut().ok_or_else(|| UiError {
+    let mut entity = session.working.clone().ok_or_else(|| UiError {
         kind: "no_candidate",
         message: "Forge or open a candidate first.".into(),
         expected: None,
         actual: None,
     })?;
-    reroll_entity_field(entity, &field)?;
-    Ok(entity.clone())
+    let previous = entity.clone();
+    reroll_entity_field(&mut entity, &field)?;
+    push_session_state(&mut session, previous, entity.clone());
+    Ok(entity)
 }
 
 #[tauri::command]
 fn reroll_unlocked(state: State<'_, AppState>) -> Result<StoredEntity, UiError> {
     let mut session = lock_state(&state)?;
-    let entity = session.working.as_mut().ok_or_else(|| UiError {
+    let mut entity = session.working.clone().ok_or_else(|| UiError {
         kind: "no_candidate",
         message: "Forge or open a candidate first.".into(),
         expected: None,
         actual: None,
     })?;
-    reroll_entity_unlocked(entity)?;
-    Ok(entity.clone())
+    let previous = entity.clone();
+    reroll_entity_unlocked(&mut entity)?;
+    push_session_state(&mut session, previous, entity.clone());
+    Ok(entity)
 }
 
 #[tauri::command]
@@ -825,14 +918,84 @@ fn edit_field(
     value: Value,
 ) -> Result<StoredEntity, UiError> {
     let mut session = lock_state(&state)?;
-    let entity = session.working.as_mut().ok_or_else(|| UiError {
+    let mut entity = session.working.clone().ok_or_else(|| UiError {
         kind: "no_candidate",
         message: "Forge or open a candidate first.".into(),
         expected: None,
         actual: None,
     })?;
-    edit_entity_field(entity, &field, value)?;
-    Ok(entity.clone())
+    let previous = entity.clone();
+    edit_entity_field(&mut entity, &field, value)?;
+    push_session_state(&mut session, previous, entity.clone());
+    Ok(entity)
+}
+
+fn push_session_state(session: &mut AppSession, previous: StoredEntity, next: StoredEntity) {
+    let history = session
+        .history
+        .get_or_insert_with(|| SessionHistory::new(previous));
+    history.push(next.clone());
+    session.working = Some(next);
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkingState {
+    entity: Option<StoredEntity>,
+    can_undo: bool,
+    can_redo: bool,
+}
+
+fn working_state(session: &AppSession) -> WorkingState {
+    WorkingState {
+        entity: session.working.clone(),
+        can_undo: session
+            .history
+            .as_ref()
+            .is_some_and(|history| history.can_undo()),
+        can_redo: session
+            .history
+            .as_ref()
+            .is_some_and(|history| history.can_redo()),
+    }
+}
+
+#[tauri::command]
+fn undo_session(state: State<'_, AppState>) -> Result<WorkingState, UiError> {
+    let mut session = lock_state(&state)?;
+    let history = session.history.as_mut().ok_or_else(|| UiError {
+        kind: "no_undo",
+        message: "There is no earlier change in this editing session.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    let previous = history.undo().cloned().ok_or_else(|| UiError {
+        kind: "no_undo",
+        message: "There is no earlier change in this editing session.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    session.working = Some(previous);
+    Ok(working_state(&session))
+}
+
+#[tauri::command]
+fn redo_session(state: State<'_, AppState>) -> Result<WorkingState, UiError> {
+    let mut session = lock_state(&state)?;
+    let history = session.history.as_mut().ok_or_else(|| UiError {
+        kind: "no_redo",
+        message: "There is no change to redo in this editing session.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    let next = history.redo().cloned().ok_or_else(|| UiError {
+        kind: "no_redo",
+        message: "There is no change to redo in this editing session.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    session.working = Some(next);
+    Ok(working_state(&session))
 }
 
 #[tauri::command]
@@ -848,6 +1011,52 @@ fn save_candidate(state: State<'_, AppState>) -> Result<EntityView, UiError> {
         Some(expected) => active_store(&mut session)?.save_candidate(entity.clone(), expected)?,
         None => active_store(&mut session)?.persist_candidate(entity.clone())?,
     };
+    session.write_version = Some(version);
+    Ok(EntityView {
+        entity,
+        write_version: version,
+    })
+}
+
+#[tauri::command]
+fn revise_canon(state: State<'_, AppState>, reason: String) -> Result<EntityView, UiError> {
+    if reason.trim().is_empty() {
+        return Err(UiError {
+            kind: "validation",
+            message: "Add a short reason for this Canon revision.".into(),
+            expected: None,
+            actual: None,
+        });
+    }
+    let mut session = lock_state(&state)?;
+    let mut entity = session.working.clone().ok_or_else(|| UiError {
+        kind: "no_candidate",
+        message: "Open a Canon item as a working copy before revising it.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    let expected = session.write_version.ok_or_else(|| UiError {
+        kind: "invalid_operation",
+        message: "This working copy is not linked to a saved Canon item.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    match &mut entity {
+        StoredEntity::CharacterCandidate(candidate) => {
+            candidate.character.envelope.canon_state = CanonState::Canon;
+        }
+        StoredEntity::QuestCandidate(candidate) => {
+            candidate.quest.envelope.canon_state = CanonState::Canon;
+        }
+        _ => {
+            return Err(invalid_candidate_operation(
+                "Canon revisions require the structured working candidate.",
+            ));
+        }
+    }
+    let version =
+        active_store(&mut session)?.revise_canon(entity.clone(), expected, reason.trim())?;
+    session.working = Some(entity.clone());
     session.write_version = Some(version);
     Ok(EntityView {
         entity,
@@ -880,6 +1089,7 @@ fn get_entity(state: State<'_, AppState>, id: String) -> Result<Option<EntityVie
     if let Some(record) = &record {
         session.working = Some(record.entity.clone());
         session.write_version = Some(record.write_version);
+        session.history = Some(SessionHistory::new(record.entity.clone()));
     }
     Ok(record.map(entity_view))
 }
@@ -956,6 +1166,57 @@ fn get_history_snapshot(
         .map_err(Into::into)
 }
 
+fn as_working_candidate(mut entity: StoredEntity) -> Result<StoredEntity, UiError> {
+    match &mut entity {
+        StoredEntity::CharacterCandidate(candidate) => {
+            candidate.character.envelope.canon_state = CanonState::Candidate;
+        }
+        StoredEntity::QuestCandidate(candidate) => {
+            candidate.quest.envelope.canon_state = CanonState::Candidate;
+        }
+        _ => {
+            return Err(UiError {
+                kind: "invalid_history",
+                message: "This saved snapshot cannot be edited as a candidate because its generation data is unavailable.".into(),
+                expected: None,
+                actual: None,
+            });
+        }
+    }
+    entity.validate().map_err(|error| UiError {
+        kind: "invalid_history",
+        message: format!("This saved snapshot cannot be used safely: {error}"),
+        expected: None,
+        actual: None,
+    })?;
+    Ok(entity)
+}
+
+#[tauri::command]
+fn use_history_as_working_copy(
+    state: State<'_, AppState>,
+    run_id: String,
+) -> Result<WorkingState, UiError> {
+    let mut session = lock_state(&state)?;
+    let id = parse_entity_id(&run_id)?;
+    let snapshot = active_store(&mut session)?
+        .load_history_snapshot(id)?
+        .ok_or_else(|| UiError {
+            kind: "not_found",
+            message: "That history snapshot is no longer available.".into(),
+            expected: None,
+            actual: None,
+        })?;
+    let entity = as_working_candidate(snapshot)?;
+    let id = entity.envelope().id;
+    session.write_version = active_store(&mut session)?
+        .get_entity(id)?
+        .map(|record| record.write_version);
+    session.working = Some(entity.clone());
+    session.history = Some(SessionHistory::new(entity));
+    Ok(working_state(&session))
+}
+
 #[tauri::command]
 fn get_canon_revisions(
     state: State<'_, AppState>,
@@ -967,6 +1228,33 @@ fn get_canon_revisions(
         .into_iter()
         .map(revision_view)
         .collect())
+}
+
+#[tauri::command]
+fn use_canon_revision_as_working_copy(
+    state: State<'_, AppState>,
+    id: String,
+    revision_number: i64,
+) -> Result<WorkingState, UiError> {
+    let mut session = lock_state(&state)?;
+    let entity_id = parse_entity_id(&id)?;
+    let revisions = active_store(&mut session)?.list_revisions(entity_id)?;
+    let revision = revisions
+        .into_iter()
+        .find(|revision| revision.revision_number == revision_number)
+        .ok_or_else(|| UiError {
+            kind: "not_found",
+            message: "That canon revision is no longer available.".into(),
+            expected: None,
+            actual: None,
+        })?;
+    let entity = as_working_candidate(revision.entity)?;
+    session.write_version = active_store(&mut session)?
+        .get_entity(entity_id)?
+        .map(|record| record.write_version);
+    session.working = Some(entity.clone());
+    session.history = Some(SessionHistory::new(entity));
+    Ok(working_state(&session))
 }
 
 fn revision_view(value: EntityRevision) -> RevisionView {
@@ -1070,6 +1358,8 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             default_project_directory,
+            get_user_settings,
+            update_user_settings,
             recent_projects,
             forget_recent_project,
             create_project,
@@ -1088,13 +1378,18 @@ pub fn run() {
             reroll_unlocked,
             edit_field,
             save_candidate,
+            revise_canon,
             list_entities,
             get_entity,
             toggle_favorite,
             promote_to_canon,
             list_history,
             get_history_snapshot,
-            get_canon_revisions
+            get_canon_revisions,
+            use_history_as_working_copy,
+            use_canon_revision_as_working_copy,
+            undo_session,
+            redo_session
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Character Forge desktop shell");
@@ -1350,6 +1645,66 @@ mod tests {
         assert!(!Path::new(&loaded.projects[0].path).exists());
         assert!(std::fs::metadata(&settings_file).unwrap().len() < 1024);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn application_settings_default_on_missing_or_malformed_file_and_persist_updates() {
+        let root = std::env::temp_dir().join(format!(
+            "character-forge-settings-test-{}-{}",
+            std::process::id(),
+            PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let settings_file = root.join(USER_SETTINGS_FILE);
+        assert!(!read_user_settings(&settings_file).reduced_motion);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(&settings_file, b"{broken").unwrap();
+        assert!(!read_user_settings(&settings_file).reduced_motion);
+        let updated = UserSettings {
+            version: 1,
+            reduced_motion: true,
+        };
+        write_user_settings(&settings_file, &updated).unwrap();
+        assert!(read_user_settings(&settings_file).reduced_motion);
+        write_user_settings(&settings_file, &UserSettings::default()).unwrap();
+        assert!(!read_user_settings(&settings_file).reduced_motion);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn session_history_restores_complete_candidate_snapshot_and_discards_redo_branch() {
+        let original = StoredEntity::CharacterCandidate(character_candidate(91));
+        let original_name = original.envelope().name.clone();
+        let mut changed = original.clone();
+        edit_entity_field(
+            &mut changed,
+            "name",
+            Value::String("Manual sentinel".into()),
+        )
+        .unwrap();
+        set_entity_field_lock(&mut changed, "name", true).unwrap();
+        let mut history = SessionHistory::new(original.clone());
+        history.push(changed.clone());
+        assert!(history.can_undo());
+        assert_eq!(history.undo(), Some(&original));
+        assert_eq!(history.redo(), Some(&changed));
+        let Some(StoredEntity::CharacterCandidate(restored)) = history.undo() else {
+            panic!("undo lost the Character candidate wrapper");
+        };
+        assert_eq!(restored.character.envelope.name, original_name);
+        let restored = history.redo().unwrap();
+        let StoredEntity::CharacterCandidate(restored) = restored else {
+            panic!("redo lost the Character candidate wrapper");
+        };
+        assert_eq!(restored.character.envelope.name, "Manual sentinel");
+        let name_key = CharacterField::Name.key().unwrap();
+        assert!(restored.dna.recipe.field_controls[&name_key].locked);
+        assert_eq!(
+            restored.field_origins[&name_key],
+            forge_app_core::FieldValueOrigin::UserModified
+        );
+        history.undo();
+        history.push(original);
+        assert!(!history.can_redo());
     }
 
     #[test]

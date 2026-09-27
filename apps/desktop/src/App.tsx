@@ -15,6 +15,8 @@ import {
   type RecentProject,
   type Revision,
   type UiError,
+  type UserSettings,
+  type WorkingState,
 } from './api';
 
 type Section =
@@ -251,6 +253,30 @@ export function App() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [snapshot, setSnapshot] = useState<ForgePayload | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [settings, setSettings] = useState<UserSettings>({
+    version: 1,
+    reducedMotion: false,
+  });
+  const [selectedRevision, setSelectedRevision] = useState<Revision | null>(
+    null,
+  );
+  const [selectedHistory, setSelectedHistory] = useState<HistoryRecord | null>(
+    null,
+  );
+  const [revisionTarget, setRevisionTarget] = useState(false);
+
+  const clearWorkingView = useCallback(() => {
+    setCandidate(null);
+    setDirty(false);
+    setCanUndo(false);
+    setCanRedo(false);
+    setRevisionTarget(false);
+    setSelectedRevision(null);
+    setSelectedHistory(null);
+    setSnapshot(null);
+  }, []);
 
   const setProjectLocationDefaults = useCallback((active: Project) => {
     const parts = active.path.split(/[\\/]/);
@@ -289,6 +315,19 @@ export function App() {
   useEffect(() => {
     void refreshProject();
   }, [refreshProject]);
+  useEffect(() => {
+    void api
+      .userSettings()
+      .then(setSettings)
+      .catch((reason: unknown) =>
+        setError(errorMessage(reason as UiError).message),
+      );
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.reducedMotion = String(
+      settings.reducedMotion,
+    );
+  }, [settings.reducedMotion]);
 
   const refreshRecentProjects = useCallback(async () => {
     try {
@@ -330,21 +369,21 @@ export function App() {
       void refreshRecords();
   }, [project, section, refreshRecords]);
 
-  const run = async <T,>(
-    operation: () => Promise<T>,
-    onSuccess: (value: T) => void,
-  ) => {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      onSuccess(await operation());
-    } catch (reason) {
-      setError(errorMessage(reason as UiError).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const run = useCallback(
+    async <T,>(operation: () => Promise<T>, onSuccess: (value: T) => void) => {
+      setBusy(true);
+      setError('');
+      setNotice('');
+      try {
+        onSuccess(await operation());
+      } catch (reason) {
+        setError(errorMessage(reason as UiError).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
   const createProject = () =>
     void run(
       () => api.createProject(projectDirectory, projectName),
@@ -352,8 +391,7 @@ export function App() {
         setProject(value);
         setProjectLocationDefaults(value);
         setSection('forge');
-        setCandidate(null);
-        setDirty(false);
+        clearWorkingView();
         setNotice('Project created and ready to forge.');
         void refreshRecentProjects();
       },
@@ -365,8 +403,7 @@ export function App() {
         setProject(value);
         setProjectLocationDefaults(value);
         setSection('forge');
-        setCandidate(null);
-        setDirty(false);
+        clearWorkingView();
         setSelectedRecord(null);
         setNotice('Project opened.');
         void refreshRecentProjects();
@@ -389,8 +426,7 @@ export function App() {
         setProject(value);
         setProjectLocationDefaults(value);
         setSection('forge');
-        setCandidate(null);
-        setDirty(false);
+        clearWorkingView();
         setSelectedRecord(null);
         setNotice('Project imported and opened.');
         void refreshRecentProjects();
@@ -411,8 +447,7 @@ export function App() {
         setProject(value);
         setProjectLocationDefaults(value);
         setSection('forge');
-        setCandidate(null);
-        setDirty(false);
+        clearWorkingView();
         setSelectedRecord(null);
         setNotice('Project opened.');
         void refreshRecentProjects();
@@ -441,8 +476,7 @@ export function App() {
     void run(
       () => api.restoreBackup(restorePath),
       () => {
-        setCandidate(null);
-        setDirty(false);
+        clearWorkingView();
         setSelectedRecord(null);
         setNotice('Backup restored successfully.');
         void refreshRecords();
@@ -488,6 +522,8 @@ export function App() {
           : api.forgeQuest(preset, numericSeed, axes, activeConstraints),
       (value) => {
         setCandidate(value);
+        setCanUndo(false);
+        setCanRedo(false);
         setDirty(true);
         setSelectedRecord(null);
         setNotice(
@@ -502,6 +538,8 @@ export function App() {
   ) =>
     void run(operation, (value) => {
       setCandidate(value);
+      setCanUndo(true);
+      setCanRedo(false);
       setDirty(true);
       if (success) setNotice(success);
     });
@@ -522,6 +560,29 @@ export function App() {
   );
 
   const save = async () => {
+    if (revisionTarget) {
+      const reason = window.prompt('Why are you revising this Canon item?');
+      if (!reason?.trim()) return;
+      await run(
+        () => api.reviseCanon(reason.trim()),
+        (saved) => {
+          setRecords((old) =>
+            old.map((row) =>
+              entityId(row.entity) === entityId(saved.entity) ? saved : row,
+            ),
+          );
+          setSelectedRecord(saved);
+          setCandidate(saved.entity);
+          setDirty(false);
+          setRevisionTarget(false);
+          setNotice(
+            'Canon revision saved. The prior revision remains available.',
+          );
+          void api.revisions(entityId(saved.entity)).then(setRevisions);
+        },
+      );
+      return;
+    }
     await run(
       () => api.saveCandidate(),
       (saved) => {
@@ -546,6 +607,10 @@ export function App() {
           setSelectedRecord(fresh);
           setCandidate(fresh.entity);
           setDirty(false);
+          setCanUndo(false);
+          setCanRedo(false);
+          setRevisionTarget(false);
+          setSelectedRevision(null);
           setRevisions([]);
           void api
             .revisions(entityId(fresh.entity))
@@ -610,12 +675,105 @@ export function App() {
     if (project && section === 'history') loadHistory();
   }, [project, section, loadHistory]);
   const showSnapshot = (item: HistoryRecord) => {
-    if (item.runId)
+    if (item.runId) {
+      setSelectedHistory(item);
       void run(
         () => api.snapshot(item.runId),
         (value) => setSnapshot(value),
       );
+    }
   };
+  const applyWorkingState = (state: WorkingState, message: string) => {
+    if (state.entity) setCandidate(state.entity);
+    setCanUndo(state.canUndo);
+    setCanRedo(state.canRedo);
+    setDirty(true);
+    setSelectedRecord(null);
+    setSection('forge');
+    setSnapshot(null);
+    setNotice(message);
+  };
+  const restoreHistoryToWorking = (item: HistoryRecord) => {
+    if (
+      dirty &&
+      !window.confirm(
+        'Replace the current unsaved working session? Saved history and Canon will remain unchanged.',
+      )
+    )
+      return;
+    void run(
+      () => api.restoreHistoryToWorkingCopy(item.runId),
+      (state) =>
+        applyWorkingState(
+          state,
+          'History snapshot opened as a working copy. Save explicitly when ready.',
+        ),
+    );
+  };
+  const useRevisionAsWorking = (revision: Revision) => {
+    if (!selectedRecord) return;
+    if (
+      dirty &&
+      !window.confirm(
+        'Replace the current unsaved working session? Saved history and Canon will remain unchanged.',
+      )
+    )
+      return;
+    void run(
+      () =>
+        api.loadCanonRevisionWorkingCopy(
+          entityId(selectedRecord.entity),
+          revision.revisionNumber,
+        ),
+      (state) => {
+        applyWorkingState(
+          state,
+          'Canon revision opened as working material. Current Canon was not changed.',
+        );
+        setRevisionTarget(true);
+      },
+    );
+  };
+  const undo = useCallback(
+    () =>
+      void run(api.undo, (state) => {
+        if (state.entity) setCandidate(state.entity);
+        setCanUndo(state.canUndo);
+        setCanRedo(state.canRedo);
+        setDirty(true);
+      }),
+    [run],
+  );
+  const redo = useCallback(
+    () =>
+      void run(api.redo, (state) => {
+        if (state.entity) setCandidate(state.entity);
+        setCanUndo(state.canUndo);
+        setCanRedo(state.canRedo);
+        setDirty(true);
+      }),
+    [run],
+  );
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const editingText = target?.matches(
+        'input, textarea, select, [contenteditable="true"]',
+      );
+      if (editingText || !(event.ctrlKey || event.metaKey)) return;
+      if (event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          if (canRedo) redo();
+        } else if (canUndo) undo();
+      } else if (event.key.toLowerCase() === 'y' && canRedo) {
+        event.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [canUndo, canRedo, undo, redo]);
   const changeLock = (field: Field) => {
     if (!current) return;
     const key = field.key;
@@ -1249,6 +1407,27 @@ export function App() {
                     </div>
                   </div>
                 )}
+                <div className="button-row">
+                  <button
+                    type="button"
+                    disabled={!canUndo || busy}
+                    onClick={undo}
+                    aria-label="Undo last session change"
+                  >
+                    Undo
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canRedo || busy}
+                    onClick={redo}
+                    aria-label="Redo session change"
+                  >
+                    Redo
+                  </button>
+                </div>
+                <small>
+                  Session changes only · Ctrl+Z to undo · Ctrl+Y to redo
+                </small>
               </section>
               {current && (
                 <section className="panel action-card">
@@ -1260,7 +1439,9 @@ export function App() {
                     onClick={save}
                   >
                     {candidateSaved || selectedRecord
-                      ? 'Save changes'
+                      ? revisionTarget
+                        ? 'Save Canon revision'
+                        : 'Save changes'
                       : 'Save candidate'}
                   </button>
                   <button
@@ -1384,8 +1565,15 @@ export function App() {
                 ))
               )}
             </section>
-            <DetailView record={selectedRecord} revisions={revisions} />
-            {selectedRecord && <RevisionPanel revisions={revisions} />}
+            <DetailView record={selectedRecord} />
+            {selectedRecord && (
+              <RevisionPanel
+                revisions={revisions}
+                selected={selectedRevision}
+                onSelect={setSelectedRevision}
+                onUse={useRevisionAsWorking}
+              />
+            )}
           </div>
         )}
         {section === 'history' && (
@@ -1434,7 +1622,23 @@ export function App() {
             <section className="detail-panel panel">
               <p className="eyebrow">READ-ONLY HISTORY SNAPSHOT</p>
               {snapshot ? (
-                <DetailView record={{ entity: snapshot, writeVersion: 0 }} />
+                <>
+                  <DetailView record={{ entity: snapshot, writeVersion: 0 }} />
+                  <button
+                    type="button"
+                    disabled={busy || !selectedHistory}
+                    onClick={() =>
+                      selectedHistory &&
+                      restoreHistoryToWorking(selectedHistory)
+                    }
+                  >
+                    Use as working copy
+                  </button>
+                  <small>
+                    This creates an editable session copy. History and Canon
+                    remain unchanged until you explicitly save or revise.
+                  </small>
+                </>
               ) : (
                 <Empty text="Choose a history entry to inspect its saved snapshot." />
               )}
@@ -1448,6 +1652,31 @@ export function App() {
             <p className="muted">
               This project and its saved work live on this device.
             </p>
+            <section
+              className="vault-group"
+              aria-labelledby="app-settings-heading"
+            >
+              <p className="eyebrow">APPLICATION</p>
+              <h3 id="app-settings-heading">Settings</h3>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.reducedMotion}
+                  onChange={(event) => {
+                    const next: UserSettings = {
+                      version: 1,
+                      reducedMotion: event.target.checked,
+                    };
+                    void run(() => api.updateUserSettings(next), setSettings);
+                  }}
+                />
+                Reduce motion
+              </label>
+              <small className="muted">
+                Uses the system motion preference unless enabled here. Stored
+                locally for this app.
+              </small>
+            </section>
             <dl>
               <dt>Project file</dt>
               <dd className="project-file-path">{project.path}</dd>
@@ -1559,8 +1788,7 @@ export function App() {
               onClick={() =>
                 void run(api.closeProject, () => {
                   setProject(null);
-                  setCandidate(null);
-                  setDirty(false);
+                  clearWorkingView();
                   setSelectedRecord(null);
                   setOpenProjectPath('');
                 })
@@ -1844,7 +2072,17 @@ function DetailView({
     </section>
   );
 }
-function RevisionPanel({ revisions }: { revisions: Revision[] }) {
+function RevisionPanel({
+  revisions,
+  selected,
+  onSelect,
+  onUse,
+}: {
+  revisions: Revision[];
+  selected: Revision | null;
+  onSelect: (revision: Revision) => void;
+  onUse: (revision: Revision) => void;
+}) {
   return (
     <section className="revision-panel panel">
       <p className="eyebrow">CANON REVISIONS</p>
@@ -1857,10 +2095,30 @@ function RevisionPanel({ revisions }: { revisions: Revision[] }) {
             <small className="revision-reason">
               {revision.reason} · {dateLabel(revision.createdAtUnixMs)}
             </small>
+            <div className="button-row">
+              <button
+                type="button"
+                onClick={() => onSelect(revision)}
+                aria-pressed={
+                  selected?.revisionNumber === revision.revisionNumber
+                }
+              >
+                Inspect
+              </button>
+              <button type="button" onClick={() => onUse(revision)}>
+                Use as working copy
+              </button>
+            </div>
           </article>
         ))
       ) : (
         <p className="muted">No canon revisions yet.</p>
+      )}
+      {selected && (
+        <>
+          <p className="eyebrow">READ-ONLY CANON REVISION</p>
+          <DetailView record={{ entity: selected.entity, writeVersion: 0 }} />
+        </>
       )}
     </section>
   );

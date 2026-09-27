@@ -4,13 +4,13 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** Pre-GAUNTLET FOUNDATION COMPLETENESS AUDIT
-**Current status:** FOUNDATION INCOMPLETE — SMALL BLOCKERS; Mission 06 VAULT and Interlude 06.5 WORKBENCH POLISH remain PASS
+**Current mission:** Pre-GAUNTLET FOUNDATION Gap Fix
+**Current status:** PASS — FOUNDATION COMPLETE — READY FOR GAUNTLET; Mission 07 remains NOT STARTED
 **Target release:** v1.0.0 FOUNDATION
-**Last committed baseline:** `88ed9b0105490d587d9266ba9b7e2b2f0da4a545` (Workbench polish experience)
+**Last committed baseline:** `d01222c49ff908048c95e6d63d2d3b49d0f205da` (clean gap-fix starting baseline)
 **Branch:** `master`
-**HEAD:** `88ed9b0105490d587d9266ba9b7e2b2f0da4a545` (`feat: polish v1 desktop workbench experience`)
-**Worktree:** clean at audit start; closeout changes only in `docs/FOUNDATION_COMPLETENESS_AUDIT.md` and this state file; no implementation code changed
+**HEAD:** `d01222c49ff908048c95e6d63d2d3b49d0f205da` (unchanged during gap-fix and closeout)
+**Worktree:** modified with bounded gap-fix implementation, tests, and closeout docs; nothing staged or committed
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -49,7 +49,7 @@
 
 - Interlude 06.5 is PASS. The operator reviewed the packaged application as a real product and accepted the landing/create/open/import workflows, Character/Quest Forge, controls, saved/unsaved state, libraries, Candidate/Canon and promotion, History, Vault, errors/status states, laptop-sized layout, keyboard navigation, and focus indication. No operator-visible P0/P1 regression was found. Verification: 105 Rust tests PASS, 30 frontend tests PASS, formatting PASS, frontend lint PASS, TypeScript typecheck PASS, frontend production build PASS, strict Clippy PASS, Cargo metadata PASS, `scripts/verify.ps1` PASS, optimized Tauri build PASS, `git diff --check` PASS, and repository pnpm tests PASS. The global npm launcher issue remains environment-only. Details: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`.
 
-- Pre-GAUNTLET FOUNDATION completeness audit: **FOUNDATION INCOMPLETE — SMALL BLOCKERS**. Reviewed 36 requirements: 22 implemented + verified, 4 implemented but incompletely verified, 9 partially implemented, 0 missing, 1 intentionally deferred. P0=0, P1=0, P2=4, P3=4. P2 product gaps are session undo/redo, explicit canon revision and prior-revision inspection, applying a persistent history snapshot to the working session, and user settings. See `docs/FOUNDATION_COMPLETENESS_AUDIT.md`. Recommendation: HOLD GAUNTLET pending human review of G-01 through G-04. No implementation changes were made.
+- Pre-GAUNTLET FOUNDATION Gap Fix: **PASS**. All four P2 gaps are resolved and operator-verified in the packaged app; no operator-visible P0/P1 defect was found. Final FOUNDATION status: **FOUNDATION COMPLETE — READY FOR GAUNTLET**. Verification: 107 Rust tests, 34 frontend tests, `scripts/verify.ps1`, optimized Tauri build, formatting, frontend lint, TypeScript typecheck, frontend production build, strict Clippy, Cargo metadata, `git diff --check`, and repository pnpm tests PASS. The global npm launcher issue remains environment-only. See `docs/missions/PRE_GAUNTLET_FOUNDATION_GAP_FIX_REPORT.md` and audit remediation §13. Mission 07 remains NOT STARTED.
 
 ## Mission 00 closeout
 
@@ -69,4 +69,4 @@ AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and later
 
 ## Handoff
 
-Mission reports: `docs/missions/MISSION_00_REPORT.md` through `MISSION_06_REPORT.md`; Interlude 06.5 report: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`; audit: `docs/FOUNDATION_COMPLETENESS_AUDIT.md`. Mission 06 and Interlude 06.5 remain closed PASS. FOUNDATION is incomplete with four P2 product gaps; Mission 07 and Mission 08 have not begun. Branch `master`, HEAD `88ed9b0105490d587d9266ba9b7e2b2f0da4a545`; only closeout documentation is changed. Stop here; do not begin Mission 07 or 08.
+Mission reports: `docs/missions/MISSION_00_REPORT.md` through `MISSION_06_REPORT.md`; Interlude 06.5 report: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`; completeness audit: `docs/FOUNDATION_COMPLETENESS_AUDIT.md`; gap-fix report: `docs/missions/PRE_GAUNTLET_FOUNDATION_GAP_FIX_REPORT.md`. Mission 06 and Interlude 06.5 remain PASS. FOUNDATION is complete and ready for GAUNTLET; gap-fix PASS includes packaged operator acceptance. Branch `master`, HEAD `d01222c49ff908048c95e6d63d2d3b49d0f205da`. Worktree changes are limited to `GAZINGA/PROJECT_STATE.md`, `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src/App.tsx`, `apps/desktop/src/api.ts`, `apps/desktop/src/styles.css`, `apps/desktop/tests/App.test.tsx`, `crates/storage/src/lib.rs`, `docs/FOUNDATION_COMPLETENESS_AUDIT.md`, and `docs/missions/PRE_GAUNTLET_FOUNDATION_GAP_FIX_REPORT.md`; none staged or committed. Mission 07 remains NOT STARTED. Stop here.

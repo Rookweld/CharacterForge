@@ -139,3 +139,18 @@ Automated evidence establishes code/build behavior within its coverage; operator
 
 Mission 06 remains PASS. Interlude 06.5 remains PASS. Mission 07 and Mission 08 have not begun. Stop after this audit and its project-state update.
 
+## 13. Pre-GAUNTLET remediation follow-up
+
+The focused gap-fix implementation is recorded in `docs/missions/PRE_GAUNTLET_FOUNDATION_GAP_FIX_REPORT.md`. It wires transient session undo/redo into the existing `SessionHistory<StoredEntity>`, exposes structured read-only canon revision inspection and explicit canon revision save, exposes history/canon snapshots as non-destructive working copies, and adds a versioned app-local reduced-motion preference. The pass's explicit scope freeze excludes theme selection.
+
+| Original gap | Remediation status | Automated evidence | Acceptance status |
+|---|---|---|---|
+| G-01 Session undo/redo | Implemented using the existing session history; mutations restore complete candidate state and clear redo after a new branch. | Desktop unit coverage for exact snapshot, lock/provenance state, undo/redo, branch invalidation; frontend availability/actions; full 107 Rust and 34 frontend tests. | Operator PASS. |
+| G-02 Canon revision and prior inspection | Implemented structured read-only revision rendering and deliberate, reasoned canon revision save. | Existing transactional storage/revision tests plus frontend revision inspection/action coverage; full suites pass. | Operator PASS. |
+| G-03 Historical working copy | Implemented for persistent history and canon snapshots without writing until explicit save or revision. | Storage snapshot/revision coverage plus frontend working-copy action coverage; full suites pass. | Operator PASS. |
+| G-04 User settings | Implemented versioned app-local reduced-motion preference, defaulting safely on absent/malformed config and persisted through app restart. Theme choice remains out of this pass by explicit scope freeze. | Desktop settings fallback/persistence tests, frontend settings interaction test, full suites pass. | Operator PASS. |
+
+**Operator closeout (2026-09-27): PASS.** The operator completed the focused packaged-app review and confirmed session Undo/Redo and redo-branch invalidation; read-only candidate/history and canon revision inspection; non-destructive use of an older snapshot with newer history retained and canon unchanged until explicit save; persistence of Reduced Motion across application restart; and no operator-visible P0/P1 defect in the remediated areas.
+
+**Final disposition: FOUNDATION COMPLETE — READY FOR GAUNTLET.** Re-evaluation of G-01 through G-04: all four are satisfied by the implementation, automated coverage, optimized package, and operator verification. The original P2 blocker count is now **0 unresolved** (four resolved); P0=0 and P1=0 for this bounded gap-fix scope. Existing Mission 07/08/09 verification and release tasks remain assigned to those later missions and do not prevent starting GAUNTLET. Mission 07 remains NOT STARTED; this closeout does not begin it. No implementation changes were made during operator closeout.
+

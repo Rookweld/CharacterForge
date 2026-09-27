@@ -711,6 +711,12 @@ impl<T: Clone> SessionHistory<T> {
     pub fn current(&self) -> &T {
         self.undo.last().expect("history always has initial state")
     }
+    pub fn can_undo(&self) -> bool {
+        self.undo.len() > 1
+    }
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
     pub fn push(&mut self, next: T) {
         self.undo.push(next);
         self.redo.clear();

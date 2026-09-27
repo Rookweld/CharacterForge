@@ -1047,6 +1047,13 @@ h3 {
   max-width: 700px;
 }
 
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.75rem 0;
+}
+
 .project-archive-actions {
   display: grid;
   gap: 0.75rem;
@@ -1268,4 +1275,13 @@ h3 {
     transition: none;
     scroll-behavior: auto;
   }
+}
+
+:root[data-reduced-motion="true"] *,
+:root[data-reduced-motion="true"] *::before,
+:root[data-reduced-motion="true"] *::after {
+  scroll-behavior: auto;
+  animation-duration: 0.01ms;
+  animation-iteration-count: 1;
+  transition-duration: 0.01ms;
 }
