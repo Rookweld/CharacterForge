@@ -4,13 +4,13 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** 06 — VAULT
-**Current status:** PASS — Mission 06 exit criteria satisfied; packaged operator verification complete
+**Current mission:** Interlude 06.5 — WORKBENCH POLISH
+**Current status:** PASS — Mission 06 remains PASS; Interlude 06.5 automated, packaged-build, and operator product-review gates are satisfied
 **Target release:** v1.0.0 FOUNDATION
-**Last committed baseline:** `66ce431d903615a99764d07bd29c4f41708d048b` (Mission 06 portable project vault workflows)
+**Last committed baseline:** `7d59619f6d03897aea994e7537fd236d983ce060` (Mission 06 portable project vault workflows)
 **Branch:** `master`
-**HEAD:** `66ce431d903615a99764d07bd29c4f41708d048b` (`feat: implement portable project vault workflows`)
-**Worktree:** dirty only in the Mission 06 report and this project state closeout; Mission 06 implementation is committed at HEAD
+**HEAD:** `7d59619f6d03897aea994e7537fd236d983ce060` (`feat: implement portable project vault workflows`)
+**Worktree:** dirty with Interlude 06.5 implementation, tests, architecture, and closeout documentation; no changes committed, staged, or pushed
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -47,6 +47,8 @@
 - Mission 05 added the React/Tauri desktop workflow. A final lock audit found that Tauri post-processing overwrote Character Name with Title after generation, rerolls, reroll-all, and Title edits. That adapter behavior is removed; Mission 01 lock/ForgeDNA semantics are unchanged. Frontend tests (17), workspace Rust tests (87), formatting, strict Clippy, Cargo metadata, `git diff --check`, `scripts/verify.ps1`, and the optimized packaged build pass. The operator verified the updated executable at `target/mission05-lock-remediation/release/character-forge-desktop.exe`: Name survived unrelated and all-unlocked rerolls, Title editing, save, application relaunch, and project reopen; after unlocking, Name reroll worked. The global `npm test` launcher could not start because its configured npm-cli.js is missing; repository pnpm checks passed, so this is recorded as an environment issue. Mission 05 is PASS. See `docs/missions/MISSION_05_REPORT.md`.
 - Mission 06 adds a closed ZIP-based `.forgeproject` v1 container, manifest and BLAKE3 member integrity, SQLite `VACUUM INTO` snapshots, safe staged import and restore, local backup, and structured JSON/Markdown entity exports. Rust export tests cover Character and Quest v2/v3 roundtrip, locks, manual provenance, canon/revisions, history, recent WAL commits, malicious paths/members, archive limits, format/schema errors, collisions, restore rollback, and staging cleanup. Automated evidence: 101 Rust tests PASS, 24 frontend tests PASS, `scripts/verify.ps1` PASS, optimized Tauri build PASS, formatting PASS, strict Clippy PASS, Cargo metadata PASS, `git diff --check` PASS, and `pnpm test` PASS. The global npm launcher issue remains an environment issue only. Operator PASS in `C:\dev\CharacterForge\target\release\character-forge-desktop.exe`: the operator exported a real project, moved the `.forgeproject`, imported it to a different project location, and confirmed project identity, Character/Quest, manual edits, locks, history, and canon/revisions survived. Backup/restore returned the pre-change state; close/relaunch preserved restored state. The operator described it as “rediscovered, moved, and relived.” No operator-visible P0/P1 VAULT defect. All Mission 06 exit criteria are satisfied. See `docs/missions/MISSION_06_REPORT.md`.
 
+- Interlude 06.5 is PASS. The operator reviewed the packaged application as a real product and accepted the landing/create/open/import workflows, Character/Quest Forge, controls, saved/unsaved state, libraries, Candidate/Canon and promotion, History, Vault, errors/status states, laptop-sized layout, keyboard navigation, and focus indication. No operator-visible P0/P1 regression was found. Verification: 105 Rust tests PASS, 30 frontend tests PASS, formatting PASS, frontend lint PASS, TypeScript typecheck PASS, frontend production build PASS, strict Clippy PASS, Cargo metadata PASS, `scripts/verify.ps1` PASS, optimized Tauri build PASS, `git diff --check` PASS, and repository pnpm tests PASS. The global npm launcher issue remains environment-only. Details: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`.
+
 ## Mission 00 closeout
 
 - **GUI result:** VERIFIED GUI SUCCESS by operator verification. Automated Codex GUI inspection could not observe the operator's interactive desktop; the earlier 16×16 event-target-only result described the Codex execution/inspection context and did not represent the actual desktop launch. The prior APPLICATION FAILURE classification is superseded and incorrect.
@@ -65,4 +67,4 @@ AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and later
 
 ## Handoff
 
-Mission reports: `docs/missions/MISSION_00_REPORT.md` through `MISSION_06_REPORT.md`. Mission 04, Mission 05, and Mission 06 are closed PASS. Mission 06 operator acceptance is complete. Branch `master`, HEAD `66ce431d903615a99764d07bd29c4f41708d048b`; worktree is dirty only in this file and the Mission 06 report. Stop here and do not begin Mission 07.
+Mission reports: `docs/missions/MISSION_00_REPORT.md` through `MISSION_06_REPORT.md`; Interlude 06.5 report: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`. Mission 06 remains closed PASS. Interlude 06.5 is closed PASS after packaged operator review. Branch `master`, HEAD `7d59619f6d03897aea994e7537fd236d983ce060`; worktree contains Interlude 06.5 changes. Stop here; do not begin Mission 07 or 08.

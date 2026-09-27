@@ -15,6 +15,12 @@ import {
   type Project,
 } from '../src/api';
 
+const clickNamedButton = (name: string, index: number) => {
+  const button = screen.getAllByRole('button', { name })[index];
+  if (!button) throw new Error(`Expected button ${name} at index ${index}`);
+  fireEvent.click(button);
+};
+
 vi.mock('../src/api', async (load) => {
   const actual = await load<typeof import('../src/api')>();
   return {
@@ -152,6 +158,11 @@ const record = (entity: ForgePayload, writeVersion = 1): EntityRecord => ({
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(api.project).mockResolvedValue(null);
+  vi.mocked(api.defaultProjectDirectory).mockResolvedValue(
+    'C:\\Users\\Test\\Documents\\Character Forge',
+  );
+  vi.mocked(api.recentProjects).mockResolvedValue([]);
+  vi.mocked(api.forgetRecentProject).mockResolvedValue(undefined);
   vi.mocked(api.createProject).mockResolvedValue(project);
   vi.mocked(api.openProject).mockResolvedValue(project);
   vi.mocked(api.closeProject).mockResolvedValue(undefined);
@@ -205,7 +216,7 @@ async function openProjectSettings() {
       screen.getByRole('navigation', { name: 'Main navigation' }),
     ).getByRole('button', { name: 'Project' }),
   );
-  await screen.findByRole('heading', { name: 'Portable project and backups' });
+  await screen.findByRole('heading', { name: 'Move a project between places' });
 }
 async function forgeCharacterResult() {
   await openWorkspace();
@@ -216,7 +227,7 @@ async function forgeCharacterResult() {
 describe('desktop creative workflows', () => {
   it('exports the project and confirms success', async () => {
     await openProjectSettings();
-    fireEvent.change(screen.getByLabelText('Project file path'), {
+    fireEvent.change(screen.getByLabelText('Export project to'), {
       target: { value: 'C:\\Worlds\\backup.forgeproject' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Export Project' }));
@@ -233,7 +244,7 @@ describe('desktop creative workflows', () => {
   it('shows archive validation errors without losing the open project', async () => {
     vi.mocked(api.exportProject).mockRejectedValue({ kind: 'unsafe_archive' });
     await openProjectSettings();
-    fireEvent.change(screen.getByLabelText('Project file path'), {
+    fireEvent.change(screen.getByLabelText('Export project to'), {
       target: { value: 'unsafe.forgeproject' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Export Project' }));
@@ -245,7 +256,7 @@ describe('desktop creative workflows', () => {
 
   it('creates a local backup with success feedback', async () => {
     await openProjectSettings();
-    fireEvent.change(screen.getByLabelText('Project file path'), {
+    fireEvent.change(screen.getByLabelText('Create backup at'), {
       target: { value: 'backup.forgeproject' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create Backup' }));
@@ -265,7 +276,7 @@ describe('desktop creative workflows', () => {
       }),
     );
     await openProjectSettings();
-    fireEvent.change(screen.getByLabelText('Project file path'), {
+    fireEvent.change(screen.getByLabelText('Export project to'), {
       target: { value: 'working.forgeproject' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Export Project' }));
@@ -273,7 +284,7 @@ describe('desktop creative workflows', () => {
       'Working with project file',
     );
     expect(
-      screen.getByRole('button', { name: 'Create Backup' }),
+      screen.getByRole('button', { name: 'Creating backup…' }),
     ).toBeDisabled();
     finish();
     await waitFor(() =>
@@ -288,17 +299,17 @@ describe('desktop creative workflows', () => {
 
   it('imports to a new path and opens the imported project', async () => {
     await openProjectSettings();
-    fireEvent.change(screen.getByLabelText('Project file path'), {
+    fireEvent.change(screen.getByLabelText('Import portable project'), {
       target: { value: 'world.forgeproject' },
     });
-    fireEvent.change(screen.getByLabelText('New project database path'), {
-      target: { value: 'imported.sqlite3' },
+    fireEvent.change(screen.getByLabelText('Import into folder'), {
+      target: { value: 'C:\\Worlds' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Import Project…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Import Project' }));
     await waitFor(() =>
       expect(api.importProject).toHaveBeenCalledWith(
         'world.forgeproject',
-        'imported.sqlite3',
+        'C:\\Worlds',
       ),
     );
     expect(
@@ -316,7 +327,7 @@ describe('desktop creative workflows', () => {
     );
     vi.mocked(api.restoreBackup).mockRejectedValue({ kind: 'invalid_archive' });
     await openProjectSettings();
-    fireEvent.change(screen.getByLabelText('Project file path'), {
+    fireEvent.change(screen.getByLabelText('Restore from backup file'), {
       target: { value: 'backup.forgeproject' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Restore Backup…' }));
@@ -338,11 +349,119 @@ describe('desktop creative workflows', () => {
       await screen.findByRole('heading', { name: 'Begin with a project' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Create project' }),
+      screen.getAllByRole('button', { name: 'Create Project' })[0],
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Open project' }),
+      screen.getByRole('button', { name: 'Open Project' }),
     ).toBeInTheDocument();
+  });
+
+  it('creates a project from its name and containing folder', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Begin with a project' });
+    fireEvent.change(screen.getByLabelText('Project name'), {
+      target: { value: 'My New World' },
+    });
+    fireEvent.change(screen.getByLabelText('Project location'), {
+      target: { value: 'C:\\Worlds' },
+    });
+    clickNamedButton('Create Project', 1);
+    await waitFor(() =>
+      expect(api.createProject).toHaveBeenCalledWith(
+        'C:\\Worlds',
+        'My New World',
+      ),
+    );
+    expect(
+      await screen.findByRole('heading', { name: 'Forge' }),
+    ).toBeInTheDocument();
+  });
+
+  it('opens only a live project file from the Open Project workflow', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Begin with a project' });
+    clickNamedButton('Open Project', 0);
+    fireEvent.change(screen.getByLabelText('Existing project file'), {
+      target: { value: 'C:\\Worlds\\Ashen Coast.sqlite3' },
+    });
+    clickNamedButton('Open Project', 1);
+    await waitFor(() =>
+      expect(api.openProject).toHaveBeenCalledWith(
+        'C:\\Worlds\\Ashen Coast.sqlite3',
+      ),
+    );
+  });
+
+  it('keeps portable import separate from opening a live project', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Begin with a project' });
+    clickNamedButton('Import Project', 0);
+    fireEvent.change(screen.getByLabelText('Portable project file'), {
+      target: { value: 'C:\\Worlds\\Moved.forgeproject' },
+    });
+    clickNamedButton('Import Project', 1);
+    await waitFor(() =>
+      expect(api.importProject).toHaveBeenCalledWith(
+        'C:\\Worlds\\Moved.forgeproject',
+        'C:\\Users\\Test\\Documents\\Character Forge',
+      ),
+    );
+    expect(api.openProject).not.toHaveBeenCalled();
+  });
+
+  it('opens a recent project and allows missing entries to be forgotten', async () => {
+    vi.mocked(api.recentProjects).mockResolvedValue([
+      {
+        name: 'Ashen Coast',
+        path: project.path,
+        lastOpenedAtUnixMs: 1234,
+        exists: true,
+      },
+      {
+        name: 'Old World',
+        path: 'C:\\Worlds\\Old.sqlite3',
+        lastOpenedAtUnixMs: 1000,
+        exists: false,
+      },
+    ]);
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Recent Projects' });
+    fireEvent.click(screen.getByRole('button', { name: /^Ashen Coast/ }));
+    await waitFor(() =>
+      expect(api.openProject).toHaveBeenCalledWith(project.path),
+    );
+  });
+
+  it('explains a stale recent project and removes only its recent entry', async () => {
+    vi.mocked(api.recentProjects).mockResolvedValue([
+      {
+        name: 'Old World',
+        path: 'C:\\Worlds\\Old.sqlite3',
+        lastOpenedAtUnixMs: 1000,
+        exists: false,
+      },
+    ]);
+    render(<App />);
+    const openRecent = await screen.findByRole('button', {
+      name: /Old World File not found at this location/,
+    });
+    fireEvent.click(openRecent);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'couldn’t be found at its last known location',
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Forget Old World from Recent Projects',
+      }),
+    );
+    await waitFor(() =>
+      expect(api.forgetRecentProject).toHaveBeenCalledWith(
+        'C:\\Worlds\\Old.sqlite3',
+      ),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'The project file was not deleted.',
+    );
   });
 
   it('opens the workspace with active project context', async () => {
@@ -355,7 +474,7 @@ describe('desktop creative workflows', () => {
 
   it('switches between Character and Quest Forge modes', async () => {
     await openWorkspace();
-    fireEvent.click(screen.getByRole('tab', { name: 'Quest' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quest' }));
     fireEvent.click(screen.getByRole('button', { name: 'Forge Quest' }));
     await screen.findByText('The Bell Below', { selector: 'h2' });
     expect(api.forgeQuest).toHaveBeenCalled();
@@ -562,15 +681,43 @@ describe('desktop creative workflows', () => {
     ).toBeInTheDocument();
   });
 
+  it('guides empty Character and Quest libraries back to the matching Forge mode', async () => {
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Characters' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Forge a Character' }),
+    );
+    expect(screen.getByRole('button', { name: 'Character' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Quests' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Forge a Quest' }),
+    );
+    expect(screen.getByRole('button', { name: 'Quest' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
   it('promotes a saved candidate through an intentional action', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
     await openWorkspace([record(character)]);
     fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
     fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
     await waitFor(() => expect(api.getEntity).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: 'Promote' }));
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('established project material'),
+    );
     await waitFor(() =>
       expect(api.promote).toHaveBeenCalledWith('character-1', 1),
     );
+    vi.unstubAllGlobals();
   });
 
   it('shows history entries and loads their older snapshot', async () => {
@@ -584,7 +731,9 @@ describe('desktop creative workflows', () => {
     ]);
     await openWorkspace();
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
-    fireEvent.click(await screen.findByRole('button', { name: /Manual Edit/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Edited a result/ }),
+    );
     await waitFor(() => expect(api.snapshot).toHaveBeenCalledWith('run-1'));
   });
 

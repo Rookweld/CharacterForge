@@ -12,6 +12,7 @@ import {
   type Project,
   presets,
   type Quest,
+  type RecentProject,
   type Revision,
   type UiError,
 } from './api';
@@ -24,6 +25,7 @@ type Section =
   | 'history'
   | 'project';
 type Mode = 'character' | 'quest';
+type ProjectStartMode = 'create' | 'open' | 'import';
 type Field = { key: string; label: string; value: FieldValue; list?: boolean };
 const blankAxes = (): Record<Axis, number> =>
   Object.fromEntries(axisMeta.map(({ id }) => [id, 50])) as Record<
@@ -236,12 +238,38 @@ export function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [projectName, setProjectName] = useState('My World');
-  const [projectPath, setProjectPath] = useState('');
-  const [portablePath, setPortablePath] = useState('');
-  const [importDestination, setImportDestination] = useState('');
+  const [projectDirectory, setProjectDirectory] = useState('');
+  const [openProjectPath, setOpenProjectPath] = useState('');
+  const [projectStartMode, setProjectStartMode] =
+    useState<ProjectStartMode>('create');
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+  const [importArchivePath, setImportArchivePath] = useState('');
+  const [importDirectory, setImportDirectory] = useState('');
+  const [exportPath, setExportPath] = useState('');
+  const [backupPath, setBackupPath] = useState('');
+  const [restorePath, setRestorePath] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [snapshot, setSnapshot] = useState<ForgePayload | null>(null);
+
+  const setProjectLocationDefaults = useCallback((active: Project) => {
+    const parts = active.path.split(/[\\/]/);
+    parts.pop();
+    const separator = active.path.includes('\\') ? '\\' : '/';
+    const directory = parts.join(separator) || separator;
+    const basename =
+      active.path
+        .split(/[\\/]/)
+        .pop()
+        ?.replace(/\.sqlite3$/i, '') || active.name;
+    const portableDefault = `${directory}${separator}${basename}.forgeproject`;
+    const backupDefault = `${directory}${separator}${basename}.backup.forgeproject`;
+    setProjectDirectory(directory);
+    setImportDirectory(directory);
+    setExportPath(portableDefault);
+    setBackupPath(backupDefault);
+    setRestorePath(backupDefault);
+  }, []);
 
   const refreshProject = useCallback(async () => {
     setLoading(true);
@@ -250,29 +278,37 @@ export function App() {
       setProject(active);
       if (active) {
         setProjectName(active.name);
-        setProjectPath(active.path);
-        const portableDefault = active.path.replace(
-          /\.sqlite3$/i,
-          '.forgeproject',
-        );
-        setPortablePath(
-          portableDefault === active.path
-            ? `${active.path}.forgeproject`
-            : portableDefault,
-        );
-        setImportDestination(
-          active.path.replace(/\.sqlite3$/i, '.imported.sqlite3'),
-        );
+        setProjectLocationDefaults(active);
       }
     } catch (reason) {
       setError(errorMessage(reason as UiError).message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setProjectLocationDefaults]);
   useEffect(() => {
     void refreshProject();
   }, [refreshProject]);
+
+  const refreshRecentProjects = useCallback(async () => {
+    try {
+      setRecentProjects(await api.recentProjects());
+    } catch (reason) {
+      setError(errorMessage(reason as UiError).message);
+    }
+  }, []);
+  useEffect(() => {
+    void api
+      .defaultProjectDirectory()
+      .then((directory) => {
+        setProjectDirectory((current) => current || directory);
+        setImportDirectory((current) => current || directory);
+      })
+      .catch((reason: unknown) =>
+        setError(errorMessage(reason as UiError).message),
+      );
+    void refreshRecentProjects();
+  }, [refreshRecentProjects]);
 
   const refreshRecords = useCallback(async () => {
     if (!project) return;
@@ -311,48 +347,88 @@ export function App() {
   };
   const createProject = () =>
     void run(
-      () => api.createProject(projectPath, projectName),
+      () => api.createProject(projectDirectory, projectName),
       (value) => {
         setProject(value);
+        setProjectLocationDefaults(value);
         setSection('forge');
         setCandidate(null);
         setDirty(false);
         setNotice('Project created and ready to forge.');
+        void refreshRecentProjects();
       },
     );
   const openProject = () =>
     void run(
-      () => api.openProject(projectPath),
+      () => api.openProject(openProjectPath),
       (value) => {
         setProject(value);
+        setProjectLocationDefaults(value);
         setSection('forge');
         setCandidate(null);
         setDirty(false);
         setSelectedRecord(null);
         setNotice('Project opened.');
+        void refreshRecentProjects();
       },
     );
   const exportProject = () =>
     void run(
-      () => api.exportProject(portablePath),
+      () => api.exportProject(exportPath),
       () => setNotice('Project exported successfully.'),
     );
   const createBackup = () =>
     void run(
-      () => api.createBackup(portablePath),
+      () => api.createBackup(backupPath),
       () => setNotice('Backup created successfully.'),
     );
   const importProject = () =>
     void run(
-      () => api.importProject(portablePath, importDestination),
+      () => api.importProject(importArchivePath, importDirectory),
       (value) => {
         setProject(value);
-        setProjectPath(value.path);
+        setProjectLocationDefaults(value);
         setSection('forge');
         setCandidate(null);
         setDirty(false);
         setSelectedRecord(null);
         setNotice('Project imported and opened.');
+        void refreshRecentProjects();
+      },
+    );
+  const openRecentProject = (recent: RecentProject) => {
+    if (!recent.exists) {
+      setProjectStartMode('open');
+      setOpenProjectPath(recent.path);
+      setError(
+        `“${recent.name}” couldn’t be found at its last known location. Locate the project file or forget this entry.`,
+      );
+      return;
+    }
+    void run(
+      () => api.openProject(recent.path),
+      (value) => {
+        setProject(value);
+        setProjectLocationDefaults(value);
+        setSection('forge');
+        setCandidate(null);
+        setDirty(false);
+        setSelectedRecord(null);
+        setNotice('Project opened.');
+        void refreshRecentProjects();
+      },
+    );
+  };
+  const forgetRecentProject = (recent: RecentProject) =>
+    void run(
+      () => api.forgetRecentProject(recent.path),
+      () => {
+        setRecentProjects((items) =>
+          items.filter((item) => item.path !== recent.path),
+        );
+        setNotice(
+          'Removed from Recent Projects. The project file was not deleted.',
+        );
       },
     );
   const restoreBackup = () => {
@@ -363,7 +439,7 @@ export function App() {
     )
       return;
     void run(
-      () => api.restoreBackup(portablePath),
+      () => api.restoreBackup(restorePath),
       () => {
         setCandidate(null);
         setDirty(false);
@@ -479,7 +555,14 @@ export function App() {
       },
     );
   };
-  const promote = (record: EntityRecord) =>
+  const promote = (record: EntityRecord) => {
+    const name = payloadTitle(record.entity);
+    if (
+      !window.confirm(
+        `Promote “${name}” to Canon? This marks this saved version as established project material. Its history is preserved.`,
+      )
+    )
+      return;
     void run(
       () => api.promote(entityId(record.entity), record.writeVersion),
       (updated) => {
@@ -490,11 +573,12 @@ export function App() {
         );
         setSelectedRecord(updated);
         setNotice(
-          'Promoted to canon. The previous state is preserved as a revision.',
+          'Promoted to Canon. The previous state is preserved as a revision.',
         );
         void api.revisions(entityId(updated.entity)).then(setRevisions);
       },
     );
+  };
   const favorite = (record: EntityRecord) =>
     void run(
       () =>
@@ -594,44 +678,137 @@ export function App() {
           <p className="eyebrow">YOUR WORKSPACE</p>
           <h2 id="project-heading">Begin with a project</h2>
           <p className="muted">
-            Your work is stored locally in a project database you choose.
+            Create a world, open work you already have, or bring in a portable
+            project.
           </p>
-          <label>
-            Project name
-            <input
-              value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
-            />
-          </label>
-          <label>
-            Project database path
-            <input
-              value={projectPath}
-              onChange={(event) => setProjectPath(event.target.value)}
-              placeholder="C:\\Worlds\\my-world.sqlite3"
-            />
-          </label>
-          <div className="button-row">
-            <button
-              type="button"
-              className="primary"
-              disabled={busy || !projectName.trim() || !projectPath.trim()}
-              onClick={createProject}
-            >
-              {busy ? 'Creating…' : 'Create project'}
-            </button>
-            <button
-              type="button"
-              disabled={busy || !projectPath.trim()}
-              onClick={openProject}
-            >
-              Open project
-            </button>
+          <div className="project-start-tabs">
+            {(
+              [
+                ['create', 'Create Project'],
+                ['open', 'Open Project'],
+                ['import', 'Import Project'],
+              ] as [ProjectStartMode, string][]
+            ).map(([mode, label]) => (
+              <button
+                type="button"
+                aria-pressed={projectStartMode === mode}
+                className={projectStartMode === mode ? 'selected' : ''}
+                key={mode}
+                onClick={() => {
+                  setProjectStartMode(mode);
+                  setError('');
+                  setNotice('');
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <p className="path-note">
-            Choose a new <code>.sqlite3</code> path to create a project, or
-            enter an existing project database path to open it.
-          </p>
+          {projectStartMode === 'create' && (
+            <div className="project-start-form">
+              <label htmlFor="new-project-name">Project name</label>
+              <input
+                id="new-project-name"
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+                autoComplete="off"
+              />
+              <label htmlFor="new-project-directory">Project location</label>
+              <input
+                id="new-project-directory"
+                value={projectDirectory}
+                onChange={(event) => setProjectDirectory(event.target.value)}
+                placeholder="Documents\\Character Forge"
+                autoComplete="off"
+              />
+              <small className="path-note">
+                Choose a folder. Character Forge will name the project file for
+                you.
+              </small>
+              <button
+                type="button"
+                className="primary full"
+                disabled={
+                  busy || !projectName.trim() || !projectDirectory.trim()
+                }
+                onClick={createProject}
+              >
+                {busy ? 'Creating…' : 'Create Project'}
+              </button>
+            </div>
+          )}
+          {projectStartMode === 'open' && (
+            <div className="project-start-form">
+              <p className="mode-explanation">
+                Open an existing local project file. Portable{' '}
+                <code>.forgeproject</code> files are imported instead.
+              </p>
+              <label htmlFor="open-project-path">Existing project file</label>
+              <input
+                id="open-project-path"
+                value={openProjectPath}
+                onChange={(event) => setOpenProjectPath(event.target.value)}
+                placeholder="C:\\Worlds\\My World.sqlite3"
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                className="primary full"
+                disabled={busy || !openProjectPath.trim()}
+                onClick={openProject}
+              >
+                {busy ? 'Opening…' : 'Open Project'}
+              </button>
+            </div>
+          )}
+          {projectStartMode === 'import' && (
+            <div className="project-start-form">
+              <p className="mode-explanation">
+                Import a portable <code>.forgeproject</code> into a folder. Your
+                original file stays unchanged.
+              </p>
+              <label htmlFor="welcome-import-archive">
+                Portable project file
+              </label>
+              <input
+                id="welcome-import-archive"
+                value={importArchivePath}
+                onChange={(event) => setImportArchivePath(event.target.value)}
+                placeholder="C:\\Worlds\\My World.forgeproject"
+                autoComplete="off"
+              />
+              <label htmlFor="welcome-import-folder">
+                New project location
+              </label>
+              <input
+                id="welcome-import-folder"
+                value={importDirectory}
+                onChange={(event) => setImportDirectory(event.target.value)}
+                placeholder="Documents\\Character Forge"
+                autoComplete="off"
+              />
+              <small className="path-note">
+                The imported project keeps its name and gets a matching local
+                project file.
+              </small>
+              <button
+                type="button"
+                className="primary full"
+                disabled={
+                  busy || !importArchivePath.trim() || !importDirectory.trim()
+                }
+                onClick={importProject}
+              >
+                {busy ? 'Importing…' : 'Import Project'}
+              </button>
+            </div>
+          )}
+          <RecentProjectsList
+            projects={recentProjects}
+            busy={busy}
+            onOpen={openRecentProject}
+            onForget={forgetRecentProject}
+          />
           <Message error={error} notice={notice} />
         </section>
       </main>
@@ -718,17 +895,12 @@ export function App() {
                   <h2>Forge settings</h2>
                 </div>
               </div>
-              <div
-                className="mode-switch"
-                role="tablist"
-                aria-label="Forge type"
-              >
+              <div className="mode-switch">
                 {(['character', 'quest'] as Mode[]).map((item) => (
                   <button
                     type="button"
                     key={item}
-                    role="tab"
-                    aria-selected={mode === item}
+                    aria-pressed={mode === item}
                     className={mode === item ? 'selected' : ''}
                     onClick={() => setMode(item)}
                   >
@@ -775,9 +947,13 @@ export function App() {
                   </button>
                 </div>
               </label>
+              <small className="seed-note">
+                Reuse this seed with the same settings to reproduce a result.
+              </small>
               <details className="axis-details" open>
                 <summary>
-                  Creative axes <span>8 controls</span>
+                  Creative axes{' '}
+                  <span className="axis-controls-count">8 controls</span>
                 </summary>
                 <div className="axis-list">
                   {axisMeta.map((axis) => (
@@ -789,6 +965,8 @@ export function App() {
                       <input
                         type="range"
                         aria-label={axis.label}
+                        aria-description={axis.hint}
+                        title={axis.hint}
                         min="0"
                         max="100"
                         value={axes[axis.id]}
@@ -873,7 +1051,9 @@ export function App() {
                 {busy
                   ? 'Forging…'
                   : `Forge ${mode === 'character' ? 'Character' : 'Quest'}`}
-                <span aria-hidden="true">✦</span>
+                <span className="forge-button-icon" aria-hidden="true">
+                  ✦
+                </span>
               </button>
               {candidate && (
                 <button
@@ -895,7 +1075,7 @@ export function App() {
               <div className="panel-heading result-heading">
                 <div>
                   <p className="eyebrow">
-                    {candidate ? 'CURRENT CANDIDATE' : 'YOUR NEXT IDEA'}
+                    {candidate ? 'CURRENT RESULT' : 'YOUR NEXT IDEA'}
                   </p>
                   <h2>
                     {current
@@ -999,13 +1179,20 @@ export function App() {
                               onClick={() => changeLock(field)}
                             >
                               {locked ? '▣' : '▢'}{' '}
-                              <span>{locked ? 'Unlock' : 'Lock'}</span>
+                              <span className="icon-button-label">
+                                {locked ? 'Unlock' : 'Lock'}
+                              </span>
                             </button>
                             <button
                               type="button"
                               aria-label={`Reroll ${field.label}`}
                               className="icon-button"
                               disabled={locked || busy}
+                              title={
+                                locked
+                                  ? 'Unlock this field before rerolling'
+                                  : `Reroll ${field.label}`
+                              }
                               onClick={() =>
                                 updateCandidate(
                                   () => api.reroll(field.key),
@@ -1013,7 +1200,8 @@ export function App() {
                                 )
                               }
                             >
-                              ↻ <span>Reroll</span>
+                              ↻{' '}
+                              <span className="icon-button-label">Reroll</span>
                             </button>
                             <button
                               type="button"
@@ -1022,7 +1210,7 @@ export function App() {
                               disabled={busy}
                               onClick={() => startEdit(field)}
                             >
-                              ✎ <span>Edit</span>
+                              ✎ <span className="icon-button-label">Edit</span>
                             </button>
                           </div>
                         )}
@@ -1044,18 +1232,20 @@ export function App() {
                 {current && (
                   <div className="context-stats">
                     <div>
-                      <span>Preset</span>
-                      <strong>{label}</strong>
+                      <span className="context-stat-label">Preset</span>
+                      <strong className="context-stat-value">{label}</strong>
                     </div>
                     <div>
-                      <span>Seed</span>
-                      <strong>
+                      <span className="context-stat-label">Seed</span>
+                      <strong className="context-stat-value">
                         {payloadEntity(current).dna.recipe.root_seed}
                       </strong>
                     </div>
                     <div>
-                      <span>Fields</span>
-                      <strong>{allFields.length} structured details</strong>
+                      <span className="context-stat-label">Fields</span>
+                      <strong className="context-stat-value">
+                        {allFields.length} structured details
+                      </strong>
                     </div>
                   </div>
                 )}
@@ -1109,11 +1299,11 @@ export function App() {
                 <p className="eyebrow">PROJECT LIBRARY</p>
                 <p className="library-count">
                   {records.filter((row) => isCharacter(row.entity)).length}{' '}
-                  <span>Characters</span>
+                  <span className="library-count-label">Characters</span>
                 </p>
                 <p className="library-count">
                   {records.filter((row) => !isCharacter(row.entity)).length}{' '}
-                  <span>Quests</span>
+                  <span className="library-count-label">Quests</span>
                 </p>
                 <button
                   type="button"
@@ -1134,6 +1324,11 @@ export function App() {
             records={records.filter((row) => isCharacter(row.entity))}
             loading={loading}
             empty="No Characters yet. Forge your first Character."
+            emptyActionLabel="Forge a Character"
+            onEmptyAction={() => {
+              setMode('character');
+              setSection('forge');
+            }}
             onSelect={selectRecord}
             onFavorite={favorite}
             onPromote={promote}
@@ -1146,6 +1341,11 @@ export function App() {
             records={records.filter((row) => !isCharacter(row.entity))}
             loading={loading}
             empty="No Quests yet. Forge your first Quest."
+            emptyActionLabel="Forge a Quest"
+            onEmptyAction={() => {
+              setMode('quest');
+              setSection('forge');
+            }}
             onSelect={selectRecord}
             onFavorite={favorite}
             onPromote={promote}
@@ -1162,12 +1362,21 @@ export function App() {
                 </div>
               </div>
               {canonRecords.length === 0 ? (
-                <Empty text="Nothing in canon yet. Promote a saved candidate when it feels right." />
+                <Empty
+                  text="Nothing has been promoted to Canon yet. Save a candidate, then choose Promote to Canon when it feels right."
+                  actionLabel="Return to Forge"
+                  onAction={() => setSection('forge')}
+                />
               ) : (
                 canonRecords.map((record) => (
                   <RecordRow
                     key={entityId(record.entity)}
                     record={record}
+                    selected={
+                      selectedRecord !== null &&
+                      entityId(selectedRecord.entity) ===
+                        entityId(record.entity)
+                    }
                     onSelect={selectRecord}
                     onFavorite={favorite}
                     onPromote={promote}
@@ -1192,7 +1401,11 @@ export function App() {
                 </button>
               </div>
               {history.length === 0 ? (
-                <Empty text="Generation and revision activity will appear here." />
+                <Empty
+                  text="Activity will appear here as you Forge, edit, save, and promote."
+                  actionLabel="Return to Forge"
+                  onAction={() => setSection('forge')}
+                />
               ) : (
                 [...history].reverse().map((item) => (
                   <button
@@ -1203,8 +1416,10 @@ export function App() {
                   >
                     <span className="history-mark">◷</span>
                     <span>
-                      <strong>{friendlyAction(item.action)}</strong>
-                      <small>
+                      <strong className="history-action">
+                        {friendlyAction(item.action)}
+                      </strong>
+                      <small className="history-meta">
                         {dateLabel(item.createdAtUnixMs)} ·{' '}
                         {item.entityId
                           ? historyEntityTitle(item.entityId, records)
@@ -1217,7 +1432,7 @@ export function App() {
               )}
             </section>
             <section className="detail-panel panel">
-              <p className="eyebrow">REVISION SNAPSHOT</p>
+              <p className="eyebrow">READ-ONLY HISTORY SNAPSHOT</p>
               {snapshot ? (
                 <DetailView record={{ entity: snapshot, writeVersion: 0 }} />
               ) : (
@@ -1234,8 +1449,8 @@ export function App() {
               This project and its saved work live on this device.
             </p>
             <dl>
-              <dt>Project database</dt>
-              <dd>{project.path}</dd>
+              <dt>Project file</dt>
+              <dd className="project-file-path">{project.path}</dd>
               <dt>Characters</dt>
               <dd>{records.filter((r) => isCharacter(r.entity)).length}</dd>
               <dt>Quests</dt>
@@ -1244,55 +1459,98 @@ export function App() {
               <dd>{dateLabel(project.createdAtUnixMs)}</dd>
             </dl>
             <div className="project-archive-actions">
-              <h3>Portable project and backups</h3>
-              <label htmlFor="portable-path">Project file path</label>
-              <input
-                id="portable-path"
-                value={portablePath}
-                onChange={(event) => setPortablePath(event.target.value)}
-                placeholder="C:\\Projects\\MyWorld.forgeproject"
-              />
-              <div className="button-row">
+              <section
+                className="vault-group"
+                aria-labelledby="portability-heading"
+              >
+                <p className="eyebrow">PORTABILITY</p>
+                <h3 id="portability-heading">Move a project between places</h3>
+                <label htmlFor="export-project-path">Export project to</label>
+                <input
+                  id="export-project-path"
+                  className="project-path-input"
+                  value={exportPath}
+                  onChange={(event) => setExportPath(event.target.value)}
+                  placeholder="C:\\Worlds\\My World.forgeproject"
+                />
                 <button
                   type="button"
-                  disabled={busy || !portablePath.trim()}
+                  className="primary"
+                  disabled={busy || !exportPath.trim()}
                   onClick={exportProject}
                 >
-                  Export Project
+                  {busy ? 'Exporting…' : 'Export Project'}
                 </button>
+                <label htmlFor="import-project-file">
+                  Import portable project
+                </label>
+                <input
+                  id="import-project-file"
+                  className="project-path-input"
+                  value={importArchivePath}
+                  onChange={(event) => setImportArchivePath(event.target.value)}
+                  placeholder="C:\\Worlds\\My World.forgeproject"
+                />
+                <label htmlFor="import-project-folder">
+                  Import into folder
+                </label>
+                <input
+                  id="import-project-folder"
+                  className="project-path-input"
+                  value={importDirectory}
+                  onChange={(event) => setImportDirectory(event.target.value)}
+                  placeholder="C:\\Worlds"
+                />
                 <button
                   type="button"
-                  disabled={busy || !portablePath.trim()}
+                  disabled={
+                    busy || !importArchivePath.trim() || !importDirectory.trim()
+                  }
+                  onClick={importProject}
+                >
+                  {busy ? 'Importing…' : 'Import Project'}
+                </button>
+              </section>
+              <section
+                className="vault-group safety-group"
+                aria-labelledby="safety-heading"
+              >
+                <p className="eyebrow">SAFETY</p>
+                <h3 id="safety-heading">Keep a backup close</h3>
+                <label htmlFor="backup-project-path">Create backup at</label>
+                <input
+                  id="backup-project-path"
+                  className="project-path-input"
+                  value={backupPath}
+                  onChange={(event) => setBackupPath(event.target.value)}
+                  placeholder="C:\\Worlds\\My World.backup.forgeproject"
+                />
+                <button
+                  type="button"
+                  disabled={busy || !backupPath.trim()}
                   onClick={createBackup}
                 >
-                  Create Backup
+                  {busy ? 'Creating backup…' : 'Create Backup'}
                 </button>
+                <label htmlFor="restore-project-path">
+                  Restore from backup file
+                </label>
+                <input
+                  id="restore-project-path"
+                  className="project-path-input"
+                  value={restorePath}
+                  onChange={(event) => setRestorePath(event.target.value)}
+                  placeholder="C:\\Worlds\\My World.backup.forgeproject"
+                />
                 <button
                   type="button"
-                  disabled={busy || !portablePath.trim()}
+                  className="danger"
+                  disabled={busy || !restorePath.trim()}
                   onClick={restoreBackup}
                 >
                   Restore Backup…
                 </button>
-              </div>
-              <label htmlFor="import-destination">
-                New project database path
-              </label>
-              <input
-                id="import-destination"
-                value={importDestination}
-                onChange={(event) => setImportDestination(event.target.value)}
-                placeholder="C:\\Projects\\ImportedWorld.sqlite3"
-              />
-              <button
-                type="button"
-                disabled={
-                  busy || !portablePath.trim() || !importDestination.trim()
-                }
-                onClick={importProject}
-              >
-                Import Project…
-              </button>
+              </section>
               {busy && <p role="status">Working with project file…</p>}
             </div>
             <button
@@ -1304,7 +1562,7 @@ export function App() {
                   setCandidate(null);
                   setDirty(false);
                   setSelectedRecord(null);
-                  setProjectPath('');
+                  setOpenProjectPath('');
                 })
               }
             >
@@ -1337,9 +1595,21 @@ function sectionTitle(section: Section) {
   )[section];
 }
 function friendlyAction(action: string) {
-  return action
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const labels: Record<string, string> = {
+    forge: 'Forged a result',
+    reroll_field: 'Rerolled a field',
+    reroll_all_unlocked: 'Rerolled unlocked fields',
+    manual_edit: 'Edited a result',
+    restore_history: 'Restored an earlier result',
+    candidate: 'Candidate',
+    canon: 'Canon',
+  };
+  return (
+    labels[action] ??
+    action
+      .replaceAll('_', ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+  );
 }
 function Message({ error, notice }: { error: string; notice: string }) {
   return (
@@ -1369,21 +1639,100 @@ function FieldContent({ field }: { field: Field }) {
     <p className="field-value">{field.value || 'No text added.'}</p>
   );
 }
-function Empty({ text }: { text: string }) {
+function Empty({
+  text,
+  actionLabel,
+  onAction,
+}: {
+  text: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <div className="empty-state">
-      <span aria-hidden="true">✦</span>
+      <span className="empty-state-icon" aria-hidden="true">
+        ✦
+      </span>
       <p>{text}</p>
+      {actionLabel && onAction && (
+        <button type="button" className="quiet" onClick={onAction}>
+          {actionLabel}
+        </button>
+      )}
     </div>
+  );
+}
+function RecentProjectsList({
+  projects,
+  busy,
+  onOpen,
+  onForget,
+}: {
+  projects: RecentProject[];
+  busy: boolean;
+  onOpen: (project: RecentProject) => void;
+  onForget: (project: RecentProject) => void;
+}) {
+  return (
+    <section
+      className="recent-projects"
+      aria-labelledby="recent-projects-heading"
+    >
+      <div className="recent-projects-heading">
+        <h3 id="recent-projects-heading">Recent Projects</h3>
+        {projects.length > 0 && <span>{projects.length}</span>}
+      </div>
+      {projects.length === 0 ? (
+        <p className="recent-empty">
+          Projects you open will appear here on this device.
+        </p>
+      ) : (
+        <div className="recent-project-list">
+          {projects.map((project) => (
+            <article className="recent-project-row" key={project.path}>
+              <button
+                type="button"
+                className="recent-project-open"
+                disabled={busy}
+                onClick={() => onOpen(project)}
+              >
+                <strong>{project.name}</strong>
+                <small>
+                  {project.exists
+                    ? project.path
+                    : 'File not found at this location'}
+                </small>
+                {project.exists && (
+                  <small>
+                    Last opened {dateLabel(project.lastOpenedAtUnixMs)}
+                  </small>
+                )}
+              </button>
+              <button
+                type="button"
+                className="recent-forget"
+                disabled={busy}
+                aria-label={`Forget ${project.name} from Recent Projects`}
+                onClick={() => onForget(project)}
+              >
+                Forget
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 function RecordRow({
   record,
+  selected = false,
   onSelect,
   onFavorite,
   onPromote,
 }: {
   record: EntityRecord;
+  selected?: boolean;
   onSelect: (record: EntityRecord) => void;
   onFavorite: (record: EntityRecord) => void;
   onPromote: (record: EntityRecord) => void;
@@ -1397,7 +1746,8 @@ function RecordRow({
     <article className="record-row">
       <button
         type="button"
-        className="record-main"
+        className={`record-main ${selected ? 'selected' : ''}`}
+        aria-pressed={selected}
         onClick={() => onSelect(record)}
       >
         <span className="record-glyph">{character ? '♙' : '⚑'}</span>
@@ -1501,8 +1851,10 @@ function RevisionPanel({ revisions }: { revisions: Revision[] }) {
       {revisions.length ? (
         revisions.map((revision) => (
           <article key={revision.revisionNumber}>
-            <strong>Revision {revision.revisionNumber}</strong>
-            <small>
+            <strong className="revision-number">
+              Revision {revision.revisionNumber}
+            </strong>
+            <small className="revision-reason">
               {revision.reason} · {dateLabel(revision.createdAtUnixMs)}
             </small>
           </article>
@@ -1518,6 +1870,8 @@ function LibraryView({
   records,
   loading,
   empty,
+  emptyActionLabel,
+  onEmptyAction,
   onSelect,
   onFavorite,
   onPromote,
@@ -1527,6 +1881,8 @@ function LibraryView({
   records: EntityRecord[];
   loading: boolean;
   empty: string;
+  emptyActionLabel?: string;
+  onEmptyAction?: () => void;
   onSelect: (record: EntityRecord) => void;
   onFavorite: (record: EntityRecord) => void;
   onPromote: (record: EntityRecord) => void;
@@ -1550,12 +1906,20 @@ function LibraryView({
         {loading ? (
           <Empty text={`Loading ${title.toLowerCase()}…`} />
         ) : records.length === 0 ? (
-          <Empty text={empty} />
+          <Empty
+            text={empty}
+            actionLabel={emptyActionLabel}
+            onAction={onEmptyAction}
+          />
         ) : (
           records.map((record) => (
             <RecordRow
               key={entityId(record.entity)}
               record={record}
+              selected={
+                selected !== null &&
+                entityId(selected.entity) === entityId(record.entity)
+              }
               onSelect={select}
               onFavorite={onFavorite}
               onPromote={onPromote}

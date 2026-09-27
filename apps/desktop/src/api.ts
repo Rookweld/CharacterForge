@@ -91,6 +91,12 @@ export type Project = {
   createdAtUnixMs: number;
   updatedAtUnixMs: number;
 };
+export type RecentProject = {
+  name: string;
+  path: string;
+  lastOpenedAtUnixMs: number;
+  exists: boolean;
+};
 export type EntityRecord = { entity: ForgePayload; writeVersion: number };
 export type HistoryRecord = {
   runId: string;
@@ -127,29 +133,85 @@ export const axisMeta: {
   label: string;
   low: string;
   high: string;
+  hint: string;
 }[] = [
-  { id: 'bleak', label: 'Bleakness', low: 'Hopeful', high: 'Bleak' },
-  { id: 'mythic', label: 'Mythic', low: 'Grounded', high: 'Mythic' },
-  { id: 'chaos', label: 'Chaos', low: 'Ordered', high: 'Chaotic' },
-  { id: 'epic', label: 'Scale', low: 'Intimate', high: 'Epic' },
-  { id: 'ambiguity', label: 'Morality', low: 'Clear', high: 'Ambiguous' },
-  { id: 'surreal', label: 'Strangeness', low: 'Familiar', high: 'Surreal' },
-  { id: 'technology', label: 'Technology', low: 'Primitive', high: 'Advanced' },
-  { id: 'mysticism', label: 'Mysticism', low: 'None', high: 'Dominant' },
+  {
+    id: 'bleak',
+    label: 'Bleakness',
+    low: 'Hopeful',
+    high: 'Bleak',
+    hint: 'Influences how hopeful or bleak a result may feel.',
+  },
+  {
+    id: 'mythic',
+    label: 'Mythic',
+    low: 'Grounded',
+    high: 'Mythic',
+    hint: 'Influences how legendary or grounded a result may feel.',
+  },
+  {
+    id: 'chaos',
+    label: 'Chaos',
+    low: 'Ordered',
+    high: 'Chaotic',
+    hint: 'Influences how orderly or unpredictable a result may feel.',
+  },
+  {
+    id: 'epic',
+    label: 'Scale',
+    low: 'Intimate',
+    high: 'Epic',
+    hint: 'Influences the scale and reach of the result.',
+  },
+  {
+    id: 'ambiguity',
+    label: 'Morality',
+    low: 'Clear',
+    high: 'Ambiguous',
+    hint: 'Influences how clear-cut or morally uncertain a result may feel.',
+  },
+  {
+    id: 'surreal',
+    label: 'Strangeness',
+    low: 'Familiar',
+    high: 'Surreal',
+    hint: 'Influences how familiar or unusual a result may feel.',
+  },
+  {
+    id: 'technology',
+    label: 'Technology',
+    low: 'Primitive',
+    high: 'Advanced',
+    hint: 'Influences the technology present in the result.',
+  },
+  {
+    id: 'mysticism',
+    label: 'Mysticism',
+    low: 'None',
+    high: 'Dominant',
+    hint: 'Influences the presence of mysticism in the result.',
+  },
 ];
 
 export const api = {
   project: () => invoke<Project | null>('get_project'),
-  createProject: (path: string, name: string) =>
-    invoke<Project>('create_project', { path, name }),
+  defaultProjectDirectory: () => invoke<string>('default_project_directory'),
+  recentProjects: () => invoke<RecentProject[]>('recent_projects'),
+  forgetRecentProject: (path: string) =>
+    invoke<void>('forget_recent_project', { path }),
+  createProject: (directory: string, name: string) =>
+    invoke<Project>('create_project', { directory, name }),
   openProject: (path: string) => invoke<Project>('open_project', { path }),
   closeProject: () => invoke<void>('close_project'),
   exportProject: (path: string) =>
     invoke<void>('export_project_command', { path }),
   createBackup: (path: string) =>
     invoke<void>('create_backup_command', { path }),
-  importProject: (archivePath: string, destinationPath: string) =>
-    invoke<Project>('import_project_command', { archivePath, destinationPath }),
+  importProject: (archivePath: string, destinationDirectory: string) =>
+    invoke<Project>('import_project_command', {
+      archivePath,
+      destinationDirectory,
+    }),
   restoreBackup: (archivePath: string) =>
     invoke<void>('restore_backup_command', { archivePath }),
   exportEntity: (id: string, path: string, format: 'json' | 'markdown') =>
@@ -214,7 +276,11 @@ export function errorMessage(error: UiError): {
     storage: error.message ?? 'The project could not be saved or opened.',
     no_project: 'Open or create a project first.',
     project_exists:
-      'A project already exists at that location. Open it instead.',
+      'A project with that name already exists in this folder. Choose another name or location.',
+    not_found:
+      'Character Forge couldn’t find that project file. Check its location or forget the stale recent entry.',
+    invalid_project:
+      'That file is not a Character Forge project. Choose an existing project file, or use Import Project for a portable project.',
     invalid_archive:
       'This is not a valid Forge project. The existing project was left unchanged.',
     unsupported_format:

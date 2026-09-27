@@ -172,6 +172,72 @@ pub fn import_project(
     Ok(project)
 }
 
+/// Imports a portable project into a folder using a safe filename derived from its display name.
+/// The project display name in the database is retained independently of that filename.
+pub fn import_project_to_directory(
+    archive_path: impl AsRef<Path>,
+    directory: impl AsRef<Path>,
+) -> Result<(StoredProject, PathBuf), ExportError> {
+    let directory = directory.as_ref();
+    fs::create_dir_all(directory)?;
+    if !directory.is_dir() {
+        return Err(ExportError::Invalid(
+            "the selected project location is not a folder".into(),
+        ));
+    }
+    let directory = fs::canonicalize(directory)?;
+    let staging = Staging::new("forge-import")?;
+    let database = staging.path.join(DATABASE_MEMBER);
+    let project = validate_archive_to_database(archive_path.as_ref(), &database)?;
+    let destination = project_database_path(&directory, &project.name)?;
+    if destination.exists() {
+        return Err(ExportError::DestinationExists);
+    }
+    copy_finalized_new_file(&database, &destination)?;
+    Ok((project, destination))
+}
+
+/// Builds a Windows-safe `.sqlite3` filename without changing the visible project name.
+pub fn project_database_path(
+    directory: impl AsRef<Path>,
+    name: &str,
+) -> Result<PathBuf, ExportError> {
+    if name.trim().is_empty() {
+        return Err(ExportError::Invalid("project name is empty".into()));
+    }
+    let mut stem = String::new();
+    let mut previous_was_separator = false;
+    for character in name.trim().chars() {
+        let invalid = character.is_control() || "<>:\"/\\|?*".contains(character);
+        if invalid {
+            if !previous_was_separator {
+                stem.push('_');
+            }
+            previous_was_separator = true;
+        } else {
+            stem.push(character);
+            previous_was_separator = false;
+        }
+    }
+    let stem = stem.trim().trim_end_matches(['.', ' ']).trim();
+    if stem.is_empty() {
+        return Err(ExportError::Invalid(
+            "project name cannot form a usable filename".into(),
+        ));
+    }
+    let base = stem.split('.').next().unwrap_or(stem).to_ascii_uppercase();
+    let numbered_device = ["COM", "LPT"].iter().any(|prefix| {
+        base.strip_prefix(prefix)
+            .is_some_and(|number| number.len() == 1 && matches!(number.as_bytes()[0], b'1'..=b'9'))
+    });
+    let stem = if matches!(base.as_str(), "CON" | "PRN" | "AUX" | "NUL") || numbered_device {
+        format!("_{stem}")
+    } else {
+        stem.to_owned()
+    };
+    Ok(directory.as_ref().join(format!("{stem}.sqlite3")))
+}
+
 pub fn create_backup(
     store: &ProjectStore,
     destination: impl AsRef<Path>,
@@ -953,6 +1019,66 @@ mod tests {
             1
         );
         restored.integrity_check().unwrap();
+    }
+
+    #[test]
+    fn project_filenames_are_safe_unicode_preserving_and_never_overwrite() {
+        let dir = Dir::new();
+        assert_eq!(
+            project_database_path(&dir.0, "  Café: North?  ").unwrap(),
+            dir.path("Café_ North_.sqlite3")
+        );
+        assert_eq!(
+            project_database_path(&dir.0, "CON").unwrap(),
+            dir.path("_CON.sqlite3")
+        );
+        assert_eq!(
+            project_database_path(&dir.0, "Story. ").unwrap(),
+            dir.path("Story.sqlite3")
+        );
+        assert!(project_database_path(&dir.0, "... ").is_err());
+        assert!(project_database_path(&dir.0, "  ").is_err());
+
+        let existing = dir.path("Café_ North_.sqlite3");
+        fs::write(&existing, b"preserve this file").unwrap();
+        let before = fs::read(&existing).unwrap();
+        assert!(import_project_to_directory(dir.path("missing.forgeproject"), &dir.0).is_err());
+        assert_eq!(fs::read(&existing).unwrap(), before);
+    }
+
+    #[test]
+    fn folder_import_uses_portable_display_name_for_safe_database_filename() {
+        let dir = Dir::new();
+        let source = dir.path("source.sqlite3");
+        let package = dir.path("world.forgeproject");
+        let target_directory = dir.path("moved-projects");
+        let mut stored = project();
+        stored.name = "Café: North?".into();
+        let mut store = ProjectStore::open(&source).unwrap();
+        store.create_project(&stored).unwrap();
+        export_project(&store, &package).unwrap();
+
+        let (imported, path) = import_project_to_directory(&package, &target_directory).unwrap();
+        assert_eq!(imported.name, "Café: North?");
+        assert_eq!(
+            path,
+            fs::canonicalize(&target_directory)
+                .unwrap()
+                .join("Café_ North_.sqlite3")
+        );
+        assert_eq!(
+            ProjectStore::open(path)
+                .unwrap()
+                .load_project()
+                .unwrap()
+                .unwrap()
+                .name,
+            "Café: North?"
+        );
+        assert!(matches!(
+            import_project_to_directory(&package, &target_directory),
+            Err(ExportError::DestinationExists)
+        ));
     }
 
     #[test]

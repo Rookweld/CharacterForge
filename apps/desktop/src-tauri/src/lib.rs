@@ -7,13 +7,14 @@ use forge_contracts::{
     INITIAL_SCHEMA_VERSION, ProjectEnvelope, ProjectId, RootSeed,
 };
 use forge_export::{
-    ExportError, create_backup, export_project, import_project, restore_active, write_entity_json,
-    write_entity_markdown,
+    ExportError, create_backup, export_project, import_project_to_directory, project_database_path,
+    restore_active, write_entity_json, write_entity_markdown,
 };
 use forge_storage::{
     EntityRecord, EntityRevision, ForgeRunRecord, ProjectSession, ProjectStore, StoreError,
     StoredEntity, StoredProject,
 };
+use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -25,7 +26,7 @@ use std::{
     },
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Default)]
 struct AppSession {
@@ -45,6 +46,143 @@ struct ProjectInfo {
     id: ProjectId,
     created_at_unix_ms: i64,
     updated_at_unix_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecentProject {
+    name: String,
+    path: String,
+    last_opened_at_unix_ms: i64,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+struct RecentProjectsFile {
+    version: u8,
+    projects: Vec<RecentProject>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecentProjectView {
+    name: String,
+    path: String,
+    last_opened_at_unix_ms: i64,
+    exists: bool,
+}
+
+const MAX_RECENT_PROJECTS: usize = 8;
+const RECENT_PROJECTS_FILE: &str = "recent-projects.json";
+
+fn ui_storage_error(message: impl Into<String>) -> UiError {
+    UiError {
+        kind: "storage",
+        message: message.into(),
+        expected: None,
+        actual: None,
+    }
+}
+
+fn reserve_project_database(path: &Path) -> Result<std::fs::File, UiError> {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                UiError {
+                    kind: "project_exists",
+                    message: "A project with that name already exists in this folder. Choose another name or location.".into(),
+                    expected: None,
+                    actual: None,
+                }
+            } else {
+                ui_storage_error("Character Forge couldn’t create the project in that folder. Choose a folder you can write to and try again.")
+            }
+        })
+}
+
+fn recent_projects_path(app: &AppHandle) -> Result<PathBuf, UiError> {
+    app.path()
+        .app_config_dir()
+        .map(|directory| directory.join(RECENT_PROJECTS_FILE))
+        .map_err(|error| ui_storage_error(format!("Could not locate local app settings: {error}")))
+}
+
+fn read_recent_projects(path: &Path) -> Result<RecentProjectsFile, UiError> {
+    if path
+        .metadata()
+        .is_ok_and(|metadata| metadata.len() > 64 * 1024)
+    {
+        return Err(ui_storage_error(
+            "Recent project information is larger than expected and could not be read safely.",
+        ));
+    }
+    let contents = match std::fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(RecentProjectsFile {
+                version: 1,
+                projects: Vec::new(),
+            });
+        }
+        Err(error) => {
+            return Err(ui_storage_error(format!(
+                "Could not read recent projects: {error}"
+            )));
+        }
+    };
+    let mut recent: RecentProjectsFile = serde_json::from_str(&contents)
+        .map_err(|_| ui_storage_error("Recent project information could not be read safely."))?;
+    if recent.version != 1 {
+        return Err(ui_storage_error(
+            "Recent project information uses an unsupported version.",
+        ));
+    }
+    recent.projects.truncate(MAX_RECENT_PROJECTS);
+    Ok(recent)
+}
+
+fn write_recent_projects(path: &Path, recent: &RecentProjectsFile) -> Result<(), UiError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| ui_storage_error("Could not locate local app settings."))?;
+    std::fs::create_dir_all(parent)
+        .map_err(|_| ui_storage_error("Could not save the Recent Projects list."))?;
+    let temp = path.with_extension(format!("json.{}.tmp", std::process::id()));
+    let bytes = serde_json::to_vec(recent)
+        .map_err(|_| ui_storage_error("Could not save the Recent Projects list."))?;
+    std::fs::write(&temp, bytes)
+        .map_err(|_| ui_storage_error("Could not save the Recent Projects list."))?;
+    if path.exists() {
+        std::fs::remove_file(path)
+            .map_err(|_| ui_storage_error("Could not update the Recent Projects list."))?;
+    }
+    std::fs::rename(&temp, path)
+        .map_err(|_| ui_storage_error("Could not update the Recent Projects list."))?;
+    Ok(())
+}
+
+fn remember_recent_project(app: &AppHandle, project: &ProjectInfo) {
+    let Ok(path) = recent_projects_path(app) else {
+        return;
+    };
+    let Ok(mut recent) = read_recent_projects(&path) else {
+        return;
+    };
+    recent
+        .projects
+        .retain(|entry| !entry.path.eq_ignore_ascii_case(&project.path));
+    recent.projects.insert(
+        0,
+        RecentProject {
+            name: project.name.clone(),
+            path: project.path.clone(),
+            last_opened_at_unix_ms: now_ms().unwrap_or_default(),
+        },
+    );
+    recent.projects.truncate(MAX_RECENT_PROJECTS);
+    let _ = write_recent_projects(&path, &recent);
 }
 
 #[derive(Serialize)]
@@ -213,66 +351,154 @@ fn new_project_id() -> ProjectId {
 
 #[tauri::command]
 fn create_project(
+    app: AppHandle,
     state: State<'_, AppState>,
-    path: String,
+    directory: String,
     name: String,
 ) -> Result<ProjectInfo, UiError> {
-    let path = PathBuf::from(path.trim());
-    if path.as_os_str().is_empty() {
+    if name.trim().is_empty() {
         return Err(UiError {
             kind: "validation",
-            message: "Choose a project database path.".into(),
+            message: "Enter a project name to continue.".into(),
             expected: None,
             actual: None,
         });
     }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| UiError {
-            kind: "storage",
-            message: error.to_string(),
-            expected: None,
-            actual: None,
-        })?;
-    }
-    let mut session = lock_state(&state)?;
-    session.project.open(&path)?;
-    let store = active_store(&mut session)?;
-    if store.load_project()?.is_some() {
+    if directory.trim().is_empty() {
         return Err(UiError {
-            kind: "project_exists",
-            message: "A project already exists at this location. Open it instead.".into(),
+            kind: "validation",
+            message: "Choose a folder for this project.".into(),
             expected: None,
             actual: None,
         });
     }
-    let timestamp = now_ms()?;
-    store.create_project(&StoredProject {
-        envelope: ProjectEnvelope {
-            id: new_project_id(),
-            schema_version: INITIAL_SCHEMA_VERSION,
-            generator_version: INITIAL_GENERATOR_VERSION,
-            content_version: INITIAL_CONTENT_VERSION,
-        },
-        name: name.trim().to_owned(),
-        created_at_unix_ms: timestamp,
-        updated_at_unix_ms: timestamp,
+    let directory = PathBuf::from(directory.trim());
+    std::fs::create_dir_all(&directory).map_err(|_| {
+        ui_storage_error("Character Forge couldn’t create that folder. Choose a folder you can write to and try again.")
     })?;
+    if !directory.is_dir() {
+        return Err(ui_storage_error(
+            "That location isn’t a folder. Choose a folder for this project and try again.",
+        ));
+    }
+    let directory = std::fs::canonicalize(&directory).map_err(|_| {
+        ui_storage_error(
+            "Character Forge couldn’t use that folder. Choose another location and try again.",
+        )
+    })?;
+    let path = project_database_path(&directory, &name).map_err(|error| UiError {
+        kind: "validation",
+        message: error.to_string(),
+        expected: None,
+        actual: None,
+    })?;
+    let mut session = lock_state(&state)?;
+    let reservation = reserve_project_database(&path)?;
+    drop(reservation);
+
+    let result = (|| {
+        session.project.open(&path)?;
+        let timestamp = now_ms()?;
+        active_store(&mut session)?.create_project(&StoredProject {
+            envelope: ProjectEnvelope {
+                id: new_project_id(),
+                schema_version: INITIAL_SCHEMA_VERSION,
+                generator_version: INITIAL_GENERATOR_VERSION,
+                content_version: INITIAL_CONTENT_VERSION,
+            },
+            name: name.trim().to_owned(),
+            created_at_unix_ms: timestamp,
+            updated_at_unix_ms: timestamp,
+        })?;
+        project_info(&session)
+    })();
+    let project = match result {
+        Ok(project) => project,
+        Err(error) => {
+            session.project.close();
+            let _ = std::fs::remove_file(&path);
+            let _ = std::fs::remove_file(path.with_extension("sqlite3-wal"));
+            let _ = std::fs::remove_file(path.with_extension("sqlite3-shm"));
+            return Err(error);
+        }
+    };
     session.working = None;
     session.write_version = None;
-    project_info(&session)
+    remember_recent_project(&app, &project);
+    Ok(project)
 }
 
 #[tauri::command]
-fn open_project(state: State<'_, AppState>, path: String) -> Result<ProjectInfo, UiError> {
+fn open_project(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<ProjectInfo, UiError> {
+    let path = std::fs::canonicalize(Path::new(path.trim())).map_err(|_| UiError {
+        kind: "not_found",
+        message: "Character Forge couldn’t find that project file. Choose an existing project file and try again.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    if path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("forgeproject"))
+    {
+        return Err(UiError {
+            kind: "validation",
+            message: "Portable .forgeproject files must be brought in with Import Project.".into(),
+            expected: None,
+            actual: None,
+        });
+    }
     let mut session = lock_state(&state)?;
-    let store = session.project.open(Path::new(path.trim()))?;
+    let store = session.project.open(&path)?;
     if store.load_project()?.is_none() {
         session.project.close();
         return Err(UiError { kind: "invalid_project", message: "This database does not contain a project. Create a new project or choose another file.".into(), expected: None, actual: None });
     }
     session.working = None;
     session.write_version = None;
-    project_info(&session)
+    let project = project_info(&session)?;
+    remember_recent_project(&app, &project);
+    Ok(project)
+}
+
+#[tauri::command]
+fn default_project_directory(app: AppHandle) -> Result<String, UiError> {
+    let documents = app.path().document_dir().map_err(|error| {
+        ui_storage_error(format!("Could not locate your Documents folder: {error}"))
+    })?;
+    Ok(documents
+        .join("Character Forge")
+        .to_string_lossy()
+        .into_owned())
+}
+
+#[tauri::command]
+fn recent_projects(app: AppHandle) -> Result<Vec<RecentProjectView>, UiError> {
+    let path = recent_projects_path(&app)?;
+    let recent = read_recent_projects(&path)?;
+    Ok(recent
+        .projects
+        .into_iter()
+        .map(|project| RecentProjectView {
+            exists: Path::new(&project.path).is_file(),
+            name: project.name,
+            path: project.path,
+            last_opened_at_unix_ms: project.last_opened_at_unix_ms,
+        })
+        .collect())
+}
+
+#[tauri::command]
+fn forget_recent_project(app: AppHandle, path: String) -> Result<(), UiError> {
+    let file_path = recent_projects_path(&app)?;
+    let mut recent = read_recent_projects(&file_path)?;
+    recent
+        .projects
+        .retain(|project| !project.path.eq_ignore_ascii_case(path.trim()));
+    write_recent_projects(&file_path, &recent)
 }
 
 #[tauri::command]
@@ -302,13 +528,24 @@ fn create_backup_command(state: State<'_, AppState>, path: String) -> Result<(),
 
 #[tauri::command]
 fn import_project_command(
+    app: AppHandle,
     state: State<'_, AppState>,
     archive_path: String,
-    destination_path: String,
+    destination_directory: String,
 ) -> Result<ProjectInfo, UiError> {
+    if destination_directory.trim().is_empty() {
+        return Err(UiError {
+            kind: "validation",
+            message: "Choose a folder for the imported project.".into(),
+            expected: None,
+            actual: None,
+        });
+    }
     let mut session = lock_state(&state)?;
-    let destination = PathBuf::from(destination_path.trim());
-    import_project(Path::new(archive_path.trim()), &destination)?;
+    let (imported, destination) = import_project_to_directory(
+        Path::new(archive_path.trim()),
+        Path::new(destination_directory.trim()),
+    )?;
     let store = session.project.open(&destination)?;
     if store.load_project()?.is_none() {
         session.project.close();
@@ -321,7 +558,10 @@ fn import_project_command(
     }
     session.working = None;
     session.write_version = None;
-    project_info(&session)
+    let project = project_info(&session)?;
+    debug_assert_eq!(project.name, imported.name);
+    remember_recent_project(&app, &project);
+    Ok(project)
 }
 
 #[tauri::command]
@@ -829,6 +1069,9 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
+            default_project_directory,
+            recent_projects,
+            forget_recent_project,
             create_project,
             open_project,
             export_project_command,
@@ -1077,5 +1320,52 @@ mod tests {
         assert_eq!(value["kind"], "stale_write");
         assert_eq!(value["expected"], 2);
         assert_eq!(value["actual"], 4);
+    }
+
+    #[test]
+    fn recent_project_metadata_roundtrips_without_project_contents() {
+        let root = std::env::temp_dir().join(format!(
+            "character-forge-recent-test-{}-{}",
+            std::process::id(),
+            PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let settings_file = root.join(RECENT_PROJECTS_FILE);
+        let saved = RecentProjectsFile {
+            version: 1,
+            projects: vec![RecentProject {
+                name: "Ashen Coast".into(),
+                path: root
+                    .join("Ashen Coast.sqlite3")
+                    .to_string_lossy()
+                    .into_owned(),
+                last_opened_at_unix_ms: 1234,
+            }],
+        };
+        write_recent_projects(&settings_file, &saved).unwrap();
+        let loaded = read_recent_projects(&settings_file).unwrap();
+        assert_eq!(loaded.version, 1);
+        assert_eq!(loaded.projects.len(), 1);
+        assert_eq!(loaded.projects[0].name, "Ashen Coast");
+        assert_eq!(loaded.projects[0].last_opened_at_unix_ms, 1234);
+        assert!(!Path::new(&loaded.projects[0].path).exists());
+        assert!(std::fs::metadata(&settings_file).unwrap().len() < 1024);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_creation_reservation_rejects_collisions_without_touching_existing_file() {
+        let root = std::env::temp_dir().join(format!(
+            "character-forge-create-test-{}-{}",
+            std::process::id(),
+            PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("My World.sqlite3");
+        std::fs::write(&target, b"keep the existing project").unwrap();
+        let before = std::fs::read(&target).unwrap();
+        let error = reserve_project_database(&target).unwrap_err();
+        assert_eq!(error.kind, "project_exists");
+        assert_eq!(std::fs::read(&target).unwrap(), before);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
