@@ -417,11 +417,17 @@ impl QuestForge {
         Ok(d)
     }
     pub fn generate(dna: &ForgeDNA) -> ValidationResult<QuestCandidate> {
+        Self::generate_in_project(dna, ProjectId::from_bytes([7; 16]))
+    }
+    pub fn generate_in_project(
+        dna: &ForgeDNA,
+        project_id: ProjectId,
+    ) -> ValidationResult<QuestCandidate> {
         let mut d = dna.clone();
         d.normalize()?;
         validate_dna(&d)?;
         if d.content_version == V3 {
-            return generate_v3(&d);
+            return generate_v3(&d, project_id);
         }
         let mut vals = FieldValues::new();
         for f in FIELDS {
@@ -430,7 +436,7 @@ impl QuestForge {
             let v = generate_value(f, &d, &vals, &mut s)?;
             vals.insert(k, v);
         }
-        let project = ProjectId::from_bytes([7; 16]);
+        let project = project_id;
         let id = EntityId::from_bytes(
             blake3::hash(&d.canonical_bytes()?).as_bytes()[..16]
                 .try_into()
@@ -896,7 +902,7 @@ fn select_thread<'a>(
         })
         .unwrap_or(&preset.threads[0]))
 }
-fn generate_v3(d: &ForgeDNA) -> ValidationResult<QuestCandidate> {
+fn generate_v3(d: &ForgeDNA, project_id: ProjectId) -> ValidationResult<QuestCandidate> {
     use crate::quest_content::Catalog;
     let catalog = Catalog::get()?;
     let preset = catalog
@@ -931,7 +937,7 @@ fn generate_v3(d: &ForgeDNA) -> ValidationResult<QuestCandidate> {
     let mut quest = Quest {
         envelope: EntityEnvelope {
             id,
-            project_id: ProjectId::from_bytes([7; 16]),
+            project_id,
             entity_type: EntityType::Quest,
             name: String::new(),
             schema_version: d.schema_version,
@@ -1328,6 +1334,19 @@ mod tests {
             candidate,
             serde_json::from_str(&serde_json::to_string(&candidate).unwrap()).unwrap()
         );
+    }
+    #[test]
+    fn project_aware_generation_binds_quests_to_the_active_project() {
+        let project_id = ProjectId::from_bytes([19; 16]);
+        let dna = QuestForge::new_dna(
+            RootSeed::new(19),
+            "occult",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let candidate = QuestForge::generate_in_project(&dna, project_id).unwrap();
+        assert_eq!(candidate.quest.envelope.project_id, project_id);
     }
     #[test]
     fn quest_rejects_character_only_and_unknown_constraints() {

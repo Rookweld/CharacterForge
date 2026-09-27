@@ -4,11 +4,11 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** 04 — MEMORY
-**Current status:** PASS — SQLite persistence, recovery, history, canon, and revision gates verified 2026-09-27
+**Current mission:** 05 — ANVIL
+**Current status:** PARTIAL — operator completed packaged-app smoke; Character name changed while locked, so the lock-preservation exit criterion remains open
 **Target release:** v1.0.0 FOUNDATION
 **Last committed baseline:** `7a864ca8fcf64917859bb667e636c3a1825c0f54` (Mission 03 final Quest quality audit closeout)
-**Branch:** `master` (Mission 04 changes are uncommitted; no commit was created)
+**Branch:** `master` (Mission 05 changes are uncommitted; no commit was created)
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -19,7 +19,7 @@
 - Frontend: React, TypeScript, Vite; strict TypeScript configuration
 - Core/application logic: Rust; four core crates plus desktop shell
 - Storage: SQLite is the authoritative project store; `forge-storage` uses bundled rusqlite behind Rust repository interfaces
-- Generation: versioned ForgeDNA contracts and deterministic field-stream/reroll infrastructure underpin the Mission 02 deterministic Character Forge core; no generation UI
+- Generation: versioned ForgeDNA contracts and deterministic field-stream/reroll infrastructure underpin the Character and Quest workflows exposed by the desktop UI
 - AI dependency in v1.0: none
 - Project format: `.forgeproject`
 - Frontend package manager: pnpm 11.25.0; npm launcher is misconfigured
@@ -42,6 +42,7 @@
 - The sample review found and corrected missing punctuation before v3 inspiration text. Review ratings: 45 usable as-is, 7 usable with minor editing, 0 weak/substantial rewrite. Quest v2 replay, constraints, UTF-8 roundtrip, locks/rerolls/manual edits, workspace verification, and the no-bundle Tauri build passed. Independent player playtesting was not part of this audit; the review packet is retained for external review.
 - Pre-Mission-03 SOUL diversity audit expanded the current corpus to content version 2 while preserving the v1 corpus and ForgeDNA stream/reroll semantics. Deterministic field-level, archetype-cluster, Chaos Blend, controlled-axis, and UTF-8 evidence is recorded in `docs/CONTENT_QUALITY_REPORT.md`; Mission 02 remains PASS after audit verification.
 - Mission 04 added transactional SQLite schema 1, recoverable schema-0 migration, project/entity repositories, generation history, explicit candidate promotion and canon revision snapshots, optimistic write conflicts, favorites/settings, integrity checks, and session-only undo/redo. Fourteen on-disk storage tests pass; full verification is recorded in `docs/missions/MISSION_04_REPORT.md`.
+- Mission 05 added the React/Tauri project workspace for Character and Quest generation, field locks/rerolls/edits, candidate saves, favorites, canon promotion/revisions, and history inspection. Frontend tests (16), workspace Rust tests (80), strict Clippy, formatting, metadata, and optimized Tauri no-bundle build passed. The operator completed the packaged-app lifecycle and persistence smoke using `target/release/character-forge-desktop.exe`, but observed the Character name change while locked. That violates lock preservation; Mission 05 remains PARTIAL pending a fix and focused packaged-app retest. See `docs/missions/MISSION_05_REPORT.md`.
 
 ## Mission 00 closeout
 
@@ -57,8 +58,8 @@
 
 ## Deferred by design
 
-AI/provider runtime, World Forge, marketplace, cloud sync, portable `.forgeproject` backup/import, expansions, and later-mission features remain deferred. Mission 03 is PASS and Quest Forge is closed. Mission 04 is PASS; project persistence operations are available as Rust interfaces, while user-facing project/Forge workflows remain in later missions.
+AI/provider runtime, World Forge, marketplace, cloud sync, portable `.forgeproject` backup/import, expansions, and later-mission features remain deferred. Mission 03 is PASS and Quest Forge is closed. Mission 04 is PASS. Export remains deferred. Mission 05 operator flow passed overall, with the Character name lock exception still open.
 
 ## Handoff
 
-Mission reports: `docs/missions/MISSION_00_REPORT.md`, `MISSION_01_REPORT.md`, `MISSION_02_REPORT.md`, `MISSION_03_REPORT.md`, and `MISSION_04_REPORT.md`. Mission 04 is closed PASS. Stop here; Mission 05 has not started.
+Mission reports: `docs/missions/MISSION_00_REPORT.md`, `MISSION_01_REPORT.md`, `MISSION_02_REPORT.md`, `MISSION_03_REPORT.md`, `MISSION_04_REPORT.md`, and `MISSION_05_REPORT.md`. Mission 04 is closed PASS. Mission 05 packaged-app operator smoke passed overall, but Mission 05 remains PARTIAL because locking the Character name did not preserve it. Stop here; do not begin Mission 06.
