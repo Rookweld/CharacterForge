@@ -4,13 +4,13 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** Interlude 06.5 — WORKBENCH POLISH
-**Current status:** PASS — Mission 06 remains PASS; Interlude 06.5 automated, packaged-build, and operator product-review gates are satisfied
+**Current mission:** Pre-GAUNTLET FOUNDATION COMPLETENESS AUDIT
+**Current status:** FOUNDATION INCOMPLETE — SMALL BLOCKERS; Mission 06 VAULT and Interlude 06.5 WORKBENCH POLISH remain PASS
 **Target release:** v1.0.0 FOUNDATION
-**Last committed baseline:** `7d59619f6d03897aea994e7537fd236d983ce060` (Mission 06 portable project vault workflows)
+**Last committed baseline:** `88ed9b0105490d587d9266ba9b7e2b2f0da4a545` (Workbench polish experience)
 **Branch:** `master`
-**HEAD:** `7d59619f6d03897aea994e7537fd236d983ce060` (`feat: implement portable project vault workflows`)
-**Worktree:** dirty with Interlude 06.5 implementation, tests, architecture, and closeout documentation; no changes committed, staged, or pushed
+**HEAD:** `88ed9b0105490d587d9266ba9b7e2b2f0da4a545` (`feat: polish v1 desktop workbench experience`)
+**Worktree:** clean at audit start; closeout changes only in `docs/FOUNDATION_COMPLETENESS_AUDIT.md` and this state file; no implementation code changed
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -49,6 +49,8 @@
 
 - Interlude 06.5 is PASS. The operator reviewed the packaged application as a real product and accepted the landing/create/open/import workflows, Character/Quest Forge, controls, saved/unsaved state, libraries, Candidate/Canon and promotion, History, Vault, errors/status states, laptop-sized layout, keyboard navigation, and focus indication. No operator-visible P0/P1 regression was found. Verification: 105 Rust tests PASS, 30 frontend tests PASS, formatting PASS, frontend lint PASS, TypeScript typecheck PASS, frontend production build PASS, strict Clippy PASS, Cargo metadata PASS, `scripts/verify.ps1` PASS, optimized Tauri build PASS, `git diff --check` PASS, and repository pnpm tests PASS. The global npm launcher issue remains environment-only. Details: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`.
 
+- Pre-GAUNTLET FOUNDATION completeness audit: **FOUNDATION INCOMPLETE — SMALL BLOCKERS**. Reviewed 36 requirements: 22 implemented + verified, 4 implemented but incompletely verified, 9 partially implemented, 0 missing, 1 intentionally deferred. P0=0, P1=0, P2=4, P3=4. P2 product gaps are session undo/redo, explicit canon revision and prior-revision inspection, applying a persistent history snapshot to the working session, and user settings. See `docs/FOUNDATION_COMPLETENESS_AUDIT.md`. Recommendation: HOLD GAUNTLET pending human review of G-01 through G-04. No implementation changes were made.
+
 ## Mission 00 closeout
 
 - **GUI result:** VERIFIED GUI SUCCESS by operator verification. Automated Codex GUI inspection could not observe the operator's interactive desktop; the earlier 16×16 event-target-only result described the Codex execution/inspection context and did not represent the actual desktop launch. The prior APPLICATION FAILURE classification is superseded and incorrect.
@@ -67,4 +69,4 @@ AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and later
 
 ## Handoff
 
-Mission reports: `docs/missions/MISSION_00_REPORT.md` through `MISSION_06_REPORT.md`; Interlude 06.5 report: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`. Mission 06 remains closed PASS. Interlude 06.5 is closed PASS after packaged operator review. Branch `master`, HEAD `7d59619f6d03897aea994e7537fd236d983ce060`; worktree contains Interlude 06.5 changes. Stop here; do not begin Mission 07 or 08.
+Mission reports: `docs/missions/MISSION_00_REPORT.md` through `MISSION_06_REPORT.md`; Interlude 06.5 report: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`; audit: `docs/FOUNDATION_COMPLETENESS_AUDIT.md`. Mission 06 and Interlude 06.5 remain closed PASS. FOUNDATION is incomplete with four P2 product gaps; Mission 07 and Mission 08 have not begun. Branch `master`, HEAD `88ed9b0105490d587d9266ba9b7e2b2f0da4a545`; only closeout documentation is changed. Stop here; do not begin Mission 07 or 08.
