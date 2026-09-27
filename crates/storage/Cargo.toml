@@ -6,3 +6,10 @@ license.workspace = true
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+forge-contracts = { path = "../contracts" }
+forge-app-core = { path = "../app-core" }
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true

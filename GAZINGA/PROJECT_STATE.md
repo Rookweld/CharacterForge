@@ -4,11 +4,11 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** 03 — CALLING
-**Current status:** PASS — Mission 03 final Quest quality audit and closeout completed 2026-09-27
+**Current mission:** 04 — MEMORY
+**Current status:** PASS — SQLite persistence, recovery, history, canon, and revision gates verified 2026-09-27
 **Target release:** v1.0.0 FOUNDATION
-**Last committed baseline:** `c61b0701fb8629d049675a8b1e3f41fbc0beea9b` (Batch D content expansion)
-**Branch:** `master` (final audit/report artifacts are uncommitted; no commit was created)
+**Last committed baseline:** `7a864ca8fcf64917859bb667e636c3a1825c0f54` (Mission 03 final Quest quality audit closeout)
+**Branch:** `master` (Mission 04 changes are uncommitted; no commit was created)
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -18,7 +18,7 @@
 - Desktop: Tauri 2
 - Frontend: React, TypeScript, Vite; strict TypeScript configuration
 - Core/application logic: Rust; four core crates plus desktop shell
-- Storage: SQLite is the planned source of truth; no persistence implementation in Mission 00
+- Storage: SQLite is the authoritative project store; `forge-storage` uses bundled rusqlite behind Rust repository interfaces
 - Generation: versioned ForgeDNA contracts and deterministic field-stream/reroll infrastructure underpin the Mission 02 deterministic Character Forge core; no generation UI
 - AI dependency in v1.0: none
 - Project format: `.forgeproject`
@@ -41,6 +41,7 @@
 - Mission 03 added deterministic Quest generation on the shared ForgeDNA field-stream foundation, with Quest v2 replay retained and v3 declarative content for all eleven presets. The final 256-seed per-preset audit and 1,024-seed Chaos audit passed with zero invalid candidates and zero exact expanded clones. Chaos recorded 0 >=10/14 pairs, 17 >=8/14 pairs, mean 1.186, median 1, maximum 9; largest >=8 connected cluster size was 3. Mythic and Chaos controlled influence remained measurable. Full results and the 52-Quest review set are in `docs/QUEST_CONTENT_QUALITY_REPORT.md` and `docs/quality/MISSION_03_FINAL_QUEST_SAMPLES.md`.
 - The sample review found and corrected missing punctuation before v3 inspiration text. Review ratings: 45 usable as-is, 7 usable with minor editing, 0 weak/substantial rewrite. Quest v2 replay, constraints, UTF-8 roundtrip, locks/rerolls/manual edits, workspace verification, and the no-bundle Tauri build passed. Independent player playtesting was not part of this audit; the review packet is retained for external review.
 - Pre-Mission-03 SOUL diversity audit expanded the current corpus to content version 2 while preserving the v1 corpus and ForgeDNA stream/reroll semantics. Deterministic field-level, archetype-cluster, Chaos Blend, controlled-axis, and UTF-8 evidence is recorded in `docs/CONTENT_QUALITY_REPORT.md`; Mission 02 remains PASS after audit verification.
+- Mission 04 added transactional SQLite schema 1, recoverable schema-0 migration, project/entity repositories, generation history, explicit candidate promotion and canon revision snapshots, optimistic write conflicts, favorites/settings, integrity checks, and session-only undo/redo. Fourteen on-disk storage tests pass; full verification is recorded in `docs/missions/MISSION_04_REPORT.md`.
 
 ## Mission 00 closeout
 
@@ -56,8 +57,8 @@
 
 ## Deferred by design
 
-Persistence schema/migrations, AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and all other later-mission features. Mission 03 is PASS and Quest Forge is closed for this mission. Mission 04 — MEMORY has not started and requires a separate authorized task. See `docs/missions/MISSION_03_REPORT.md`.
+AI/provider runtime, World Forge, marketplace, cloud sync, portable `.forgeproject` backup/import, expansions, and later-mission features remain deferred. Mission 03 is PASS and Quest Forge is closed. Mission 04 is PASS; project persistence operations are available as Rust interfaces, while user-facing project/Forge workflows remain in later missions.
 
 ## Handoff
 
-Mission 00 report: `docs/missions/MISSION_00_REPORT.md`. Mission 01 report: `docs/missions/MISSION_01_REPORT.md`. Mission 02 report: `docs/missions/MISSION_02_REPORT.md`. Mission 03 report: `docs/missions/MISSION_03_REPORT.md`. Mission 03 is closed PASS. Mission 04 has not started; wait for separate authorization.
+Mission reports: `docs/missions/MISSION_00_REPORT.md`, `MISSION_01_REPORT.md`, `MISSION_02_REPORT.md`, `MISSION_03_REPORT.md`, and `MISSION_04_REPORT.md`. Mission 04 is closed PASS. Stop here; Mission 05 has not started.

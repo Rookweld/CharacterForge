@@ -56,9 +56,18 @@ See [ADR 0002](adr/0002-forge-dna-and-field-streams.md) for the serialization an
 - Direct user edits are represented by per-field origin metadata and retained generation provenance. Reroll-all temporarily protects manually edited fields, then restores their original lock settings.
 - The developer harness is `cargo run -p forge-app-core --example character_forge -- --seed 42 --preset cyberpunk --axis technology=100`; it emits the complete candidate and ForgeDNA as JSON. This is a developer demonstration, not UI functionality.
 
-## Mission 03 — Quest prototype (partial)
+## Mission 03 — Quest generation (closed)
 
 - Quest generation is implemented in `forge-app-core` and reuses the existing ForgeDNA streams, nonce controls, and lock/reroll functions. The developer harness is `cargo run -p forge-app-core --example quest_forge -- --seed 42 --preset cyberpunk --axis technology=100`.
 - Quest content version 2 remains available for replay; new Quest recipes use content version 3. The v3 corpus is `content/quests/v3/core.json`; the Rust loader validates it and deterministic selection/composition is separate from the JSON data. ForgeDNA wire encoding and field-stream derivation are unchanged.
-- V3 adds internal thread selection plus generated clue and briefing fields on `QuestCandidate` without changing the shared Quest entity contract. The compatibility boundary and quality limitations are recorded in the Mission 03 report. Mission 03 remains PARTIAL because field pools are shallow and Chaos Blend high-overlap counts worsened.
+- V3 adds internal thread selection plus generated clue and briefing fields on `QuestCandidate` without changing the shared Quest entity contract. Mission 03 is closed PASS; its final quality evidence and sample packet are recorded in the Mission 03 reports.
 - **Remediation compatibility decision:** the committed content-version-2 Quest output is treated as replay behavior and will remain frozen. New declarative Quest content uses content version 3. No ForgeDNA serialization, stream context, nonce, lock, or dependency semantics are changed.
+
+## Mission 04 — MEMORY persistence
+
+- `forge-storage` implements the Rust repository interfaces using `rusqlite` 0.40.2 with only the `bundled` feature (rusqlite default features disabled). SQLite is built into the application; no separately installed SQLite runtime is required.
+- Each on-disk `ProjectStore` contains one project. Versioned SQLite `user_version` migrations create schema 1 from a fresh schema-0 database or upgrade the documented synthetic `legacy_projects` schema-0 fixture. Existing databases receive a `.pre-migration.bak` copy before migration; schema changes commit transactionally, and failures preserve both original data and backup.
+- Projects, structured candidate/canon payloads, generation runs, entity revisions, and project-local settings are persisted. Candidate payloads retain complete Character/Quest candidates, ForgeDNA, generation provenance, per-field manual-edit origins, locks/nonces, and Quest v3 clue/briefing fields. Quest v2 replay payloads remain intact.
+- `ProjectRepository` and `EntityRepository` form the application-facing persistence contracts. The generator remains independent of storage and Tauri. Multi-record writes use transactions; entity writes use optimistic `write_version` checks. Canon promotion and revision are explicit operations; previous canon snapshots remain inspectable.
+- Connections enable foreign keys, WAL, FULL synchronous mode, a 5-second busy timeout, and a 1,000-page automatic checkpoint. `ProjectSession` validates a new handle before replacing the active one. `SessionHistory<T>` provides in-memory editing-session undo/redo, separate from persistent ForgeRuns and canon revisions.
+- Migration/corruption/version errors are structured. Integrity tooling runs SQLite integrity and foreign-key checks. See [ADR 0003](adr/0003-sqlite-project-persistence.md) and [Mission 04 report](missions/MISSION_04_REPORT.md).
