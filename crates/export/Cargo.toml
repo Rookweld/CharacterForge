@@ -6,3 +6,15 @@ license.workspace = true
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+blake3.workspace = true
+forge-storage = { path = "../storage" }
+serde.workspace = true
+serde_json.workspace = true
+zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[dev-dependencies]
+forge-app-core = { path = "../app-core" }
+forge-contracts = { path = "../contracts" }
+rusqlite.workspace = true

@@ -6,6 +6,10 @@ use forge_contracts::{
     CreativeAxes, CreativeAxis, EntityId, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
     INITIAL_SCHEMA_VERSION, ProjectEnvelope, ProjectId, RootSeed,
 };
+use forge_export::{
+    ExportError, create_backup, export_project, import_project, restore_active, write_entity_json,
+    write_entity_markdown,
+};
 use forge_storage::{
     EntityRecord, EntityRevision, ForgeRunRecord, ProjectSession, ProjectStore, StoreError,
     StoredEntity, StoredProject,
@@ -97,6 +101,27 @@ impl From<StoreError> for UiError {
             message: error.to_string(),
             expected,
             actual,
+        }
+    }
+}
+
+impl From<ExportError> for UiError {
+    fn from(error: ExportError) -> Self {
+        let kind = match &error {
+            ExportError::DestinationExists => "project_exists",
+            ExportError::UnsupportedFormat(_) => "unsupported_format",
+            ExportError::UnsupportedDatabaseSchema(_) => "unsupported_schema",
+            ExportError::Integrity => "integrity",
+            ExportError::Invalid(message) if message.contains("unsafe path") => "unsafe_archive",
+            ExportError::Invalid(_) | ExportError::Archive(_) => "invalid_archive",
+            ExportError::Storage(_) => "corrupt_project",
+            ExportError::Io(_) => "storage",
+        };
+        Self {
+            kind,
+            message: error.to_string(),
+            expected: None,
+            actual: None,
         }
     }
 }
@@ -256,6 +281,89 @@ fn close_project(state: State<'_, AppState>) -> Result<(), UiError> {
     session.project.close();
     session.working = None;
     session.write_version = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn export_project_command(state: State<'_, AppState>, path: String) -> Result<(), UiError> {
+    let mut session = lock_state(&state)?;
+    let store = active_store(&mut session)?;
+    export_project(store, Path::new(path.trim()))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn create_backup_command(state: State<'_, AppState>, path: String) -> Result<(), UiError> {
+    let mut session = lock_state(&state)?;
+    let store = active_store(&mut session)?;
+    create_backup(store, Path::new(path.trim()))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn import_project_command(
+    state: State<'_, AppState>,
+    archive_path: String,
+    destination_path: String,
+) -> Result<ProjectInfo, UiError> {
+    let mut session = lock_state(&state)?;
+    let destination = PathBuf::from(destination_path.trim());
+    import_project(Path::new(archive_path.trim()), &destination)?;
+    let store = session.project.open(&destination)?;
+    if store.load_project()?.is_none() {
+        session.project.close();
+        return Err(UiError {
+            kind: "invalid_archive",
+            message: "The imported file does not contain a project.".into(),
+            expected: None,
+            actual: None,
+        });
+    }
+    session.working = None;
+    session.write_version = None;
+    project_info(&session)
+}
+
+#[tauri::command]
+fn restore_backup_command(state: State<'_, AppState>, archive_path: String) -> Result<(), UiError> {
+    let mut session = lock_state(&state)?;
+    restore_active(&mut session.project, Path::new(archive_path.trim()))?;
+    session.working = None;
+    session.write_version = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn export_entity_command(
+    state: State<'_, AppState>,
+    id: String,
+    path: String,
+    format: String,
+) -> Result<(), UiError> {
+    let mut session = lock_state(&state)?;
+    let store = active_store(&mut session)?;
+    let id = parse_entity_id(&id)?;
+    let entity = store
+        .get_entity(id)?
+        .ok_or_else(|| UiError {
+            kind: "not_found",
+            message: "The saved item could not be found.".into(),
+            expected: None,
+            actual: None,
+        })?
+        .entity;
+    match format.as_str() {
+        "json" => write_entity_json(&entity, Path::new(path.trim()))?,
+        "markdown" => write_entity_markdown(&entity, Path::new(path.trim()))?,
+        _ => {
+            return Err(UiError {
+                kind: "validation",
+                message: "Choose JSON or Markdown export.".into(),
+                expected: None,
+                actual: None,
+            });
+        }
+    }
     Ok(())
 }
 
@@ -723,6 +831,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             create_project,
             open_project,
+            export_project_command,
+            create_backup_command,
+            import_project_command,
+            restore_backup_command,
+            export_entity_command,
             close_project,
             get_project,
             forge_character,

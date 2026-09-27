@@ -16,5 +16,6 @@ tauri = { version = "2", features = [] }
 forge-app-core = { path = "../../../crates/app-core" }
 forge-contracts = { path = "../../../crates/contracts" }
 forge-storage = { path = "../../../crates/storage" }
+forge-export = { path = "../../../crates/export" }
 serde.workspace = true
 serde_json.workspace = true

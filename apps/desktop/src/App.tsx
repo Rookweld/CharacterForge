@@ -237,6 +237,8 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [projectName, setProjectName] = useState('My World');
   const [projectPath, setProjectPath] = useState('');
+  const [portablePath, setPortablePath] = useState('');
+  const [importDestination, setImportDestination] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [snapshot, setSnapshot] = useState<ForgePayload | null>(null);
@@ -249,6 +251,18 @@ export function App() {
       if (active) {
         setProjectName(active.name);
         setProjectPath(active.path);
+        const portableDefault = active.path.replace(
+          /\.sqlite3$/i,
+          '.forgeproject',
+        );
+        setPortablePath(
+          portableDefault === active.path
+            ? `${active.path}.forgeproject`
+            : portableDefault,
+        );
+        setImportDestination(
+          active.path.replace(/\.sqlite3$/i, '.imported.sqlite3'),
+        );
       }
     } catch (reason) {
       setError(errorMessage(reason as UiError).message);
@@ -318,6 +332,60 @@ export function App() {
         setNotice('Project opened.');
       },
     );
+  const exportProject = () =>
+    void run(
+      () => api.exportProject(portablePath),
+      () => setNotice('Project exported successfully.'),
+    );
+  const createBackup = () =>
+    void run(
+      () => api.createBackup(portablePath),
+      () => setNotice('Backup created successfully.'),
+    );
+  const importProject = () =>
+    void run(
+      () => api.importProject(portablePath, importDestination),
+      (value) => {
+        setProject(value);
+        setProjectPath(value.path);
+        setSection('forge');
+        setCandidate(null);
+        setDirty(false);
+        setSelectedRecord(null);
+        setNotice('Project imported and opened.');
+      },
+    );
+  const restoreBackup = () => {
+    if (
+      !window.confirm(
+        'Restore this backup over the open project? A recoverable copy will be kept while restore is checked.',
+      )
+    )
+      return;
+    void run(
+      () => api.restoreBackup(portablePath),
+      () => {
+        setCandidate(null);
+        setDirty(false);
+        setSelectedRecord(null);
+        setNotice('Backup restored successfully.');
+        void refreshRecords();
+      },
+    );
+  };
+  const exportEntity = (record: EntityRecord, format: 'json' | 'markdown') => {
+    const extension = format === 'json' ? 'json' : 'md';
+    const path = window.prompt(
+      `Save ${format.toUpperCase()} export as`,
+      `${payloadTitle(record.entity)}.${extension}`,
+    );
+    if (!path?.trim()) return;
+    void run(
+      () => api.exportEntity(entityId(record.entity), path.trim(), format),
+      () =>
+        setNotice(`${format === 'json' ? 'JSON' : 'Markdown'} export saved.`),
+    );
+  };
   const forge = () => {
     const numericSeed = Number(seed);
     if (!Number.isSafeInteger(numericSeed) || numericSeed < 0) {
@@ -1069,6 +1137,7 @@ export function App() {
             onSelect={selectRecord}
             onFavorite={favorite}
             onPromote={promote}
+            onExport={exportEntity}
           />
         )}
         {section === 'quests' && (
@@ -1080,6 +1149,7 @@ export function App() {
             onSelect={selectRecord}
             onFavorite={favorite}
             onPromote={promote}
+            onExport={exportEntity}
           />
         )}
         {section === 'canon' && (
@@ -1173,6 +1243,58 @@ export function App() {
               <dt>Created</dt>
               <dd>{dateLabel(project.createdAtUnixMs)}</dd>
             </dl>
+            <div className="project-archive-actions">
+              <h3>Portable project and backups</h3>
+              <label htmlFor="portable-path">Project file path</label>
+              <input
+                id="portable-path"
+                value={portablePath}
+                onChange={(event) => setPortablePath(event.target.value)}
+                placeholder="C:\\Projects\\MyWorld.forgeproject"
+              />
+              <div className="button-row">
+                <button
+                  type="button"
+                  disabled={busy || !portablePath.trim()}
+                  onClick={exportProject}
+                >
+                  Export Project
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !portablePath.trim()}
+                  onClick={createBackup}
+                >
+                  Create Backup
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !portablePath.trim()}
+                  onClick={restoreBackup}
+                >
+                  Restore Backup…
+                </button>
+              </div>
+              <label htmlFor="import-destination">
+                New project database path
+              </label>
+              <input
+                id="import-destination"
+                value={importDestination}
+                onChange={(event) => setImportDestination(event.target.value)}
+                placeholder="C:\\Projects\\ImportedWorld.sqlite3"
+              />
+              <button
+                type="button"
+                disabled={
+                  busy || !portablePath.trim() || !importDestination.trim()
+                }
+                onClick={importProject}
+              >
+                Import Project…
+              </button>
+              {busy && <p role="status">Working with project file…</p>}
+            </div>
             <button
               type="button"
               className="danger"
@@ -1313,9 +1435,11 @@ function RecordRow({
 }
 function DetailView({
   record,
+  onExport,
 }: {
   record: EntityRecord | null;
   revisions?: Revision[];
+  onExport?: (record: EntityRecord, format: 'json' | 'markdown') => void;
 }) {
   if (!record)
     return (
@@ -1343,6 +1467,16 @@ function DetailView({
           payloadEntity(record.entity).dna.recipe.universe_preset}{' '}
         · seed {payloadEntity(record.entity).dna.recipe.root_seed}
       </p>
+      {onExport && (
+        <div className="button-row">
+          <button type="button" onClick={() => onExport(record, 'json')}>
+            Export JSON
+          </button>
+          <button type="button" onClick={() => onExport(record, 'markdown')}>
+            Export Markdown
+          </button>
+        </div>
+      )}
       <div className="detail-fields">
         {payloadFields(record.entity).map((field) => (
           <article key={field.key}>
@@ -1387,6 +1521,7 @@ function LibraryView({
   onSelect,
   onFavorite,
   onPromote,
+  onExport,
 }: {
   title: string;
   records: EntityRecord[];
@@ -1395,6 +1530,7 @@ function LibraryView({
   onSelect: (record: EntityRecord) => void;
   onFavorite: (record: EntityRecord) => void;
   onPromote: (record: EntityRecord) => void;
+  onExport: (record: EntityRecord, format: 'json' | 'markdown') => void;
 }) {
   const [selected, setSelected] = useState<EntityRecord | null>(null);
   const select = (record: EntityRecord) => {
@@ -1434,6 +1570,7 @@ function LibraryView({
               selected && entityId(record.entity) === entityId(selected.entity),
           ) ?? selected
         }
+        onExport={onExport}
       />
     </div>
   );

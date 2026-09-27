@@ -144,6 +144,16 @@ export const api = {
     invoke<Project>('create_project', { path, name }),
   openProject: (path: string) => invoke<Project>('open_project', { path }),
   closeProject: () => invoke<void>('close_project'),
+  exportProject: (path: string) =>
+    invoke<void>('export_project_command', { path }),
+  createBackup: (path: string) =>
+    invoke<void>('create_backup_command', { path }),
+  importProject: (archivePath: string, destinationPath: string) =>
+    invoke<Project>('import_project_command', { archivePath, destinationPath }),
+  restoreBackup: (archivePath: string) =>
+    invoke<void>('restore_backup_command', { archivePath }),
+  exportEntity: (id: string, path: string, format: 'json' | 'markdown') =>
+    invoke<void>('export_entity_command', { id, path, format }),
   forgeCharacter: (
     preset: string,
     seed: number,
@@ -205,6 +215,12 @@ export function errorMessage(error: UiError): {
     no_project: 'Open or create a project first.',
     project_exists:
       'A project already exists at that location. Open it instead.',
+    invalid_archive:
+      'This is not a valid Forge project. The existing project was left unchanged.',
+    unsupported_format:
+      'This project was created by a newer unsupported format.',
+    integrity: 'The project archive failed its integrity check.',
+    unsafe_archive: 'This project file contains an unsafe path.',
   };
   return {
     message:

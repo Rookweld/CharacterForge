@@ -592,6 +592,20 @@ impl ProjectStore {
             .map(|_| ())
             .map_err(StoreError::from)
     }
+
+    /// Creates a standalone SQLite snapshot including committed WAL pages without closing this store.
+    pub fn snapshot_into(&self, destination: impl AsRef<Path>) -> StoreResult<()> {
+        let destination = destination.as_ref();
+        if destination.exists() {
+            return Err(StoreError::InvalidOperation(
+                "snapshot destination already exists".into(),
+            ));
+        }
+        let destination_text = destination.to_string_lossy();
+        self.connection
+            .execute("VACUUM INTO ?1", [destination_text.as_ref()])?;
+        Ok(())
+    }
 }
 
 impl ProjectRepository for ProjectStore {
