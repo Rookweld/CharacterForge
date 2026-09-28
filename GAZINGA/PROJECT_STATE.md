@@ -4,13 +4,13 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** Mission 07 — GAUNTLET
-**Current status:** PASS — automated gates and packaged operator GAUNTLET complete
+**Current mission:** Mission 08 — ARMOR
+**Current status:** PASS — security review, automated verification, and packaged offline/security operator smoke complete; full automated transitive advisory scan accepted as non-blocking residual risk
 **Target release:** v1.0.0 FOUNDATION
-**Last committed baseline:** `c60eef04cfae14928cdda8c7d8f6d4909b13033b` (clean FOUNDATION-complete baseline)
+**Last committed baseline:** `d42eb3cff27655432ecb3481c74c99dfb4a880a8` (clean committed Mission 07 GAUNTLET completion)
 **Branch:** `master`
-**HEAD:** `c60eef04cfae14928cdda8c7d8f6d4909b13033b`
-**Worktree:** closeout report/state/findings and deterministic sweep harness changed or untracked; nothing staged or committed
+**HEAD:** `d42eb3cff27655432ecb3481c74c99dfb4a880a8`
+**Worktree:** Mission 08 security documentation and this state file modified/untracked; nothing staged or committed
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -71,4 +71,4 @@ AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and later
 
 ## Handoff
 
-Mission 06 and Interlude 06.5 remain PASS. FOUNDATION remains complete. Mission 07 — GAUNTLET is **PASS**, including packaged operator verification. Mission 08 has not started. The packaged executable is `C:\dev\CharacterForge\target\release\character-forge-desktop.exe`. Branch `master`, HEAD `c60eef04cfae14928cdda8c7d8f6d4909b13033b`. Worktree has modified/untracked documentation, regression coverage and the deterministic sweep harness; nothing is staged or committed. See the Mission 07 report for exact changed-file/Git state. Stop here.
+Mission 06 and Interlude 06.5 remain PASS. FOUNDATION remains complete. Mission 07 — GAUNTLET is **PASS**, including packaged operator verification. Mission 08 — ARMOR is **PASS**: security review, automated gates, and packaged offline/security operator verification passed. P0/P1/P2/P3 findings: 0/0/0/0. The human accepts the unavailable complete automated transitive advisory scan as a non-blocking documented residual maintenance/release risk; the graph is not claimed automatically clean. The Mission 08 executable is `C:\dev\CharacterForge\target\mission08-security-review\release\character-forge-desktop.exe`. The default-target Windows Access Denied replacement attempt did not alter the existing executable; verification passed using the isolated Mission 08 Cargo target. Branch `master`, HEAD `d42eb3cff27655432ecb3481c74c99dfb4a880a8`. Mission 08 documentation is modified/untracked; nothing is staged or committed. See `docs/missions/MISSION_08_REPORT.md`. Mission 09 has not started.
