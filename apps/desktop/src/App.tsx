@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type Axis,
   api,
@@ -265,9 +265,18 @@ export function App() {
   const [selectedHistory, setSelectedHistory] = useState<HistoryRecord | null>(
     null,
   );
+  const [revisionBase, setRevisionBase] = useState<EntityRecord | null>(null);
+  const historySnapshotRequest = useRef(0);
   const [revisionTarget, setRevisionTarget] = useState(false);
+  const navigateToSection = (next: Section) => {
+    historySnapshotRequest.current += 1;
+    setSnapshot(null);
+    setSelectedHistory(null);
+    setSection(next);
+  };
 
   const clearWorkingView = useCallback(() => {
+    historySnapshotRequest.current += 1;
     setCandidate(null);
     setDirty(false);
     setCanUndo(false);
@@ -276,6 +285,7 @@ export function App() {
     setSelectedRevision(null);
     setSelectedHistory(null);
     setSnapshot(null);
+    setRevisionBase(null);
   }, []);
 
   const setProjectLocationDefaults = useCallback((active: Project) => {
@@ -390,7 +400,7 @@ export function App() {
       (value) => {
         setProject(value);
         setProjectLocationDefaults(value);
-        setSection('forge');
+        navigateToSection('forge');
         clearWorkingView();
         setNotice('Project created and ready to forge.');
         void refreshRecentProjects();
@@ -402,7 +412,7 @@ export function App() {
       (value) => {
         setProject(value);
         setProjectLocationDefaults(value);
-        setSection('forge');
+        navigateToSection('forge');
         clearWorkingView();
         setSelectedRecord(null);
         setNotice('Project opened.');
@@ -425,7 +435,7 @@ export function App() {
       (value) => {
         setProject(value);
         setProjectLocationDefaults(value);
-        setSection('forge');
+        navigateToSection('forge');
         clearWorkingView();
         setSelectedRecord(null);
         setNotice('Project imported and opened.');
@@ -446,7 +456,7 @@ export function App() {
       (value) => {
         setProject(value);
         setProjectLocationDefaults(value);
-        setSection('forge');
+        navigateToSection('forge');
         clearWorkingView();
         setSelectedRecord(null);
         setNotice('Project opened.');
@@ -561,6 +571,45 @@ export function App() {
 
   const save = async () => {
     if (revisionTarget) {
+      if (!candidate) return;
+      const savedCanon = revisionBase?.entity;
+      const oldFields = new Map(
+        (savedCanon ? payloadFields(savedCanon) : []).map((field) => [
+          field.key,
+          field,
+        ]),
+      );
+      const changes = payloadFields(candidate).flatMap((field) => {
+        const oldField = oldFields.get(field.key);
+        if (
+          !oldField ||
+          JSON.stringify(oldField.value) === JSON.stringify(field.value)
+        )
+          return [];
+        const concise = (value: FieldValue) => {
+          const normalized = displayField(value).replaceAll('\n', ' ');
+          return normalized.length > 120
+            ? `${normalized.slice(0, 117)}…`
+            : normalized;
+        };
+        const oldValue = concise(oldField.value);
+        const newValue = concise(field.value);
+        return [`${field.label}: “${oldValue}” → “${newValue}”`];
+      });
+      const visibleChanges = changes.slice(0, 8);
+      if (changes.length > visibleChanges.length)
+        visibleChanges.push(
+          `…and ${changes.length - visibleChanges.length} more changed fields.`,
+        );
+      const confirmation = [
+        'Make this working copy the new current Canon?',
+        'The existing current Canon will be preserved in revision history.',
+        '',
+        ...(visibleChanges.length > 0
+          ? ['Changes from current Canon:', ...visibleChanges]
+          : ['No structured field differences from current Canon.']),
+      ].join('\n');
+      if (!window.confirm(confirmation)) return;
       const reason = window.prompt('Why are you revising this Canon item?');
       if (!reason?.trim()) return;
       await run(
@@ -575,6 +624,7 @@ export function App() {
           setCandidate(saved.entity);
           setDirty(false);
           setRevisionTarget(false);
+          setRevisionBase(null);
           setNotice(
             'Canon revision saved. The prior revision remains available.',
           );
@@ -600,6 +650,8 @@ export function App() {
     );
   };
   const selectRecord = async (record: EntityRecord) => {
+    setRevisionTarget(false);
+    setRevisionBase(null);
     await run(
       () => api.getEntity(entityId(record.entity)),
       (fresh) => {
@@ -676,11 +728,23 @@ export function App() {
   }, [project, section, loadHistory]);
   const showSnapshot = (item: HistoryRecord) => {
     if (item.runId) {
+      const requestId = ++historySnapshotRequest.current;
       setSelectedHistory(item);
-      void run(
-        () => api.snapshot(item.runId),
-        (value) => setSnapshot(value),
-      );
+      setSnapshot(null);
+      setBusy(true);
+      setError('');
+      api
+        .snapshot(item.runId)
+        .then((value) => {
+          if (requestId === historySnapshotRequest.current) setSnapshot(value);
+        })
+        .catch((reason: unknown) => {
+          if (requestId === historySnapshotRequest.current)
+            setError(errorMessage(reason as UiError).message);
+        })
+        .finally(() => {
+          if (requestId === historySnapshotRequest.current) setBusy(false);
+        });
     }
   };
   const applyWorkingState = (state: WorkingState, message: string) => {
@@ -689,7 +753,7 @@ export function App() {
     setCanRedo(state.canRedo);
     setDirty(true);
     setSelectedRecord(null);
-    setSection('forge');
+    navigateToSection('forge');
     setSnapshot(null);
     setNotice(message);
   };
@@ -701,14 +765,30 @@ export function App() {
       )
     )
       return;
+    const canonRecord = item.entityId
+      ? records.find(
+          (record) =>
+            entityId(record.entity) === item.entityId &&
+            payloadEntity(record.entity).envelope.canon_state === 'canon',
+        )
+      : undefined;
     void run(
       () => api.restoreHistoryToWorkingCopy(item.runId),
-      (state) =>
+      (state) => {
         applyWorkingState(
           state,
           'History snapshot opened as a working copy. Save explicitly when ready.',
-        ),
+        );
+        if (canonRecord) {
+          setRevisionBase(canonRecord);
+          setRevisionTarget(true);
+        }
+      },
     );
+    if (!canonRecord) {
+      setRevisionTarget(false);
+      setRevisionBase(null);
+    }
   };
   const useRevisionAsWorking = (revision: Revision) => {
     if (!selectedRecord) return;
@@ -719,6 +799,7 @@ export function App() {
       )
     )
       return;
+    setRevisionBase(selectedRecord);
     void run(
       () =>
         api.loadCanonRevisionWorkingCopy(
@@ -999,7 +1080,7 @@ export function App() {
               key={id}
               className={`nav-item ${section === id ? 'active' : ''}`}
               onClick={() => {
-                setSection(id);
+                navigateToSection(id);
                 setSnapshot(null);
               }}
             >
@@ -1037,7 +1118,7 @@ export function App() {
               type="button"
               aria-label="Project details"
               title="Project details"
-              onClick={() => setSection('project')}
+              onClick={() => navigateToSection('project')}
             >
               ⌄
             </button>
@@ -1468,7 +1549,7 @@ export function App() {
                         () => api.history(entityId(current)),
                         setHistory,
                       );
-                      setSection('history');
+                      navigateToSection('history');
                     }}
                   >
                     View history
@@ -1490,7 +1571,9 @@ export function App() {
                   type="button"
                   className="quiet full"
                   onClick={() =>
-                    setSection(mode === 'character' ? 'characters' : 'quests')
+                    navigateToSection(
+                      mode === 'character' ? 'characters' : 'quests',
+                    )
                   }
                 >
                   Browse {mode === 'character' ? 'Characters' : 'Quests'} →
@@ -1508,7 +1591,7 @@ export function App() {
             emptyActionLabel="Forge a Character"
             onEmptyAction={() => {
               setMode('character');
-              setSection('forge');
+              navigateToSection('forge');
             }}
             onSelect={selectRecord}
             onFavorite={favorite}
@@ -1525,7 +1608,7 @@ export function App() {
             emptyActionLabel="Forge a Quest"
             onEmptyAction={() => {
               setMode('quest');
-              setSection('forge');
+              navigateToSection('forge');
             }}
             onSelect={selectRecord}
             onFavorite={favorite}
@@ -1546,7 +1629,7 @@ export function App() {
                 <Empty
                   text="Nothing has been promoted to Canon yet. Save a candidate, then choose Promote to Canon when it feels right."
                   actionLabel="Return to Forge"
-                  onAction={() => setSection('forge')}
+                  onAction={() => navigateToSection('forge')}
                 />
               ) : (
                 canonRecords.map((record) => (
@@ -1592,7 +1675,7 @@ export function App() {
                 <Empty
                   text="Activity will appear here as you Forge, edit, save, and promote."
                   actionLabel="Return to Forge"
-                  onAction={() => setSection('forge')}
+                  onAction={() => navigateToSection('forge')}
                 />
               ) : (
                 [...history].reverse().map((item) => (

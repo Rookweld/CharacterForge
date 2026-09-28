@@ -4,13 +4,13 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** Pre-GAUNTLET FOUNDATION Gap Fix
-**Current status:** PASS — FOUNDATION COMPLETE — READY FOR GAUNTLET; Mission 07 remains NOT STARTED
+**Current mission:** Mission 07 — GAUNTLET
+**Current status:** PASS — automated gates and packaged operator GAUNTLET complete
 **Target release:** v1.0.0 FOUNDATION
-**Last committed baseline:** `d01222c49ff908048c95e6d63d2d3b49d0f205da` (clean gap-fix starting baseline)
+**Last committed baseline:** `c60eef04cfae14928cdda8c7d8f6d4909b13033b` (clean FOUNDATION-complete baseline)
 **Branch:** `master`
-**HEAD:** `d01222c49ff908048c95e6d63d2d3b49d0f205da` (unchanged during gap-fix and closeout)
-**Worktree:** modified with bounded gap-fix implementation, tests, and closeout docs; nothing staged or committed
+**HEAD:** `c60eef04cfae14928cdda8c7d8f6d4909b13033b`
+**Worktree:** closeout report/state/findings and deterministic sweep harness changed or untracked; nothing staged or committed
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -51,6 +51,8 @@
 
 - Pre-GAUNTLET FOUNDATION Gap Fix: **PASS**. All four P2 gaps are resolved and operator-verified in the packaged app; no operator-visible P0/P1 defect was found. Final FOUNDATION status: **FOUNDATION COMPLETE — READY FOR GAUNTLET**. Verification: 107 Rust tests, 34 frontend tests, `scripts/verify.ps1`, optimized Tauri build, formatting, frontend lint, TypeScript typecheck, frontend production build, strict Clippy, Cargo metadata, `git diff --check`, and repository pnpm tests PASS. The global npm launcher issue remains environment-only. See `docs/missions/PRE_GAUNTLET_FOUNDATION_GAP_FIX_REPORT.md` and audit remediation §13. Mission 07 remains NOT STARTED.
 
+- Mission 07 — GAUNTLET: **PASS**. Automated evidence: 45,056 Character and 45,056 Quest deterministic generations; 1,000 state-machine sequences / 32,000 operations; 114 Rust tests; 36 frontend tests; `scripts/verify.ps1`; optimized Tauri build; formatting; frontend lint; TypeScript typecheck; frontend production build; strict Clippy; Cargo metadata; `git diff --check`; and repository pnpm tests all PASS. The global npm launcher issue remains environment-only. All three recorded P2 findings are resolved. The operator passed the packaged Windows gauntlet, including Canon A cancellation/confirmation and D persistence after restart for Character and Quest, plus History/navigation, export/import, backup/restore, resize, keyboard focus and error recovery. No operator-visible P0/P1/P2 defect remains. Mission 08 has not started. See `docs/missions/MISSION_07_REPORT.md` and `docs/quality/GAUNTLET_FINDINGS.md`.
+
 ## Mission 00 closeout
 
 - **GUI result:** VERIFIED GUI SUCCESS by operator verification. Automated Codex GUI inspection could not observe the operator's interactive desktop; the earlier 16×16 event-target-only result described the Codex execution/inspection context and did not represent the actual desktop launch. The prior APPLICATION FAILURE classification is superseded and incorrect.
@@ -69,4 +71,4 @@ AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and later
 
 ## Handoff
 
-Mission reports: `docs/missions/MISSION_00_REPORT.md` through `MISSION_06_REPORT.md`; Interlude 06.5 report: `docs/missions/INTERLUDE_06_5_WORKBENCH_POLISH_REPORT.md`; completeness audit: `docs/FOUNDATION_COMPLETENESS_AUDIT.md`; gap-fix report: `docs/missions/PRE_GAUNTLET_FOUNDATION_GAP_FIX_REPORT.md`. Mission 06 and Interlude 06.5 remain PASS. FOUNDATION is complete and ready for GAUNTLET; gap-fix PASS includes packaged operator acceptance. Branch `master`, HEAD `d01222c49ff908048c95e6d63d2d3b49d0f205da`. Worktree changes are limited to `GAZINGA/PROJECT_STATE.md`, `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src/App.tsx`, `apps/desktop/src/api.ts`, `apps/desktop/src/styles.css`, `apps/desktop/tests/App.test.tsx`, `crates/storage/src/lib.rs`, `docs/FOUNDATION_COMPLETENESS_AUDIT.md`, and `docs/missions/PRE_GAUNTLET_FOUNDATION_GAP_FIX_REPORT.md`; none staged or committed. Mission 07 remains NOT STARTED. Stop here.
+Mission 06 and Interlude 06.5 remain PASS. FOUNDATION remains complete. Mission 07 — GAUNTLET is **PASS**, including packaged operator verification. Mission 08 has not started. The packaged executable is `C:\dev\CharacterForge\target\release\character-forge-desktop.exe`. Branch `master`, HEAD `c60eef04cfae14928cdda8c7d8f6d4909b13033b`. Worktree has modified/untracked documentation, regression coverage and the deterministic sweep harness; nothing is staged or committed. See the Mission 07 report for exact changed-file/Git state. Stop here.

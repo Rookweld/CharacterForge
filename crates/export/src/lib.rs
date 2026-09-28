@@ -825,7 +825,10 @@ fn storage(error: StoreError) -> ExportError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use forge_app_core::{CharacterField, CharacterFieldValue, CharacterForge, QuestForge};
+    use forge_app_core::{
+        CharacterField, CharacterFieldValue, CharacterForge, QuestField, QuestFieldValue,
+        QuestForge,
+    };
     use forge_contracts::{
         ContentVersion, CreativeAxes, FieldKey, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
         INITIAL_SCHEMA_VERSION, ProjectEnvelope, ProjectId, RootSeed,
@@ -1022,6 +1025,404 @@ mod tests {
     }
 
     #[test]
+    fn gauntlet_cross_feature_roundtrip_preserves_revision_history_unicode_and_restore() {
+        let dir = Dir::new();
+        let source = dir.path("source.sqlite3");
+        let package = dir.path("complete.forgeproject");
+        let destination = dir.path("imported.sqlite3");
+        let backup = dir.path("pre-mutation.forgeproject");
+        let (project_id, character, quest, _) = populated(&source);
+        let character_id = character.envelope().id;
+        let quest_id = quest.envelope().id;
+
+        let mut store = ProjectStore::open(&source).unwrap();
+        for revision in 1..=3 {
+            let record = store.get_entity(character_id).unwrap().unwrap();
+            let mut changed = record.entity;
+            let StoredEntity::CharacterCandidate(candidate) = &mut changed else {
+                panic!("Character candidate wrapper was lost");
+            };
+            candidate
+                .manual_edit(
+                    CharacterField::Fear,
+                    CharacterFieldValue::Text(format!("Canon revision {revision} — Räven 🜁")),
+                )
+                .unwrap();
+            store
+                .revise_canon(
+                    changed,
+                    record.write_version,
+                    &format!("Gauntlet Character canon {revision}"),
+                )
+                .unwrap();
+        }
+
+        let character_dna = CharacterForge::new_dna(
+            RootSeed::new(73_001),
+            "nordic-myth",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let mut working_character =
+            CharacterForge::generate_in_project(&character_dna, project_id).unwrap();
+        let working_character_id = working_character.character.envelope.id;
+        let mut session = forge_storage::SessionHistory::new(StoredEntity::CharacterCandidate(
+            working_character.clone(),
+        ));
+        working_character
+            .manual_edit(
+                CharacterField::Name,
+                CharacterFieldValue::Text(
+                    "Eydis — Seattle, \"North\" \\ route\nsecond line".into(),
+                ),
+            )
+            .unwrap();
+        session.push(StoredEntity::CharacterCandidate(working_character.clone()));
+        CharacterForge::lock(&mut working_character, CharacterField::Appearance).unwrap();
+        let locked_snapshot = StoredEntity::CharacterCandidate(working_character.clone());
+        session.push(locked_snapshot.clone());
+        CharacterForge::reroll_field(&mut working_character, CharacterField::Fear).unwrap();
+        session.push(StoredEntity::CharacterCandidate(working_character));
+        let forward = session.current().clone();
+        assert_eq!(session.undo(), Some(&locked_snapshot));
+        assert_eq!(session.redo(), Some(&forward));
+        let mut saved_character = match forward {
+            StoredEntity::CharacterCandidate(candidate) => candidate,
+            _ => unreachable!(),
+        };
+        let mut working_character_version = store
+            .persist_candidate(StoredEntity::CharacterCandidate(saved_character.clone()))
+            .unwrap();
+        saved_character
+            .manual_edit(
+                CharacterField::Title,
+                CharacterFieldValue::Text("Second saved Character revision".into()),
+            )
+            .unwrap();
+        working_character_version = store
+            .save_candidate(
+                StoredEntity::CharacterCandidate(saved_character.clone()),
+                working_character_version,
+            )
+            .unwrap();
+        working_character_version = store
+            .promote_candidate(working_character_id, working_character_version)
+            .unwrap();
+        saved_character.character.envelope.canon_state = forge_contracts::CanonState::Canon;
+        saved_character
+            .manual_edit(
+                CharacterField::Fear,
+                CharacterFieldValue::Text("Explicit canon revision after promotion".into()),
+            )
+            .unwrap();
+        store
+            .revise_canon(
+                StoredEntity::CharacterCandidate(saved_character),
+                working_character_version,
+                "Gauntlet explicit Character canon revision",
+            )
+            .unwrap();
+
+        let mut quest_candidate = match store.get_entity(quest_id).unwrap().unwrap().entity {
+            StoredEntity::QuestCandidate(candidate) => candidate,
+            _ => panic!("Quest candidate wrapper was lost"),
+        };
+        let mut quest_version = store.get_entity(quest_id).unwrap().unwrap().write_version;
+        for revision in 1..=4 {
+            quest_candidate
+                .manual_edit(
+                    QuestField::Title,
+                    QuestFieldValue::Text(format!("Working history {revision} — Öresund 🧭")),
+                )
+                .unwrap();
+            QuestForge::lock(&mut quest_candidate, QuestField::Title).unwrap();
+            quest_version = store
+                .save_candidate(
+                    StoredEntity::QuestCandidate(quest_candidate.clone()),
+                    quest_version,
+                )
+                .unwrap();
+            quest_candidate = match store.get_entity(quest_id).unwrap().unwrap().entity {
+                StoredEntity::QuestCandidate(candidate) => candidate,
+                _ => panic!("Quest candidate wrapper was lost after save"),
+            };
+        }
+        store
+            .set_setting("vault.live-wal", "\"latest WAL-backed commit\"")
+            .unwrap();
+
+        let expected_entities = store.list_entities().unwrap();
+        let expected_history = store.list_history(None).unwrap();
+        let expected_revisions = store.list_revisions(character_id).unwrap();
+        let expected_working_character_revisions =
+            store.list_revisions(working_character_id).unwrap();
+        assert_eq!(expected_revisions.len(), 4);
+        assert_eq!(expected_working_character_revisions.len(), 2);
+        assert!(source.with_extension("sqlite3-wal").exists() || source.exists());
+        let expected_snapshots = expected_history
+            .iter()
+            .map(|event| {
+                (
+                    event.event_id,
+                    store
+                        .load_history_event_snapshot(event.event_id)
+                        .unwrap()
+                        .unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let quest_history = expected_history
+            .iter()
+            .filter(|event| event.entity_id == Some(quest_id))
+            .collect::<Vec<_>>();
+        assert!(quest_history.len() >= 5);
+        assert!(
+            quest_history
+                .iter()
+                .map(|event| event.run_id)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                < quest_history.len(),
+            "regression case requires repeated generator run ids"
+        );
+
+        let older_snapshot = store
+            .load_history_event_snapshot(quest_history[1].event_id)
+            .unwrap()
+            .unwrap();
+        let older_json: serde_json::Value =
+            serde_json::from_slice(&entity_json(&older_snapshot).unwrap()).unwrap();
+        let older_markdown = entity_markdown(&older_snapshot).unwrap();
+        assert!(
+            serde_json::to_string(&older_json)
+                .unwrap()
+                .contains("Öresund")
+        );
+        assert!(older_markdown.contains("Öresund"));
+        export_project(&store, &package).unwrap();
+        drop(store);
+
+        assert_eq!(
+            import_project(&package, &destination).unwrap().envelope.id,
+            project_id
+        );
+        let mut imported = ProjectStore::open(&destination).unwrap();
+        assert_eq!(imported.list_entities().unwrap(), expected_entities);
+        assert_eq!(imported.list_history(None).unwrap(), expected_history);
+        assert_eq!(
+            imported.list_revisions(character_id).unwrap(),
+            expected_revisions
+        );
+        assert_eq!(
+            imported.list_revisions(working_character_id).unwrap(),
+            expected_working_character_revisions
+        );
+        for (event_id, snapshot) in &expected_snapshots {
+            assert_eq!(
+                imported
+                    .load_history_event_snapshot(*event_id)
+                    .unwrap()
+                    .as_ref(),
+                Some(snapshot)
+            );
+        }
+        assert_eq!(
+            imported.get_setting("vault.live-wal").unwrap().as_deref(),
+            Some("\"latest WAL-backed commit\"")
+        );
+        let imported_old = imported
+            .load_history_event_snapshot(quest_history[1].event_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(imported_old, older_snapshot);
+        let mut old_copy = match imported_old {
+            StoredEntity::QuestCandidate(candidate) => candidate,
+            _ => panic!("imported historical Quest is not editable candidate data"),
+        };
+        old_copy.quest.envelope.canon_state = forge_contracts::CanonState::Candidate;
+        old_copy
+            .manual_edit(
+                QuestField::Objective,
+                QuestFieldValue::Text(
+                    "Restored old branch — Göteborg, \"quotation\" \\ path\nsecond line".into(),
+                ),
+            )
+            .unwrap();
+        let current_version = imported
+            .get_entity(quest_id)
+            .unwrap()
+            .unwrap()
+            .write_version;
+        imported
+            .save_candidate(StoredEntity::QuestCandidate(old_copy), current_version)
+            .unwrap();
+        let unicode_branch = imported.get_entity(quest_id).unwrap().unwrap().entity;
+        let branch_document: serde_json::Value =
+            serde_json::from_slice(&entity_json(&unicode_branch).unwrap()).unwrap();
+        let expected_unicode = "Restored old branch — Göteborg, \"quotation\" \\ path\nsecond line";
+        assert_eq!(
+            branch_document["entity"]["value"]["quest"]["objective"],
+            expected_unicode
+        );
+        assert!(
+            entity_markdown(&unicode_branch)
+                .unwrap()
+                .contains("Restored old branch")
+        );
+        assert_eq!(
+            imported.list_revisions(character_id).unwrap(),
+            expected_revisions
+        );
+        assert_eq!(
+            imported.list_history(Some(quest_id)).unwrap().len(),
+            quest_history.len() + 1
+        );
+
+        let saved_entities = imported.list_entities().unwrap();
+        let saved_history = imported.list_history(None).unwrap();
+        let saved_revisions = imported.list_revisions(character_id).unwrap();
+        let saved_project = imported.load_project().unwrap().unwrap();
+        create_backup(&imported, &backup).unwrap();
+        let mut changed = match imported.get_entity(quest_id).unwrap().unwrap().entity {
+            StoredEntity::QuestCandidate(candidate) => candidate,
+            _ => panic!("Quest candidate wrapper was lost before mutation"),
+        };
+        changed
+            .manual_edit(
+                QuestField::Stakes,
+                QuestFieldValue::Text("Post-backup mutation must disappear".into()),
+            )
+            .unwrap();
+        let write_version = imported
+            .get_entity(quest_id)
+            .unwrap()
+            .unwrap()
+            .write_version;
+        imported
+            .save_candidate(StoredEntity::QuestCandidate(changed), write_version)
+            .unwrap();
+        drop(imported);
+
+        restore_backup(&backup, &destination).unwrap();
+        let reopened = ProjectStore::open(&destination).unwrap();
+        reopened.integrity_check().unwrap();
+        assert_eq!(reopened.load_project().unwrap().unwrap(), saved_project);
+        assert_eq!(reopened.list_entities().unwrap(), saved_entities);
+        assert_eq!(reopened.list_history(None).unwrap(), saved_history);
+        assert_eq!(
+            reopened.list_revisions(character_id).unwrap(),
+            saved_revisions
+        );
+        assert!(reopened.get_setting("ui.reducedMotion").unwrap().is_none());
+        assert!(
+            reopened
+                .get_entity(quest_id)
+                .unwrap()
+                .unwrap()
+                .entity
+                .validate()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn identically_named_projects_remain_isolated_during_export_import_and_restore() {
+        let dir = Dir::new();
+        let project_a = dir.path("project-a.sqlite3");
+        let project_b = dir.path("project-b.sqlite3");
+        let imported_a = dir.path("project-a-copy.sqlite3");
+        let restore_target_a = dir.path("project-a-restore.sqlite3");
+        let archive_a = dir.path("project-a.forgeproject");
+        let dna = CharacterForge::new_dna(
+            RootSeed::new(91_001),
+            "dark-fantasy",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+
+        let metadata_a = project();
+        let mut candidate_a =
+            CharacterForge::generate_in_project(&dna, metadata_a.envelope.id).unwrap();
+        let id_a = candidate_a.character.envelope.id;
+        let mut store_a = ProjectStore::open(&project_a).unwrap();
+        store_a.create_project(&metadata_a).unwrap();
+        store_a
+            .persist_candidate(StoredEntity::CharacterCandidate(candidate_a.clone()))
+            .unwrap();
+
+        let mut metadata_b = project();
+        metadata_b.envelope.id = ProjectId::from_bytes([9; 16]);
+        let candidate_b =
+            CharacterForge::generate_in_project(&dna, metadata_b.envelope.id).unwrap();
+        let id_b = candidate_b.character.envelope.id;
+        let mut store_b = ProjectStore::open(&project_b).unwrap();
+        store_b.create_project(&metadata_b).unwrap();
+        store_b
+            .persist_candidate(StoredEntity::CharacterCandidate(candidate_b.clone()))
+            .unwrap();
+        assert_eq!(
+            candidate_a.character.envelope.name,
+            candidate_b.character.envelope.name
+        );
+        assert_eq!(
+            store_a.load_project().unwrap().unwrap().name,
+            store_b.load_project().unwrap().unwrap().name
+        );
+
+        candidate_a
+            .manual_edit(
+                CharacterField::Title,
+                CharacterFieldValue::Text("Only Project A changes — å".into()),
+            )
+            .unwrap();
+        store_a
+            .save_candidate(StoredEntity::CharacterCandidate(candidate_a.clone()), 1)
+            .unwrap();
+        candidate_a = match store_a.get_entity(id_a).unwrap().unwrap().entity {
+            StoredEntity::CharacterCandidate(value) => value,
+            _ => panic!("Project A entity type changed after save"),
+        };
+        assert_eq!(
+            store_b.get_entity(id_b).unwrap().unwrap().entity,
+            StoredEntity::CharacterCandidate(candidate_b.clone())
+        );
+        export_project(&store_a, &archive_a).unwrap();
+        drop(store_a);
+        assert_eq!(
+            import_project(&archive_a, &imported_a).unwrap().envelope.id,
+            metadata_a.envelope.id
+        );
+        let copy = ProjectStore::open(&imported_a).unwrap();
+        assert_eq!(
+            copy.get_entity(id_a).unwrap().unwrap().entity,
+            StoredEntity::CharacterCandidate(candidate_a)
+        );
+
+        let mut restore_target = ProjectStore::open(&restore_target_a).unwrap();
+        let mut target_metadata = project();
+        target_metadata.name = "Temporary target".into();
+        restore_target.create_project(&target_metadata).unwrap();
+        drop(restore_target);
+        restore_backup(&archive_a, &restore_target_a).unwrap();
+        assert_eq!(
+            ProjectStore::open(&restore_target_a)
+                .unwrap()
+                .get_entity(id_a)
+                .unwrap()
+                .unwrap()
+                .entity,
+            copy.get_entity(id_a).unwrap().unwrap().entity
+        );
+        assert_eq!(
+            store_b.get_entity(id_b).unwrap().unwrap().entity,
+            StoredEntity::CharacterCandidate(candidate_b)
+        );
+        store_b.integrity_check().unwrap();
+    }
+
+    #[test]
     fn project_filenames_are_safe_unicode_preserving_and_never_overwrite() {
         let dir = Dir::new();
         assert_eq!(
@@ -1098,6 +1499,58 @@ mod tests {
             store.get_setting("vault.test").unwrap().as_deref(),
             Some("\"committed immediately before export\"")
         );
+        assert!(
+            fs::read_dir(&dir.0).unwrap().flatten().all(|entry| !entry
+                .file_name()
+                .to_string_lossy()
+                .contains("character-forge-partial")),
+            "failed export left a partial sibling file"
+        );
+        let later = dir.path("later.forgeproject");
+        export_project(&store, &later).unwrap();
+        assert_eq!(
+            import_project(&later, dir.path("later.sqlite3"))
+                .unwrap()
+                .envelope
+                .id,
+            project().envelope.id
+        );
+    }
+
+    #[test]
+    fn export_and_import_failures_leave_sources_healthy_and_allow_retry() {
+        let dir = Dir::new();
+        let source = dir.path("source.sqlite3");
+        let (project_id, _, _, _) = populated(&source);
+        let store = ProjectStore::open(&source).unwrap();
+        let impossible = dir.path("missing-parent/out.forgeproject");
+        assert!(export_project(&store, &impossible).is_err());
+        assert!(!impossible.exists());
+        store.integrity_check().unwrap();
+        let healthy_archive = dir.path("healthy.forgeproject");
+        export_project(&store, &healthy_archive).unwrap();
+
+        let bad_archive = dir.path("bad.forgeproject");
+        fs::write(&bad_archive, b"not a zip archive").unwrap();
+        let original_bad_archive = fs::read(&bad_archive).unwrap();
+        let failed_destination = dir.path("failed-import.sqlite3");
+        assert!(import_project(&bad_archive, &failed_destination).is_err());
+        assert!(!failed_destination.exists());
+        assert_eq!(fs::read(&bad_archive).unwrap(), original_bad_archive);
+        store.integrity_check().unwrap();
+
+        let successful_destination = dir.path("retry-import.sqlite3");
+        assert_eq!(
+            import_project(&healthy_archive, &successful_destination)
+                .unwrap()
+                .envelope
+                .id,
+            project_id
+        );
+        ProjectStore::open(&successful_destination)
+            .unwrap()
+            .integrity_check()
+            .unwrap();
     }
 
     #[test]
@@ -1314,24 +1767,25 @@ mod tests {
         let source = dir.path("source.sqlite3");
         populated(&source);
         let destination = dir.path("target.sqlite3");
-        let mut target = ProjectStore::open(&destination).unwrap();
-        let mut previous = project();
-        previous.name = "Keep This World".into();
-        target.create_project(&previous).unwrap();
-        drop(target);
+        populated(&destination);
+        let previous = ProjectStore::open(&destination).unwrap();
+        let previous_entities = previous.list_entities().unwrap();
+        let previous_history = previous.list_history(None).unwrap();
+        let previous_character_id = previous_entities[0].entity.envelope().id;
+        let previous_revisions = previous.list_revisions(previous_character_id).unwrap();
+        drop(previous);
         let error = restore_staged(&source, &destination, &project(), |_, _| {
             Err(ExportError::Storage("injected validation failure".into()))
         })
         .unwrap_err();
         assert!(error.to_string().contains("previous project was recovered"));
+        let recovered = ProjectStore::open(&destination).unwrap();
+        recovered.integrity_check().unwrap();
+        assert_eq!(recovered.list_entities().unwrap(), previous_entities);
+        assert_eq!(recovered.list_history(None).unwrap(), previous_history);
         assert_eq!(
-            ProjectStore::open(&destination)
-                .unwrap()
-                .load_project()
-                .unwrap()
-                .unwrap()
-                .name,
-            "Keep This World"
+            recovered.list_revisions(previous_character_id).unwrap(),
+            previous_revisions
         );
         assert!(
             !fs::read_dir(&dir.0)

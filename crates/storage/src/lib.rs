@@ -122,6 +122,7 @@ pub struct EntityRecord {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ForgeRunRecord {
+    pub event_id: i64,
     pub run_id: EntityId,
     pub entity_id: Option<EntityId>,
     pub action: String,
@@ -161,6 +162,7 @@ pub trait EntityRepository {
     ) -> StoreResult<i64>;
     fn list_history(&self, id: Option<EntityId>) -> StoreResult<Vec<ForgeRunRecord>>;
     fn load_history_snapshot(&self, run_id: EntityId) -> StoreResult<Option<StoredEntity>>;
+    fn load_history_event_snapshot(&self, event_id: i64) -> StoreResult<Option<StoredEntity>>;
     fn list_revisions(&self, id: EntityId) -> StoreResult<Vec<EntityRevision>>;
 }
 
@@ -465,27 +467,28 @@ impl ProjectStore {
 
     pub fn list_history(&self, id: Option<EntityId>) -> StoreResult<Vec<ForgeRunRecord>> {
         let sql = if id.is_some() {
-            "SELECT run_id, entity_id, action, parent_run_id, recipe_json, result_json, created_at FROM forge_runs WHERE entity_id = ?1 ORDER BY created_at, rowid"
+            "SELECT event_id, run_id, entity_id, action, parent_run_id, recipe_json, result_json, created_at FROM forge_runs WHERE entity_id = ?1 ORDER BY event_id"
         } else {
-            "SELECT run_id, entity_id, action, parent_run_id, recipe_json, result_json, created_at FROM forge_runs ORDER BY created_at, rowid"
+            "SELECT event_id, run_id, entity_id, action, parent_run_id, recipe_json, result_json, created_at FROM forge_runs ORDER BY event_id"
         };
         let mut statement = self.connection.prepare(sql)?;
         let mut records = Vec::new();
         let collect = |row: &rusqlite::Row<'_>| -> rusqlite::Result<ForgeRunRecord> {
             Ok(ForgeRunRecord {
-                run_id: parse_id(row.get::<_, String>(0)?).map_err(to_sql_conversion_error)?,
+                event_id: row.get(0)?,
+                run_id: parse_id(row.get::<_, String>(1)?).map_err(to_sql_conversion_error)?,
                 entity_id: row
-                    .get::<_, Option<String>>(1)?
+                    .get::<_, Option<String>>(2)?
                     .map(|v| parse_id(v).map_err(to_sql_conversion_error))
                     .transpose()?,
-                action: row.get(2)?,
+                action: row.get(3)?,
                 parent_run_id: row
-                    .get::<_, Option<String>>(3)?
+                    .get::<_, Option<String>>(4)?
                     .map(|v| parse_id(v).map_err(to_sql_conversion_error))
                     .transpose()?,
-                recipe_json: row.get(4)?,
-                result_json: row.get(5)?,
-                created_at_unix_ms: row.get(6)?,
+                recipe_json: row.get(5)?,
+                result_json: row.get(6)?,
+                created_at_unix_ms: row.get(7)?,
             })
         };
         if let Some(id) = id {
@@ -510,6 +513,19 @@ impl ProjectStore {
             .query_row(
                 "SELECT result_json FROM forge_runs WHERE run_id=?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
                 [id_text(run_id.uuid())],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        result.map(|json| decode_stored_entity(&json)).transpose()
+    }
+
+    /// Loads the exact immutable snapshot represented by a history row.
+    pub fn load_history_event_snapshot(&self, event_id: i64) -> StoreResult<Option<StoredEntity>> {
+        let result = self
+            .connection
+            .query_row(
+                "SELECT result_json FROM forge_runs WHERE event_id=?1",
+                [event_id],
                 |row| row.get::<_, String>(0),
             )
             .optional()?;
@@ -663,6 +679,10 @@ impl EntityRepository for ProjectStore {
     }
     fn load_history_snapshot(&self, run_id: EntityId) -> StoreResult<Option<StoredEntity>> {
         ProjectStore::load_history_snapshot(self, run_id)
+    }
+
+    fn load_history_event_snapshot(&self, event_id: i64) -> StoreResult<Option<StoredEntity>> {
+        ProjectStore::load_history_event_snapshot(self, event_id)
     }
     fn list_revisions(&self, id: EntityId) -> StoreResult<Vec<EntityRevision>> {
         ProjectStore::list_revisions(self, id)

@@ -157,6 +157,7 @@ const record = (entity: ForgePayload, writeVersion = 1): EntityRecord => ({
 });
 
 beforeEach(() => {
+  vi.unstubAllGlobals();
   vi.resetAllMocks();
   vi.mocked(api.project).mockResolvedValue(null);
   vi.mocked(api.defaultProjectDirectory).mockResolvedValue(
@@ -769,6 +770,78 @@ describe('desktop creative workflows', () => {
     ).toBeInTheDocument();
   });
 
+  it('ignores an older history snapshot response after a newer selection', async () => {
+    vi.mocked(api.project).mockResolvedValue(project);
+    vi.mocked(api.history).mockResolvedValue([
+      {
+        runId: 'event-older',
+        entityId: 'character-1',
+        action: 'manual_edit',
+        createdAtUnixMs: 1000,
+      },
+      {
+        runId: 'event-newer',
+        entityId: 'character-1',
+        action: 'reroll_field',
+        createdAtUnixMs: 2000,
+      },
+    ]);
+    const olderSnapshot: ForgePayload = {
+      ...character,
+      value: {
+        ...character.value,
+        character: {
+          ...character.value.character,
+          title: 'Older snapshot response',
+        },
+      },
+    };
+    const newerSnapshot: ForgePayload = {
+      ...character,
+      value: {
+        ...character.value,
+        character: {
+          ...character.value.character,
+          title: 'Newer snapshot response',
+        },
+      },
+    };
+    const completions = new Map<string, (value: ForgePayload | null) => void>();
+    vi.mocked(api.snapshot).mockImplementation(
+      (eventId) =>
+        new Promise((resolve) => {
+          completions.set(eventId, resolve);
+        }),
+    );
+    const { container } = render(<App />);
+    await screen.findByRole('heading', { name: 'Forge' });
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    await screen.findByRole('heading', { name: 'History', level: 1 });
+    await waitFor(() =>
+      expect(container.querySelectorAll('.history-row')).toHaveLength(2),
+    );
+    const rows = container.querySelectorAll<HTMLButtonElement>('.history-row');
+    fireEvent.click(rows.item(1));
+    fireEvent.click(rows.item(0));
+    await waitFor(() => expect(completions.size).toBe(2));
+
+    completions.get('event-newer')?.(newerSnapshot);
+    await waitFor(() =>
+      expect(container.querySelector('.detail-panel')?.textContent).toContain(
+        'Newer snapshot response',
+      ),
+    );
+    completions.get('event-older')?.(olderSnapshot);
+    await waitFor(() =>
+      expect(container.querySelector('.detail-panel')?.textContent).toContain(
+        'Newer snapshot response',
+      ),
+    );
+    expect(container.querySelector('.detail-panel')?.textContent).not.toContain(
+      'Older snapshot response',
+    );
+  });
+
   it('exposes session undo and redo as separate from persisted save', async () => {
     vi.mocked(api.reroll).mockResolvedValue({
       ...character,
@@ -855,6 +928,81 @@ describe('desktop creative workflows', () => {
         1,
       ),
     );
+  });
+
+  it('keeps a canceled Canon save transient and requires explicit confirmation before revising', async () => {
+    const historical = character;
+    const currentCanon: ForgePayload = {
+      ...character,
+      value: {
+        ...character.value,
+        character: {
+          ...character.value.character,
+          title: 'Current Canon C',
+          envelope: {
+            ...character.value.character.envelope,
+            canon_state: 'canon',
+          },
+        },
+      },
+    };
+    vi.mocked(api.listEntities).mockResolvedValue([record(currentCanon)]);
+    vi.mocked(api.getEntity).mockResolvedValue(record(currentCanon));
+    vi.mocked(api.revisions).mockResolvedValue([
+      {
+        revisionNumber: 1,
+        reason: 'Canon A',
+        entity: historical,
+        createdAtUnixMs: 1,
+      },
+    ]);
+    vi.mocked(api.loadCanonRevisionWorkingCopy).mockResolvedValue({
+      entity: historical,
+      canUndo: false,
+      canRedo: false,
+    });
+    const confirm = vi.fn().mockReturnValue(false);
+    const prompt = vi.fn().mockReturnValue('revisit A');
+    vi.stubGlobal('confirm', confirm);
+    vi.stubGlobal('prompt', prompt);
+
+    await openWorkspace([record(currentCanon)]);
+    fireEvent.click(screen.getByRole('button', { name: 'Canon' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Current Canon C/ }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Inspect' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Use as working copy' }),
+    );
+    await waitFor(() =>
+      expect(api.loadCanonRevisionWorkingCopy).toHaveBeenCalledWith(
+        'character-1',
+        1,
+      ),
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Save Canon revision' }),
+    );
+
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('Current Canon C'),
+    );
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Mara Vale'));
+    expect(prompt).not.toHaveBeenCalled();
+    expect(api.reviseCanon).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/Current Canon was not changed/),
+    ).toBeInTheDocument();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save Canon revision' }),
+    );
+    await waitFor(() =>
+      expect(api.reviseCanon).toHaveBeenCalledWith('revisit A'),
+    );
+    expect(prompt).toHaveBeenCalledTimes(1);
   });
 
   it('opens persisted application settings and saves reduced motion preference', async () => {

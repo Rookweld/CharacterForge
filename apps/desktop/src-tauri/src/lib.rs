@@ -264,7 +264,7 @@ struct EntityView {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HistoryView {
-    run_id: EntityId,
+    run_id: String,
     entity_id: Option<EntityId>,
     action: String,
     created_at_unix_ms: i64,
@@ -1148,7 +1148,7 @@ fn list_history(
 
 fn history_view(record: ForgeRunRecord) -> HistoryView {
     HistoryView {
-        run_id: record.run_id,
+        run_id: record.event_id.to_string(),
         entity_id: record.entity_id,
         action: record.action,
         created_at_unix_ms: record.created_at_unix_ms,
@@ -1160,9 +1160,15 @@ fn get_history_snapshot(
     state: State<'_, AppState>,
     run_id: String,
 ) -> Result<Option<StoredEntity>, UiError> {
+    let event_id = run_id.parse::<i64>().map_err(|error| UiError {
+        kind: "invalid_history",
+        message: format!("That history entry identifier is invalid: {error}"),
+        expected: None,
+        actual: None,
+    })?;
     let mut session = lock_state(&state)?;
     active_store(&mut session)?
-        .load_history_snapshot(parse_entity_id(&run_id)?)
+        .load_history_event_snapshot(event_id)
         .map_err(Into::into)
 }
 
@@ -1198,9 +1204,14 @@ fn use_history_as_working_copy(
     run_id: String,
 ) -> Result<WorkingState, UiError> {
     let mut session = lock_state(&state)?;
-    let id = parse_entity_id(&run_id)?;
+    let event_id = run_id.parse::<i64>().map_err(|error| UiError {
+        kind: "invalid_history",
+        message: format!("That history entry identifier is invalid: {error}"),
+        expected: None,
+        actual: None,
+    })?;
     let snapshot = active_store(&mut session)?
-        .load_history_snapshot(id)?
+        .load_history_event_snapshot(event_id)?
         .ok_or_else(|| UiError {
             kind: "not_found",
             message: "That history snapshot is no longer available.".into(),
