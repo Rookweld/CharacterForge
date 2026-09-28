@@ -1,7 +1,7 @@
 {
   "name": "character-forge-quest-forge",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "dev": "pnpm --filter @character-forge/desktop dev",
@@ -11,6 +11,8 @@
     "test": "pnpm --filter @character-forge/desktop test",
     "test:watch": "pnpm --filter @character-forge/desktop test:watch",
     "lint": "biome lint apps/desktop package.json tsconfig.json biome.json",
+    "check:version": "pwsh -NoProfile -File scripts/check-release-version.ps1",
+    "release:verify": "pwsh -NoProfile -File scripts/release-verify.ps1",
     "format:check": "biome format apps/desktop package.json tsconfig.json biome.json",
     "format": "biome check --write apps/desktop package.json tsconfig.json biome.json",
     "tauri:dev": "pnpm --filter @character-forge/desktop tauri:dev",

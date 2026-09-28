@@ -4,13 +4,14 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** Mission 08 — ARMOR
-**Current status:** PASS — security review, automated verification, and packaged offline/security operator smoke complete; full automated transitive advisory scan accepted as non-blocking residual risk
+**Current mission:** Mission 09 — RELEASE
+**Current status:** PASS — v1.0.0 FOUNDATION release gates verified, including fresh-install-like operator smoke of the final portable ZIP
 **Target release:** v1.0.0 FOUNDATION
-**Last committed baseline:** `d42eb3cff27655432ecb3481c74c99dfb4a880a8` (clean committed Mission 07 GAUNTLET completion)
+**FOUNDATION release gates:** VERIFIED
+**Last committed baseline:** `54e1d7b1aff072f01e553ce338036820742b026d` (Mission 08 ARMOR closeout)
 **Branch:** `master`
-**HEAD:** `d42eb3cff27655432ecb3481c74c99dfb4a880a8`
-**Worktree:** Mission 08 security documentation and this state file modified/untracked; nothing staged or committed
+**HEAD:** `54e1d7b1aff072f01e553ce338036820742b026d`
+**Worktree:** Mission 09 docs, version/build configuration, and release scripts modified/untracked; ignored release payloads present locally; two untracked Mission 09 logs and two operator export files left untouched; nothing staged or committed.
 **Schema version:** 1
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
@@ -71,4 +72,6 @@ AI/provider runtime, World Forge, marketplace, cloud sync, expansions, and later
 
 ## Handoff
 
-Mission 06 and Interlude 06.5 remain PASS. FOUNDATION remains complete. Mission 07 — GAUNTLET is **PASS**, including packaged operator verification. Mission 08 — ARMOR is **PASS**: security review, automated gates, and packaged offline/security operator verification passed. P0/P1/P2/P3 findings: 0/0/0/0. The human accepts the unavailable complete automated transitive advisory scan as a non-blocking documented residual maintenance/release risk; the graph is not claimed automatically clean. The Mission 08 executable is `C:\dev\CharacterForge\target\mission08-security-review\release\character-forge-desktop.exe`. The default-target Windows Access Denied replacement attempt did not alter the existing executable; verification passed using the isolated Mission 08 Cargo target. Branch `master`, HEAD `d42eb3cff27655432ecb3481c74c99dfb4a880a8`. Mission 08 documentation is modified/untracked; nothing is staged or committed. See `docs/missions/MISSION_08_REPORT.md`. Mission 09 has not started.
+Mission 06 and Interlude 06.5 remain PASS. FOUNDATION remains complete. Mission 07 — GAUNTLET is **PASS**, including packaged operator verification. Mission 08 — ARMOR is **PASS**: source review, automated gates, and packaged offline/security operator verification passed. P0/P1/P2/P3 findings: 0/0/0/0. The unavailable complete automated transitive advisory scan remains a human-accepted residual maintenance/release limitation; the dependency graph is not claimed automatically clean. Mission 08 operator used `C:\dev\CharacterForge\target\mission08-security-review\release\character-forge-desktop.exe`. Its default-target Windows Access Denied replacement attempt did not alter the existing executable; the isolated Mission 08 Cargo target was used.
+
+Mission 09 — RELEASE is **PASS — v1.0.0 FOUNDATION release gates verified**. Application version is 1.0.0 and compatibility versions are preserved. The human selected the x64 Windows portable ZIP as the primary artifact; no NSIS/MSI installer is included. Frozen-lockfile pnpm restore succeeded, reusing all 117 packages without changing package versions or lockfile. Frontend formatting, lint, TypeScript, 36 tests, and production build passed. `scripts/verify.ps1` passed with `CARGO_TARGET_DIR=target\mission09-final-verify`, including 114 Rust tests, Rust format, strict Clippy, and optimized Tauri `build --no-bundle`; metadata, version check, and `git diff --check` passed. The operator passed the fresh-install-like smoke of the exact final portable ZIP, SHA-256 `D73956A1E4DB225786CEE2FD52004303A64156C76665711C7A49FBA9EB4F19F4`. ARMOR findings remain P0/P1/P2/P3 = 0/0/0/0; the Mission 08 dependency advisory limitation remains documented. Package is unsigned and requires WebView2 Runtime. No commit, tag, or publication was performed. Branch `master`, HEAD `54e1d7b1aff072f01e553ce338036820742b026d`; release worktree is modified/untracked and unstaged, including two untracked Mission 09 logs and two operator export files left untouched. See `docs/missions/MISSION_09_REPORT.md`, `docs/RELEASE_CHECKLIST.md`, and `artifacts/releases/v1.0.0/RELEASE_MANIFEST.md`. Do not begin Mission 10 in this closeout.
