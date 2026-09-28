@@ -1,0 +1,36 @@
+THE FORGE — CODEX LAUNCHER
+
+Execute the current bounded The Forge mission from the repository.
+
+Before changing anything:
+
+1. Read GAZINGA/CANON_CORE.md.
+2. Read GAZINGA/THE_FORGE_CANON_CORE.md.
+3. Read GAZINGA/PROJECT_STATE.md for the v1.0 FOUNDATION baseline.
+4. Read GAZINGA/DISCOVERY_STATE.md for the current post-v1 state.
+5. Read the current mission file named by the operator.
+6. Read only the docs/design files or sections explicitly referenced by that mission, plus repository files necessary to verify current implementation reality.
+7. Inspect branch, HEAD, and worktree. Do not absorb unrelated untracked logs/operator exports into the mission.
+
+Rules:
+
+- Work only within the current mission boundary.
+- Existing v1.0 compatibility is a hard constraint.
+- Do not silently change ForgeDNA, deterministic replay, IDs, Canon history, or storage semantics.
+- Do not implement DEFERRED features because the architecture mentions them.
+- Do not guess current repository/schema behavior; inspect it.
+- Prefer additive, bounded changes over rewrites.
+- Data-changing migrations require backup/recovery and fixture-backed tests.
+- Do not start the next mission.
+- Do not claim PASS without evidence.
+
+Before stopping:
+
+- run every required verification gate
+- run git diff --check
+- update/create the mission report required by the mission
+- update GAZINGA/DISCOVERY_STATE.md if and only if the mission changes current post-v1 state
+- update GAZINGA/PROJECT_STATE.md only when FOUNDATION/current repository facts tracked there materially change
+- report branch, HEAD, worktree, changed files, tests, blockers, residual limitations, and exact exit-gate status
+
+If the mission is BLOCKED or PARTIAL, stop with concrete evidence. Do not expand scope to compensate.
