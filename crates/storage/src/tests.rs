@@ -5,7 +5,7 @@ use forge_app_core::{
 };
 use forge_contracts::{
     ContentVersion, CreativeAxes, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
-    INITIAL_SCHEMA_VERSION, RootSeed,
+    RelationshipType, RootSeed, SchemaVersion,
 };
 use rusqlite::Connection;
 use std::{
@@ -47,7 +47,7 @@ fn new_project() -> StoredProject {
     StoredProject {
         envelope: ProjectEnvelope {
             id: project_id(),
-            schema_version: INITIAL_SCHEMA_VERSION,
+            schema_version: SchemaVersion(CURRENT_SCHEMA_VERSION as u16),
             generator_version: INITIAL_GENERATOR_VERSION,
             content_version: INITIAL_CONTENT_VERSION,
         },
@@ -60,6 +60,322 @@ fn create_store(db: &TestDb) -> ProjectStore {
     let mut store = ProjectStore::open(db.path()).unwrap();
     store.create_project(&new_project()).unwrap();
     store
+}
+
+fn add_typed_endpoint(store: &ProjectStore, id: EntityId, entity_type: &str) {
+    store.connection.execute(
+        "INSERT INTO entities(id,project_id,entity_type,name,canon_state,origin,favorite,schema_version,body_json,generation_json,write_version,created_at,updated_at) VALUES (?1,?2,?3,'Typed endpoint','candidate','manual',0,1,'{}',NULL,1,10,10)",
+        params![id_text(id.uuid()), id_text(project_id().uuid()), entity_type],
+    ).unwrap();
+}
+
+fn born_in_relationship(source_id: EntityId, target_id: EntityId) -> Relationship {
+    Relationship {
+        id: RelationshipId::from_bytes([41; 16]),
+        project_id: project_id(),
+        relationship_type: RelationshipType::BornIn,
+        source_id,
+        target_id,
+        state: RelationshipState::Candidate,
+        origin: EntityOrigin::Manual,
+        created_at_unix_ms: 10,
+        updated_at_unix_ms: 10,
+    }
+}
+
+#[test]
+#[ignore = "one-time reproducible writer for the frozen schema-1 fixture"]
+fn write_frozen_schema1_fixture_once() {
+    let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    fs::create_dir_all(&folder).unwrap();
+    let path = folder.join("schema1-populated.sqlite3");
+    let db = TestDb(path.clone());
+    let mut store = ProjectStore::open(db.path()).unwrap();
+    store.create_project(&new_project()).unwrap();
+
+    let mut candidate = character_candidate(88001);
+    candidate.character.envelope.tags = vec!["archive".into(), "café".into()];
+    candidate.character.envelope.notes = Some("Δοκιμή — frozen schema-one prose".into());
+    CharacterForge::lock(&mut candidate, CharacterField::Name).unwrap();
+    candidate
+        .manual_edit(
+            CharacterField::Title,
+            CharacterFieldValue::Text("The Keeper of Reykjavík".into()),
+        )
+        .unwrap();
+    let candidate_id = candidate.character.envelope.id;
+    store
+        .persist_candidate(StoredEntity::CharacterCandidate(candidate))
+        .unwrap();
+    store.toggle_favorite(candidate_id, true, 1).unwrap();
+
+    let canon_character = character_candidate(88002);
+    let character_id = canon_character.character.envelope.id;
+    store
+        .persist_candidate(StoredEntity::CharacterCandidate(canon_character))
+        .unwrap();
+    store.promote_candidate(character_id, 1).unwrap();
+    let mut revised_character = store.get_entity(character_id).unwrap().unwrap().entity;
+    if let StoredEntity::CharacterCandidate(value) = &mut revised_character {
+        value.character.title.push_str(" — δεύτερη μαρτυρία");
+    }
+    store
+        .revise_canon(revised_character, 2, "fixture canon revision α")
+        .unwrap();
+
+    let mut quest_candidate_value = quest_candidate(88003, 3);
+    QuestForge::lock(&mut quest_candidate_value, QuestField::Objective).unwrap();
+    let quest_candidate_id = quest_candidate_value.quest.envelope.id;
+    store
+        .persist_candidate(StoredEntity::QuestCandidate(quest_candidate_value))
+        .unwrap();
+    let quest_canon = quest_candidate(88004, 3);
+    let quest_canon_id = quest_canon.quest.envelope.id;
+    store
+        .persist_candidate(StoredEntity::QuestCandidate(quest_canon))
+        .unwrap();
+    store.promote_candidate(quest_canon_id, 1).unwrap();
+    let mut revised_quest = store.get_entity(quest_canon_id).unwrap().unwrap().entity;
+    if let StoredEntity::QuestCandidate(value) = &mut revised_quest {
+        value.quest.objective.push_str(" — Δοκιμή");
+    }
+    store
+        .revise_canon(revised_quest, 2, "quest canon revision β")
+        .unwrap();
+    let mut candidate_quest = store
+        .get_entity(quest_candidate_id)
+        .unwrap()
+        .unwrap()
+        .entity;
+    if let StoredEntity::QuestCandidate(value) = &mut candidate_quest {
+        value.quest.envelope.tags = vec!["candidate".into(), "世界".into()];
+        value.quest.envelope.notes = Some("notes: naïve façade".into());
+    }
+    store.save_candidate(candidate_quest, 1).unwrap();
+    store.set_setting("reduced_motion", "true").unwrap();
+    store.checkpoint().unwrap();
+    drop(store);
+
+    let connection = Connection::open(db.path()).unwrap();
+    connection
+        .pragma_update(None, "foreign_keys", "OFF")
+        .unwrap();
+    connection.execute_batch(r#"
+DROP TABLE relationship_revisions;
+DROP TABLE relationships;
+CREATE TABLE entities_v1 (
+ id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL,
+ entity_type TEXT NOT NULL CHECK(entity_type IN ('character','quest')),
+ name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+ canon_state TEXT NOT NULL CHECK(canon_state IN ('draft','candidate','canon','archived')),
+ origin TEXT NOT NULL CHECK(origin IN ('manual','generated','imported')),
+ favorite INTEGER NOT NULL DEFAULT 0 CHECK(favorite IN (0,1)), schema_version INTEGER NOT NULL CHECK(schema_version > 0),
+ body_json TEXT NOT NULL CHECK(json_valid(body_json)), generation_json TEXT CHECK(generation_json IS NULL OR json_valid(generation_json)),
+ write_version INTEGER NOT NULL CHECK(write_version > 0), created_at INTEGER NOT NULL CHECK(created_at >= 0), updated_at INTEGER NOT NULL CHECK(updated_at >= created_at),
+ UNIQUE(project_id,id), FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+INSERT INTO entities_v1 SELECT * FROM entities;
+DROP TABLE entities;
+ALTER TABLE entities_v1 RENAME TO entities;
+CREATE INDEX idx_entities_project_state ON entities(project_id,canon_state,updated_at);
+CREATE INDEX idx_entities_project_type ON entities(project_id,entity_type,updated_at);
+UPDATE projects SET schema_version=1;
+PRAGMA user_version=1;
+"#).unwrap();
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .unwrap();
+    connection
+        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+        .unwrap();
+    std::mem::forget(db);
+}
+
+fn fixture_rows(connection: &Connection) -> Vec<String> {
+    ["projects", "entities", "entity_revisions", "forge_runs", "settings"].into_iter().map(|table| {
+        let sql = if table == "projects" { "SELECT id,name,generator_version,content_version,created_at,updated_at FROM projects ORDER BY rowid".to_string() } else { format!("SELECT * FROM {table} ORDER BY rowid") };
+        let mut statement = connection.prepare(&sql).unwrap();
+        let width = statement.column_count();
+        statement.query_map([], |row| {
+            let values = (0..width).map(|column| row.get::<_, rusqlite::types::Value>(column).map(|v| format!("{v:?}"))).collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(values.join("|"))
+        }).unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap().join("\n")
+    }).collect()
+}
+
+fn fixture_replay_signatures(connection: &Connection) -> Vec<String> {
+    let mut statement = connection
+        .prepare("SELECT body_json FROM entities ORDER BY id")
+        .unwrap();
+    let bodies = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    bodies
+        .into_iter()
+        .map(|body| match decode_stored_entity(&body).unwrap() {
+            StoredEntity::CharacterCandidate(candidate) => serde_json::to_string(
+                &CharacterForge::generate_in_project(
+                    &candidate.dna,
+                    candidate.character.envelope.project_id,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+            StoredEntity::QuestCandidate(candidate) => {
+                serde_json::to_string(&QuestForge::generate(&candidate.dna).unwrap()).unwrap()
+            }
+            other => serde_json::to_string(&other).unwrap(),
+        })
+        .collect()
+}
+
+fn legacy_replay_version_signatures() -> Vec<String> {
+    let mut character_v1 = CharacterForge::new_dna(
+        RootSeed::new(88010),
+        "dark-fantasy",
+        CreativeAxes::neutral(),
+        Default::default(),
+    )
+    .unwrap();
+    character_v1.content_version = ContentVersion(1);
+    let character_v1_output =
+        CharacterForge::generate_in_project(&character_v1, project_id()).unwrap();
+    let character_v2_output = character_candidate(88011);
+    let quest_v2_output = quest_candidate(88012, 2);
+    let quest_v3_output = quest_candidate(88013, 3);
+    vec![
+        serde_json::to_string(&character_v1_output).unwrap(),
+        serde_json::to_string(&character_v2_output).unwrap(),
+        serde_json::to_string(&quest_v2_output).unwrap(),
+        serde_json::to_string(&quest_v3_output).unwrap(),
+    ]
+}
+
+#[test]
+fn frozen_schema1_fixture_migrates_losslessly_and_failure_rolls_back_with_backup() {
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/schema1-populated.sqlite3");
+    assert!(
+        fixture.exists(),
+        "frozen schema-1 fixture must be present in source control"
+    );
+    let success = TestDb::new("schema1-frozen-success");
+    fs::copy(&fixture, success.path()).unwrap();
+    let source = Connection::open(success.path()).unwrap();
+    let before = fixture_rows(&source);
+    let replay_before = fixture_replay_signatures(&source);
+    let versioned_replay_before = legacy_replay_version_signatures();
+    drop(source);
+    let migrated = ProjectStore::open(success.path()).unwrap();
+    assert_eq!(migrated.list_relationships().unwrap().len(), 0);
+    assert_eq!(fixture_rows(&migrated.connection), before);
+    assert_eq!(
+        fixture_replay_signatures(&migrated.connection),
+        replay_before
+    );
+    assert_eq!(legacy_replay_version_signatures(), versioned_replay_before);
+    assert_eq!(
+        migrated
+            .load_project()
+            .unwrap()
+            .unwrap()
+            .envelope
+            .schema_version
+            .0,
+        2
+    );
+    let characters = migrated.list_entities().unwrap();
+    let mut locked_character = characters
+        .iter()
+        .find_map(|record| match &record.entity {
+            StoredEntity::CharacterCandidate(candidate)
+                if candidate.character.envelope.notes.as_deref()
+                    == Some("Δοκιμή — frozen schema-one prose") =>
+            {
+                Some(candidate.clone())
+            }
+            _ => None,
+        })
+        .expect("frozen locked Character Candidate");
+    let locked_name = locked_character.character.envelope.name.clone();
+    let name_key = CharacterField::Name.key().unwrap();
+    let name_nonce = locked_character.dna.recipe.field_controls[&name_key].nonce;
+    CharacterForge::reroll_field(&mut locked_character, CharacterField::Archetype).unwrap();
+    assert_eq!(locked_character.character.envelope.name, locked_name);
+    assert_eq!(
+        locked_character.dna.recipe.field_controls[&name_key].nonce,
+        name_nonce
+    );
+    let mut locked_quest = characters
+        .iter()
+        .find_map(|record| match &record.entity {
+            StoredEntity::QuestCandidate(candidate)
+                if candidate.clue.is_some()
+                    && candidate
+                        .quest
+                        .envelope
+                        .tags
+                        .iter()
+                        .any(|tag| tag == "candidate") =>
+            {
+                Some(candidate.clone())
+            }
+            _ => None,
+        })
+        .expect("frozen Quest v3 Candidate");
+    let locked_objective = locked_quest.quest.objective.clone();
+    let objective_key = QuestField::Objective.key().unwrap();
+    let objective_nonce = locked_quest.dna.recipe.field_controls[&objective_key].nonce;
+    QuestForge::reroll_field(&mut locked_quest, QuestField::Twist).unwrap();
+    assert_eq!(locked_quest.quest.objective, locked_objective);
+    assert_eq!(
+        locked_quest.dna.recipe.field_controls[&objective_key].nonce,
+        objective_nonce
+    );
+    migrated.integrity_check().unwrap();
+    assert!(migration_backup_path(success.path()).exists());
+    drop(migrated);
+    let reopened = ProjectStore::open(success.path()).unwrap();
+    assert_eq!(
+        reopened.load_project().unwrap().unwrap().name,
+        "Memory Test World"
+    );
+
+    let failure = TestDb::new("schema1-frozen-failure");
+    fs::copy(&fixture, failure.path()).unwrap();
+    let original_rows = fixture_rows(&Connection::open(failure.path()).unwrap());
+    Connection::open(failure.path())
+        .unwrap()
+        .execute_batch("CREATE TABLE entities_v2(injected INTEGER);")
+        .unwrap();
+    assert!(matches!(
+        ProjectStore::open(failure.path()),
+        Err(StoreError::Sqlite(_))
+    ));
+    let original = Connection::open(failure.path()).unwrap();
+    assert_eq!(
+        original
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(fixture_rows(&original), original_rows);
+    assert!(migration_backup_path(failure.path()).exists());
+    assert_eq!(
+        original
+            .query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))
+            .unwrap(),
+        "ok"
+    );
+    assert_eq!(
+        original
+            .query_row("SELECT COUNT(*) FROM projects", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
 }
 fn character_candidate(seed: u64) -> CharacterCandidate {
     let dna = CharacterForge::new_dna(
@@ -402,6 +718,175 @@ fn fresh_database_has_versioned_schema_and_enforces_foreign_keys() {
     );
     assert!(store.load_project().unwrap().is_none());
     store.integrity_check().unwrap();
+}
+
+#[test]
+fn relationship_candidate_lifecycle_is_revisioned_and_stale_safe() {
+    let db = TestDb::new("relationship-lifecycle");
+    let mut store = create_store(&db);
+    let character = character_candidate(120).character.envelope.id;
+    store
+        .persist_candidate(StoredEntity::CharacterCandidate(character_candidate(120)))
+        .unwrap();
+    let location = EntityId::from_bytes([42; 16]);
+    add_typed_endpoint(&store, location, "location");
+    let relationship = born_in_relationship(character, location);
+    assert_eq!(store.create_relationship(relationship.clone()).unwrap(), 1);
+    assert_eq!(
+        store
+            .get_relationship(relationship.id)
+            .unwrap()
+            .unwrap()
+            .relationship,
+        relationship
+    );
+    assert_eq!(store.list_relationships().unwrap().len(), 1);
+    assert_eq!(
+        store
+            .list_relationships_for_entity(character)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(matches!(
+        store.create_relationship(relationship.clone()),
+        Err(StoreError::Sqlite(_))
+    ));
+    assert_eq!(store.promote_relationship(relationship.id, 1).unwrap(), 2);
+    let promoted = store
+        .get_relationship(relationship.id)
+        .unwrap()
+        .unwrap()
+        .relationship;
+    let revisions = store.list_relationship_revisions(relationship.id).unwrap();
+    assert_eq!(revisions.len(), 1);
+    assert_eq!(revisions[0].relationship, promoted);
+    assert_eq!(promoted.state, RelationshipState::Canon);
+
+    let mut proposed_b = promoted.clone();
+    proposed_b.origin = EntityOrigin::Imported;
+    assert_eq!(
+        store
+            .revise_relationship(proposed_b, 2, "clarified provenance")
+            .unwrap(),
+        3
+    );
+    let revisions = store.list_relationship_revisions(relationship.id).unwrap();
+    assert_eq!(revisions.len(), 2);
+    assert_eq!(revisions[0].relationship, promoted);
+    let revised = revisions[1].relationship.clone();
+    assert_eq!(revised.origin, EntityOrigin::Imported);
+    assert_eq!(
+        store
+            .get_relationship(relationship.id)
+            .unwrap()
+            .unwrap()
+            .relationship,
+        revised
+    );
+
+    let mut stale = revised.clone();
+    stale.origin = EntityOrigin::Generated;
+    assert!(matches!(
+        store.revise_relationship(stale, 2, "stale revision"),
+        Err(StoreError::Conflict { .. })
+    ));
+    assert_eq!(
+        store.list_relationship_revisions(relationship.id).unwrap(),
+        revisions
+    );
+    assert_eq!(
+        store
+            .get_relationship(relationship.id)
+            .unwrap()
+            .unwrap()
+            .relationship,
+        revised
+    );
+
+    let mut proposed_c = revised.clone();
+    proposed_c.origin = EntityOrigin::Generated;
+    assert_eq!(
+        store
+            .revise_relationship(proposed_c, 3, "confirmed provenance")
+            .unwrap(),
+        4
+    );
+    let revisions = store.list_relationship_revisions(relationship.id).unwrap();
+    assert_eq!(revisions.len(), 3);
+    assert_eq!(revisions[0].relationship, promoted);
+    assert_eq!(revisions[1].relationship, revised);
+    let final_revision = revisions[2].relationship.clone();
+    assert_eq!(final_revision.origin, EntityOrigin::Generated);
+    assert_eq!(
+        store
+            .get_relationship(relationship.id)
+            .unwrap()
+            .unwrap()
+            .relationship,
+        final_revision
+    );
+    drop(store);
+
+    let mut reopened = ProjectStore::open(db.path()).unwrap();
+    let reopened_revisions = reopened
+        .list_relationship_revisions(relationship.id)
+        .unwrap();
+    assert_eq!(reopened_revisions, revisions);
+    let reopened_current = reopened.get_relationship(relationship.id).unwrap().unwrap();
+    assert_eq!(reopened_current.relationship, final_revision);
+    assert_eq!(reopened_current.write_version, 4);
+
+    // Archive behavior remains unchanged: archive retains the prior Canon snapshot.
+    assert_eq!(
+        reopened.archive_relationship(relationship.id, 4).unwrap(),
+        5
+    );
+    let archived_revisions = reopened
+        .list_relationship_revisions(relationship.id)
+        .unwrap();
+    assert_eq!(archived_revisions.len(), 4);
+    assert_eq!(archived_revisions[3].relationship, final_revision);
+    assert!(matches!(
+        reopened.promote_relationship(relationship.id, 5),
+        Err(StoreError::InvalidOperation(_))
+    ));
+    assert_eq!(
+        reopened
+            .get_relationship(relationship.id)
+            .unwrap()
+            .unwrap()
+            .write_version,
+        5
+    );
+}
+
+#[test]
+fn relationship_rejects_wrong_endpoint_type_and_cross_project_identity() {
+    let db = TestDb::new("relationship-invalid");
+    let mut store = create_store(&db);
+    let candidate = character_candidate(121);
+    let character = candidate.character.envelope.id;
+    store
+        .persist_candidate(StoredEntity::CharacterCandidate(candidate))
+        .unwrap();
+    let quest = quest_candidate(122, 3);
+    let quest_id = quest.quest.envelope.id;
+    store
+        .persist_candidate(StoredEntity::QuestCandidate(quest))
+        .unwrap();
+    let location = EntityId::from_bytes([43; 16]);
+    add_typed_endpoint(&store, location, "location");
+    assert!(matches!(
+        store.create_relationship(born_in_relationship(quest_id, location)),
+        Err(StoreError::Validation(_))
+    ));
+    let mut cross_project = born_in_relationship(character, location);
+    cross_project.project_id = ProjectId::from_bytes([99; 16]);
+    assert!(matches!(
+        store.create_relationship(cross_project),
+        Err(StoreError::InvalidOperation(_))
+    ));
 }
 
 #[test]
@@ -1145,14 +1630,9 @@ fn foreign_key_corruption_is_reported_and_does_not_affect_an_independent_project
     .unwrap();
     drop(raw);
 
-    let reopened = ProjectStore::open(corrupt_db.path()).unwrap();
     assert!(matches!(
-        reopened.integrity_check(),
-        Err(StoreError::Corrupt(message)) if message.contains("foreign-key violation")
-    ));
-    assert!(matches!(
-        reopened.get_entity(entity_id),
-        Err(StoreError::Corrupt(_))
+        ProjectStore::open(corrupt_db.path()),
+        Err(StoreError::Corrupt(message)) if message.contains("foreign-key violations")
     ));
 
     let healthy = create_store(&healthy_db);

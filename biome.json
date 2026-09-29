@@ -2,7 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/src-tauri/gen"]
+    "includes": ["**", "!**/src-tauri/gen", "!**/target"]
   },
   "formatter": {
     "enabled": true,

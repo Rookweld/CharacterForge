@@ -25,6 +25,7 @@ Thumbs.db
 # Local application/database files
 *.sqlite
 *.sqlite3
+!crates/storage/tests/fixtures/schema1-populated.sqlite3
 *.db
 *.db-wal
 *.db-shm

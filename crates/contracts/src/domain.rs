@@ -9,6 +9,76 @@ use serde::{Deserialize, Serialize};
 pub enum EntityType {
     Character,
     Quest,
+    Location,
+    Faction,
+    Item,
+    Creature,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationshipType {
+    BornIn,
+    MemberOf,
+    Owns,
+    OpposedBy,
+}
+
+impl RelationshipType {
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::BornIn => "born_in",
+            Self::MemberOf => "member_of",
+            Self::Owns => "owns",
+            Self::OpposedBy => "opposed_by",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationshipState {
+    Candidate,
+    Canon,
+    Archived,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Relationship {
+    pub id: crate::RelationshipId,
+    pub project_id: ProjectId,
+    pub relationship_type: RelationshipType,
+    pub source_id: EntityId,
+    pub target_id: EntityId,
+    pub state: RelationshipState,
+    pub origin: EntityOrigin,
+    pub created_at_unix_ms: i64,
+    pub updated_at_unix_ms: i64,
+}
+
+impl Relationship {
+    pub fn validate(&self) -> ValidationResult<()> {
+        self.id.validate("relationship.id")?;
+        self.project_id.validate("relationship.project_id")?;
+        self.source_id.validate("relationship.source_id")?;
+        self.target_id.validate("relationship.target_id")?;
+        if self.source_id == self.target_id {
+            return Err(ValidationErrors::one(ValidationError::new(
+                ValidationCode::InvalidEntity,
+                "relationship.endpoints",
+                "source and target must be distinct entities",
+            )));
+        }
+        if self.created_at_unix_ms < 0 || self.updated_at_unix_ms < self.created_at_unix_ms {
+            return Err(ValidationErrors::one(ValidationError::new(
+                ValidationCode::InvalidTimestamp,
+                "relationship.timestamps",
+                "timestamps must be non-negative and updated_at must not precede created_at",
+            )));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -104,6 +174,41 @@ impl EntityEnvelope {
             provenance.dna.validate()?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod substrate_contract_tests {
+    use super::*;
+    use crate::RelationshipId;
+
+    #[test]
+    fn entity_type_serialization_keeps_existing_and_new_keys_stable() {
+        let expected = [
+            (EntityType::Character, "\"character\""),
+            (EntityType::Quest, "\"quest\""),
+            (EntityType::Location, "\"location\""),
+            (EntityType::Faction, "\"faction\""),
+            (EntityType::Item, "\"item\""),
+            (EntityType::Creature, "\"creature\""),
+        ];
+        for (kind, json) in expected {
+            assert_eq!(serde_json::to_string(&kind).unwrap(), json);
+            assert_eq!(serde_json::from_str::<EntityType>(json).unwrap(), kind);
+        }
+    }
+
+    #[test]
+    fn relationship_contract_rejects_nil_ids_and_has_stable_type_keys() {
+        assert_eq!(RelationshipType::BornIn.key(), "born_in");
+        assert_eq!(RelationshipType::MemberOf.key(), "member_of");
+        assert_eq!(RelationshipType::Owns.key(), "owns");
+        assert_eq!(RelationshipType::OpposedBy.key(), "opposed_by");
+        assert!(
+            RelationshipId::from_bytes([0; 16])
+                .validate("relationship.id")
+                .is_err()
+        );
     }
 }
 

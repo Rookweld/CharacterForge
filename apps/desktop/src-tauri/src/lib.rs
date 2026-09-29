@@ -4,15 +4,15 @@ use forge_app_core::{
 };
 use forge_contracts::{
     CanonState, CreativeAxes, CreativeAxis, EntityId, INITIAL_CONTENT_VERSION,
-    INITIAL_GENERATOR_VERSION, INITIAL_SCHEMA_VERSION, ProjectEnvelope, ProjectId, RootSeed,
+    INITIAL_GENERATOR_VERSION, ProjectEnvelope, ProjectId, RootSeed,
 };
 use forge_export::{
     ExportError, create_backup, export_project, import_project_to_directory, project_database_path,
     restore_active, write_entity_json, write_entity_markdown,
 };
 use forge_storage::{
-    EntityRecord, EntityRevision, ForgeRunRecord, ProjectSession, ProjectStore, SessionHistory,
-    StoreError, StoredEntity, StoredProject,
+    CURRENT_SCHEMA_VERSION, EntityRecord, EntityRevision, ForgeRunRecord, ProjectSession,
+    ProjectStore, SessionHistory, StoreError, StoredEntity, StoredProject,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -471,7 +471,7 @@ fn create_project(
         active_store(&mut session)?.create_project(&StoredProject {
             envelope: ProjectEnvelope {
                 id: new_project_id(),
-                schema_version: INITIAL_SCHEMA_VERSION,
+                schema_version: forge_contracts::SchemaVersion(CURRENT_SCHEMA_VERSION as u16),
                 generator_version: INITIAL_GENERATOR_VERSION,
                 content_version: INITIAL_CONTENT_VERSION,
             },

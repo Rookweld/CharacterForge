@@ -2,11 +2,12 @@
 //!
 //! This crate depends on domain contracts and candidate types, never on Tauri or UI code.
 
-use forge_app_core::{CharacterCandidate, QuestCandidate};
+use forge_app_core::{CharacterCandidate, QuestCandidate, validate_relationship_endpoints};
 use forge_contracts::{
     CanonState, Character, EntityEnvelope, EntityId, EntityOrigin, EntityType, GenerationAction,
-    GenerationMetadata, ProjectEnvelope, ProjectId, Quest, SchemaVersion, Uuid128, ValidationCode,
-    ValidationError, ValidationErrors, ValidationResult,
+    GenerationMetadata, ProjectEnvelope, ProjectId, Quest, Relationship, RelationshipId,
+    RelationshipState, SchemaVersion, Uuid128, ValidationCode, ValidationError, ValidationErrors,
+    ValidationResult,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
@@ -17,7 +18,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 const BUSY_TIMEOUT_MS: u64 = 5_000;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -52,6 +53,8 @@ impl StoredProject {
 
 /// Complete persisted representation. Candidate wrappers retain per-field manual-edit origins,
 /// including Quest v3 clue/briefing data, while canonical entities retain their full contract.
+/// Intentionally remains limited to Character/Quest until each future Entity Type receives a
+/// real typed payload contract; schema-2 vocabulary alone does not create placeholder entities.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum StoredEntity {
@@ -166,11 +169,53 @@ pub trait EntityRepository {
     fn list_revisions(&self, id: EntityId) -> StoreResult<Vec<EntityRevision>>;
 }
 
+/// Persistence boundary for explicit first-class Relationship assertions.
+pub trait RelationshipRepository {
+    fn create_relationship(&mut self, relationship: Relationship) -> StoreResult<i64>;
+    fn get_relationship(&self, id: RelationshipId) -> StoreResult<Option<RelationshipRecord>>;
+    fn list_relationships(&self) -> StoreResult<Vec<RelationshipRecord>>;
+    fn list_relationships_for_entity(&self, id: EntityId) -> StoreResult<Vec<RelationshipRecord>>;
+    fn promote_relationship(
+        &mut self,
+        id: RelationshipId,
+        expected_version: i64,
+    ) -> StoreResult<i64>;
+    fn revise_relationship(
+        &mut self,
+        relationship: Relationship,
+        expected_version: i64,
+        reason: &str,
+    ) -> StoreResult<i64>;
+    fn archive_relationship(
+        &mut self,
+        id: RelationshipId,
+        expected_version: i64,
+    ) -> StoreResult<i64>;
+    fn list_relationship_revisions(
+        &self,
+        id: RelationshipId,
+    ) -> StoreResult<Vec<RelationshipRevision>>;
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EntityRevision {
     pub revision_number: i64,
     pub reason: String,
     pub entity: StoredEntity,
+    pub created_at_unix_ms: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RelationshipRecord {
+    pub relationship: Relationship,
+    pub write_version: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RelationshipRevision {
+    pub revision_number: i64,
+    pub reason: String,
+    pub relationship: Relationship,
     pub created_at_unix_ms: i64,
 }
 
@@ -254,11 +299,229 @@ impl ProjectStore {
         connection.pragma_update(None, "journal_mode", "WAL")?;
         connection.pragma_update(None, "synchronous", "FULL")?;
         connection.pragma_update(None, "wal_autocheckpoint", 1000)?;
-        Ok(Self { path, connection })
+        let store = Self { path, connection };
+        store.integrity_check()?;
+        Ok(store)
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Stores a new Candidate assertion. Endpoints must be typed entities in this project.
+    pub fn create_relationship(&mut self, relationship: Relationship) -> StoreResult<i64> {
+        relationship.validate()?;
+        if relationship.state != RelationshipState::Candidate {
+            return Err(StoreError::InvalidOperation(
+                "new relationships must begin as Candidate".into(),
+            ));
+        }
+        let tx = self.connection.transaction()?;
+        validate_relationship_entities(&tx, &relationship)?;
+        let source = entity_type_from_db(entity_type_for_id(&tx, relationship.source_id)?)?;
+        let target = entity_type_from_db(entity_type_for_id(&tx, relationship.target_id)?)?;
+        validate_relationship_endpoints(&relationship, source, target)?;
+        let body = encode_json(&relationship)?;
+        tx.execute("INSERT INTO relationships(id,project_id,relationship_type,source_id,target_id,state,origin,body_json,write_version,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,'candidate',?6,?7,1,?8,?9)", params![id_text(relationship.id.uuid()), id_text(relationship.project_id.uuid()), relationship.relationship_type.key(), id_text(relationship.source_id.uuid()), id_text(relationship.target_id.uuid()), origin(relationship.origin), body, relationship.created_at_unix_ms, relationship.updated_at_unix_ms])?;
+        tx.commit()?;
+        Ok(1)
+    }
+
+    pub fn get_relationship(&self, id: RelationshipId) -> StoreResult<Option<RelationshipRecord>> {
+        self.connection
+            .query_row(
+                "SELECT body_json, write_version FROM relationships WHERE id=?1",
+                [id_text(id.uuid())],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .optional()?
+            .map(|(body, version)| {
+                Ok(RelationshipRecord {
+                    relationship: decode_relationship(&body)?,
+                    write_version: version,
+                })
+            })
+            .transpose()
+    }
+
+    pub fn list_relationships(&self) -> StoreResult<Vec<RelationshipRecord>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT body_json,write_version FROM relationships ORDER BY created_at,id")?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        rows.map(|row| {
+            let (body, write_version) = row?;
+            Ok(RelationshipRecord {
+                relationship: decode_relationship(&body)?,
+                write_version,
+            })
+        })
+        .collect()
+    }
+
+    pub fn list_relationships_for_entity(
+        &self,
+        id: EntityId,
+    ) -> StoreResult<Vec<RelationshipRecord>> {
+        let mut statement = self.connection.prepare("SELECT body_json,write_version FROM relationships WHERE source_id=?1 OR target_id=?1 ORDER BY created_at,id")?;
+        let rows = statement.query_map([id_text(id.uuid())], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        rows.map(|row| {
+            let (body, write_version) = row?;
+            Ok(RelationshipRecord {
+                relationship: decode_relationship(&body)?,
+                write_version,
+            })
+        })
+        .collect()
+    }
+
+    pub fn promote_relationship(&mut self, id: RelationshipId, expected: i64) -> StoreResult<i64> {
+        self.mutate_relationship(
+            id,
+            expected,
+            Some("promoted to canon"),
+            RelationshipState::Canon,
+        )
+    }
+
+    pub fn revise_relationship(
+        &mut self,
+        mut relationship: Relationship,
+        expected: i64,
+        reason: &str,
+    ) -> StoreResult<i64> {
+        validate_text("relationship.revision_reason", reason)?;
+        let prior = self
+            .get_relationship(relationship.id)?
+            .ok_or_else(|| StoreError::NotFound(id_text(relationship.id.uuid())))?;
+        if prior.relationship.state != RelationshipState::Canon
+            || relationship.state != RelationshipState::Canon
+        {
+            return Err(StoreError::InvalidOperation(
+                "only Canon relationships may be explicitly revised".into(),
+            ));
+        }
+        if prior.relationship.project_id != relationship.project_id
+            || prior.relationship.relationship_type != relationship.relationship_type
+            || prior.relationship.source_id != relationship.source_id
+            || prior.relationship.target_id != relationship.target_id
+        {
+            return Err(StoreError::InvalidOperation(
+                "relationship identity, project, type, and endpoints are immutable".into(),
+            ));
+        }
+        relationship.created_at_unix_ms = prior.relationship.created_at_unix_ms;
+        relationship.updated_at_unix_ms = now_unix_ms()?.max(prior.relationship.updated_at_unix_ms);
+        relationship.validate()?;
+        let tx = self.connection.transaction()?;
+        let current = relationship_version_tx(&tx, relationship.id)?;
+        check_version(expected, current)?;
+        let revision_number: i64 = tx.query_row("SELECT COALESCE(MAX(revision_number),0)+1 FROM relationship_revisions WHERE relationship_id=?1", [id_text(relationship.id.uuid())], |row| row.get(0))?;
+        let body = encode_json(&relationship)?;
+        tx.execute("INSERT INTO relationship_revisions(relationship_id,revision_number,reason,body_json,created_at) VALUES (?1,?2,?3,?4,?5)", params![id_text(relationship.id.uuid()), revision_number, reason, body, relationship.updated_at_unix_ms])?;
+        let changed = tx.execute("UPDATE relationships SET origin=?1,body_json=?2,updated_at=?3,write_version=write_version+1 WHERE id=?4 AND write_version=?5", params![origin(relationship.origin), body, relationship.updated_at_unix_ms, id_text(relationship.id.uuid()), expected])?;
+        if changed != 1 {
+            return Err(StoreError::Conflict {
+                expected,
+                actual: relationship_version_tx(&tx, relationship.id)?,
+            });
+        }
+        tx.commit()?;
+        Ok(expected + 1)
+    }
+
+    pub fn archive_relationship(&mut self, id: RelationshipId, expected: i64) -> StoreResult<i64> {
+        self.mutate_relationship(
+            id,
+            expected,
+            Some("archive relationship"),
+            RelationshipState::Archived,
+        )
+    }
+
+    pub fn list_relationship_revisions(
+        &self,
+        id: RelationshipId,
+    ) -> StoreResult<Vec<RelationshipRevision>> {
+        let mut statement = self.connection.prepare("SELECT revision_number,reason,body_json,created_at FROM relationship_revisions WHERE relationship_id=?1 ORDER BY revision_number")?;
+        let rows = statement.query_map([id_text(id.uuid())], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (revision_number, reason, body, created_at_unix_ms) = row?;
+            Ok(RelationshipRevision {
+                revision_number,
+                reason,
+                relationship: decode_relationship(&body)?,
+                created_at_unix_ms,
+            })
+        })
+        .collect()
+    }
+
+    fn mutate_relationship(
+        &mut self,
+        id: RelationshipId,
+        expected: i64,
+        reason: Option<&str>,
+        state: RelationshipState,
+    ) -> StoreResult<i64> {
+        let tx = self.connection.transaction()?;
+        let (body, current) = tx
+            .query_row(
+                "SELECT body_json,write_version FROM relationships WHERE id=?1",
+                [id_text(id.uuid())],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::NotFound(id_text(id.uuid())))?;
+        check_version(expected, Some(current))?;
+        let mut relationship = decode_relationship(&body)?;
+        let prior_updated_at = relationship.updated_at_unix_ms;
+        if relationship.state == RelationshipState::Archived {
+            return Err(StoreError::InvalidOperation(
+                "archived relationship is immutable".into(),
+            ));
+        }
+        if state == RelationshipState::Canon && relationship.state != RelationshipState::Candidate {
+            return Err(StoreError::InvalidOperation(
+                "only Candidate relationships can be promoted".into(),
+            ));
+        }
+        if state == RelationshipState::Canon {
+            relationship.state = RelationshipState::Canon;
+            relationship.updated_at_unix_ms = now_unix_ms()?.max(prior_updated_at);
+        }
+        if let Some(reason) = reason {
+            let revision_number: i64 = tx.query_row("SELECT COALESCE(MAX(revision_number),0)+1 FROM relationship_revisions WHERE relationship_id=?1", [id_text(id.uuid())], |row| row.get(0))?;
+            let snapshot = if state == RelationshipState::Canon {
+                encode_json(&relationship)?
+            } else {
+                body
+            };
+            tx.execute("INSERT INTO relationship_revisions(relationship_id,revision_number,reason,body_json,created_at) VALUES (?1,?2,?3,?4,?5)", params![id_text(id.uuid()), revision_number, reason, snapshot, now_unix_ms()?])?;
+        }
+        relationship.state = state;
+        relationship.updated_at_unix_ms = now_unix_ms()?.max(prior_updated_at);
+        let new_body = encode_json(&relationship)?;
+        let changed = tx.execute("UPDATE relationships SET state=?1,body_json=?2,updated_at=?3,write_version=write_version+1 WHERE id=?4 AND write_version=?5", params![relationship_state(state), new_body, relationship.updated_at_unix_ms, id_text(id.uuid()), expected])?;
+        if changed != 1 {
+            return Err(StoreError::Conflict {
+                expected,
+                actual: relationship_version_tx(&tx, id)?,
+            });
+        }
+        tx.commit()?;
+        Ok(expected + 1)
     }
 
     pub fn create_project(&mut self, project: &StoredProject) -> StoreResult<()> {
@@ -276,7 +539,7 @@ impl ProjectStore {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 id_text(project.envelope.id.uuid()), project.name,
-                project.envelope.schema_version.0, project.envelope.generator_version.0,
+                CURRENT_SCHEMA_VERSION as u16, project.envelope.generator_version.0,
                 project.envelope.content_version.0, project.created_at_unix_ms,
                 project.updated_at_unix_ms
             ],
@@ -597,6 +860,60 @@ impl ProjectStore {
                 "{violations} foreign-key violations"
             )));
         }
+        let mut statement = self.connection.prepare("SELECT r.id,r.project_id,r.relationship_type,r.source_id,r.target_id,r.state,r.origin,r.body_json,r.created_at,r.updated_at,s.entity_type,t.entity_type FROM relationships r JOIN entities s ON s.project_id=r.project_id AND s.id=r.source_id JOIN entities t ON t.project_id=r.project_id AND t.id=r.target_id")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, i64>(8)?,
+                row.get::<_, i64>(9)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, String>(11)?,
+            ))
+        })?;
+        for row in rows {
+            let (
+                id,
+                project,
+                kind,
+                source,
+                target,
+                state,
+                origin_text,
+                body,
+                created,
+                updated,
+                source_type,
+                target_type,
+            ) = row?;
+            let relation = decode_relationship(&body)?;
+            if id != id_text(relation.id.uuid())
+                || project != id_text(relation.project_id.uuid())
+                || kind != relation.relationship_type.key()
+                || source != id_text(relation.source_id.uuid())
+                || target != id_text(relation.target_id.uuid())
+                || state != relationship_state(relation.state)
+                || origin_text != origin(relation.origin)
+                || created != relation.created_at_unix_ms
+                || updated != relation.updated_at_unix_ms
+            {
+                return Err(StoreError::Corrupt(
+                    "relationship columns disagree with the stored typed contract".into(),
+                ));
+            }
+            validate_relationship_endpoints(
+                &relation,
+                entity_type_from_db(source_type)?,
+                entity_type_from_db(target_type)?,
+            )
+            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+        }
         Ok(())
     }
 
@@ -689,6 +1006,49 @@ impl EntityRepository for ProjectStore {
     }
 }
 
+impl RelationshipRepository for ProjectStore {
+    fn create_relationship(&mut self, relationship: Relationship) -> StoreResult<i64> {
+        ProjectStore::create_relationship(self, relationship)
+    }
+    fn get_relationship(&self, id: RelationshipId) -> StoreResult<Option<RelationshipRecord>> {
+        ProjectStore::get_relationship(self, id)
+    }
+    fn list_relationships(&self) -> StoreResult<Vec<RelationshipRecord>> {
+        ProjectStore::list_relationships(self)
+    }
+    fn list_relationships_for_entity(&self, id: EntityId) -> StoreResult<Vec<RelationshipRecord>> {
+        ProjectStore::list_relationships_for_entity(self, id)
+    }
+    fn promote_relationship(
+        &mut self,
+        id: RelationshipId,
+        expected_version: i64,
+    ) -> StoreResult<i64> {
+        ProjectStore::promote_relationship(self, id, expected_version)
+    }
+    fn revise_relationship(
+        &mut self,
+        relationship: Relationship,
+        expected_version: i64,
+        reason: &str,
+    ) -> StoreResult<i64> {
+        ProjectStore::revise_relationship(self, relationship, expected_version, reason)
+    }
+    fn archive_relationship(
+        &mut self,
+        id: RelationshipId,
+        expected_version: i64,
+    ) -> StoreResult<i64> {
+        ProjectStore::archive_relationship(self, id, expected_version)
+    }
+    fn list_relationship_revisions(
+        &self,
+        id: RelationshipId,
+    ) -> StoreResult<Vec<RelationshipRevision>> {
+        ProjectStore::list_relationship_revisions(self, id)
+    }
+}
+
 /// Owns the currently-open project handle. A requested switch opens and validates the new
 /// database before dropping the active one, so a bad path never loses the current session.
 #[derive(Default)]
@@ -763,6 +1123,111 @@ fn migrate(connection: &mut Connection, path: &Path) -> StoreResult<()> {
     if version == CURRENT_SCHEMA_VERSION {
         return Ok(());
     }
+    if version == 1 {
+        checkpoint_for_migration(connection)?;
+        let backup = migration_backup_path(path);
+        if backup.exists() {
+            return Err(StoreError::InvalidOperation(format!(
+                "refusing to overwrite existing migration recovery file {}",
+                backup.display()
+            )));
+        }
+        fs::copy(path, &backup)?;
+        connection.pragma_update(None, "foreign_keys", "OFF")?;
+        let result = (|| -> StoreResult<()> {
+            let before_entities: i64 =
+                connection.query_row("SELECT COUNT(*) FROM entities", [], |row| row.get(0))?;
+            let before_revisions: i64 =
+                connection.query_row("SELECT COUNT(*) FROM entity_revisions", [], |row| {
+                    row.get(0)
+                })?;
+            let before_runs: i64 =
+                connection.query_row("SELECT COUNT(*) FROM forge_runs", [], |row| row.get(0))?;
+            let before_settings: i64 =
+                connection.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))?;
+            let tx = connection.transaction()?;
+            tx.execute_batch(r#"
+CREATE TABLE entities_v2 (
+ id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL,
+ entity_type TEXT NOT NULL CHECK(entity_type IN ('character','quest','location','faction','item','creature')),
+ name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+ canon_state TEXT NOT NULL CHECK(canon_state IN ('draft','candidate','canon','archived')),
+ origin TEXT NOT NULL CHECK(origin IN ('manual','generated','imported')),
+ favorite INTEGER NOT NULL DEFAULT 0 CHECK(favorite IN (0,1)),
+ schema_version INTEGER NOT NULL CHECK(schema_version > 0),
+ body_json TEXT NOT NULL CHECK(json_valid(body_json)),
+ generation_json TEXT CHECK(generation_json IS NULL OR json_valid(generation_json)),
+ write_version INTEGER NOT NULL CHECK(write_version > 0),
+ created_at INTEGER NOT NULL CHECK(created_at >= 0), updated_at INTEGER NOT NULL CHECK(updated_at >= created_at),
+ UNIQUE(project_id,id), FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+INSERT INTO entities_v2 SELECT * FROM entities;
+DROP TABLE entities;
+ALTER TABLE entities_v2 RENAME TO entities;
+CREATE INDEX idx_entities_project_state ON entities(project_id,canon_state,updated_at);
+CREATE INDEX idx_entities_project_type ON entities(project_id,entity_type,updated_at);
+CREATE TABLE relationships (
+ id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL, relationship_type TEXT NOT NULL CHECK(relationship_type IN ('born_in','member_of','owns','opposed_by')),
+ source_id TEXT NOT NULL, target_id TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('candidate','canon','archived')),
+ origin TEXT NOT NULL CHECK(origin IN ('manual','generated','imported')), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
+ write_version INTEGER NOT NULL CHECK(write_version > 0), created_at INTEGER NOT NULL CHECK(created_at >= 0), updated_at INTEGER NOT NULL CHECK(updated_at >= created_at),
+ UNIQUE(project_id,relationship_type,source_id,target_id), UNIQUE(project_id,id),
+ FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+ FOREIGN KEY(project_id,source_id) REFERENCES entities(project_id,id),
+ FOREIGN KEY(project_id,target_id) REFERENCES entities(project_id,id)
+);
+CREATE INDEX idx_relationships_project_state ON relationships(project_id,state,updated_at);
+CREATE INDEX idx_relationships_source ON relationships(project_id,source_id);
+CREATE INDEX idx_relationships_target ON relationships(project_id,target_id);
+CREATE TABLE relationship_revisions (
+ revision_id INTEGER PRIMARY KEY AUTOINCREMENT, relationship_id TEXT NOT NULL,
+ revision_number INTEGER NOT NULL CHECK(revision_number > 0), reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+ body_json TEXT NOT NULL CHECK(json_valid(body_json)), created_at INTEGER NOT NULL CHECK(created_at >= 0),
+ UNIQUE(relationship_id,revision_number), FOREIGN KEY(relationship_id) REFERENCES relationships(id) ON DELETE RESTRICT
+);
+"#)?;
+            let bad: i64 =
+                tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                    row.get(0)
+                })?;
+            if bad != 0 {
+                return Err(StoreError::Corrupt(format!(
+                    "schema-2 migration produced {bad} foreign-key violations"
+                )));
+            }
+            let after_entities: i64 =
+                tx.query_row("SELECT COUNT(*) FROM entities", [], |row| row.get(0))?;
+            let after_revisions: i64 =
+                tx.query_row("SELECT COUNT(*) FROM entity_revisions", [], |row| {
+                    row.get(0)
+                })?;
+            let after_runs: i64 =
+                tx.query_row("SELECT COUNT(*) FROM forge_runs", [], |row| row.get(0))?;
+            let after_settings: i64 =
+                tx.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))?;
+            if (
+                before_entities,
+                before_revisions,
+                before_runs,
+                before_settings,
+            ) != (after_entities, after_revisions, after_runs, after_settings)
+            {
+                return Err(StoreError::Corrupt(
+                    "schema-2 migration changed legacy row counts".into(),
+                ));
+            }
+            tx.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
+            tx.execute(
+                "UPDATE projects SET schema_version=?1",
+                [CURRENT_SCHEMA_VERSION],
+            )?;
+            tx.commit()?;
+            Ok(())
+        })();
+        connection.pragma_update(None, "foreign_keys", "ON")?;
+        result?;
+        return Ok(());
+    }
     let has_legacy: bool = connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_projects')",
         [],
@@ -791,7 +1256,7 @@ fn migrate(connection: &mut Connection, path: &Path) -> StoreResult<()> {
         fs::copy(path, backup)?;
     }
     let tx = connection.transaction()?;
-    tx.execute_batch(SCHEMA_V1)?;
+    tx.execute_batch(SCHEMA_V2)?;
     if has_legacy {
         let legacy_count: i64 =
             tx.query_row("SELECT COUNT(*) FROM legacy_projects", [], |row| row.get(0))?;
@@ -802,13 +1267,26 @@ fn migrate(connection: &mut Connection, path: &Path) -> StoreResult<()> {
         }
         tx.execute(
             "INSERT INTO projects(id, name, schema_version, generator_version, content_version, created_at, updated_at)
-             SELECT id, name, 1, 1, 1, created_at, updated_at FROM legacy_projects",
-            [],
+             SELECT id, name, ?1, 1, 1, created_at, updated_at FROM legacy_projects",
+            [CURRENT_SCHEMA_VERSION],
         )?;
         tx.execute_batch("DROP TABLE legacy_projects;")?;
     }
     tx.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
     tx.commit()?;
+    Ok(())
+}
+
+fn checkpoint_for_migration(connection: &Connection) -> StoreResult<()> {
+    let (busy, log_frames, checkpointed): (i64, i64, i64) =
+        connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?;
+    if busy != 0 || (log_frames >= 0 && checkpointed != log_frames) {
+        return Err(StoreError::InvalidOperation(format!(
+            "WAL checkpoint incomplete before migration (busy={busy}, frames={checkpointed}/{log_frames})"
+        )));
+    }
     Ok(())
 }
 
@@ -818,7 +1296,7 @@ fn migration_backup_path(path: &Path) -> PathBuf {
     path.with_file_name(name)
 }
 
-const SCHEMA_V1: &str = r#"
+const SCHEMA_V2: &str = r#"
 CREATE TABLE IF NOT EXISTS projects (
  id TEXT PRIMARY KEY NOT NULL,
  name TEXT NOT NULL CHECK(length(trim(name)) > 0),
@@ -831,7 +1309,7 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS entities (
  id TEXT PRIMARY KEY NOT NULL,
  project_id TEXT NOT NULL,
- entity_type TEXT NOT NULL CHECK(entity_type IN ('character','quest')),
+ entity_type TEXT NOT NULL CHECK(entity_type IN ('character','quest','location','faction','item','creature')),
  name TEXT NOT NULL CHECK(length(trim(name)) > 0),
  canon_state TEXT NOT NULL CHECK(canon_state IN ('draft','candidate','canon','archived')),
  origin TEXT NOT NULL CHECK(origin IN ('manual','generated','imported')),
@@ -878,6 +1356,25 @@ CREATE TABLE IF NOT EXISTS settings (
  key TEXT PRIMARY KEY NOT NULL,
  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
  updated_at INTEGER NOT NULL CHECK(updated_at >= 0)
+);
+CREATE TABLE IF NOT EXISTS relationships (
+ id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL, relationship_type TEXT NOT NULL CHECK(relationship_type IN ('born_in','member_of','owns','opposed_by')),
+ source_id TEXT NOT NULL, target_id TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('candidate','canon','archived')),
+ origin TEXT NOT NULL CHECK(origin IN ('manual','generated','imported')), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
+ write_version INTEGER NOT NULL CHECK(write_version > 0), created_at INTEGER NOT NULL CHECK(created_at >= 0), updated_at INTEGER NOT NULL CHECK(updated_at >= created_at),
+ UNIQUE(project_id,relationship_type,source_id,target_id), UNIQUE(project_id,id),
+ FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+ FOREIGN KEY(project_id,source_id) REFERENCES entities(project_id,id),
+ FOREIGN KEY(project_id,target_id) REFERENCES entities(project_id,id)
+);
+CREATE INDEX IF NOT EXISTS idx_relationships_project_state ON relationships(project_id,state,updated_at);
+CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(project_id,source_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(project_id,target_id);
+CREATE TABLE IF NOT EXISTS relationship_revisions (
+ revision_id INTEGER PRIMARY KEY AUTOINCREMENT, relationship_id TEXT NOT NULL,
+ revision_number INTEGER NOT NULL CHECK(revision_number > 0), reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+ body_json TEXT NOT NULL CHECK(json_valid(body_json)), created_at INTEGER NOT NULL CHECK(created_at >= 0),
+ UNIQUE(relationship_id,revision_number), FOREIGN KEY(relationship_id) REFERENCES relationships(id) ON DELETE RESTRICT
 );
 "#;
 
@@ -989,6 +1486,72 @@ fn get_entity_tx(tx: &Transaction<'_>, id: EntityId) -> StoreResult<Option<Entit
         .optional()?;
     row.map(decode_entity_row).transpose()
 }
+
+fn validate_relationship_entities(
+    tx: &Transaction<'_>,
+    relationship: &Relationship,
+) -> StoreResult<()> {
+    let project = id_text(relationship.project_id.uuid());
+    for endpoint in [relationship.source_id, relationship.target_id] {
+        let owner: Option<String> = tx
+            .query_row(
+                "SELECT project_id FROM entities WHERE id=?1",
+                [id_text(endpoint.uuid())],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match owner {
+            None => return Err(StoreError::NotFound(id_text(endpoint.uuid()))),
+            Some(owner) if owner != project => {
+                return Err(StoreError::InvalidOperation(
+                    "relationships cannot cross project boundaries".into(),
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn entity_type_for_id(tx: &Transaction<'_>, endpoint: EntityId) -> StoreResult<String> {
+    tx.query_row(
+        "SELECT entity_type FROM entities WHERE id=?1",
+        [id_text(endpoint.uuid())],
+        |row| row.get(0),
+    )
+    .optional()?
+    .ok_or_else(|| StoreError::NotFound(id_text(endpoint.uuid())))
+}
+
+fn entity_type_from_db(value: String) -> StoreResult<EntityType> {
+    match value.as_str() {
+        "character" => Ok(EntityType::Character),
+        "quest" => Ok(EntityType::Quest),
+        "location" => Ok(EntityType::Location),
+        "faction" => Ok(EntityType::Faction),
+        "item" => Ok(EntityType::Item),
+        "creature" => Ok(EntityType::Creature),
+        _ => Err(StoreError::Corrupt(format!("unknown entity type {value}"))),
+    }
+}
+
+fn relationship_version_tx(tx: &Transaction<'_>, id: RelationshipId) -> StoreResult<Option<i64>> {
+    tx.query_row(
+        "SELECT write_version FROM relationships WHERE id=?1",
+        [id_text(id.uuid())],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(StoreError::from)
+}
+
+fn decode_relationship(body: &str) -> StoreResult<Relationship> {
+    let relationship: Relationship = decode_json(body)?;
+    relationship
+        .validate()
+        .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+    Ok(relationship)
+}
 fn current_version(tx: &Transaction<'_>, id: EntityId) -> StoreResult<Option<i64>> {
     tx.query_row(
         "SELECT write_version FROM entities WHERE id=?1",
@@ -1077,6 +1640,17 @@ fn entity_type(value: EntityType) -> &'static str {
     match value {
         EntityType::Character => "character",
         EntityType::Quest => "quest",
+        EntityType::Location => "location",
+        EntityType::Faction => "faction",
+        EntityType::Item => "item",
+        EntityType::Creature => "creature",
+    }
+}
+fn relationship_state(value: RelationshipState) -> &'static str {
+    match value {
+        RelationshipState::Candidate => "candidate",
+        RelationshipState::Canon => "canon",
+        RelationshipState::Archived => "archived",
     }
 }
 fn canon_state(value: CanonState) -> &'static str {

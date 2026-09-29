@@ -141,6 +141,7 @@ macro_rules! id_type {
 
 id_type!(ProjectId);
 id_type!(EntityId);
+id_type!(RelationshipId);
 
 #[cfg(test)]
 mod tests {

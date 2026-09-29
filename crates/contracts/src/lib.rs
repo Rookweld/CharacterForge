@@ -8,13 +8,14 @@ mod version;
 
 pub use domain::{
     CanonState, Character, EntityEnvelope, EntityOrigin, EntityType, ProjectEnvelope, Quest,
+    Relationship, RelationshipState, RelationshipType,
 };
 pub use generation::{
     ConstraintKey, Constraints, CreativeAxes, CreativeAxis, FieldControl, FieldDependencies,
     FieldKey, FieldNonce, ForgeDNA, GenerationAction, GenerationKind, GenerationMetadata,
     GenerationRecipe, PresetId, RootSeed,
 };
-pub use identity::{EntityId, ProjectId, Uuid128};
+pub use identity::{EntityId, ProjectId, RelationshipId, Uuid128};
 pub use validation::{ValidationCode, ValidationError, ValidationErrors, ValidationResult};
 pub use version::{ContentVersion, GeneratorVersion, RecipeVersion, SchemaVersion};
 

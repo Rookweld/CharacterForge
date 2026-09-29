@@ -1,6 +1,8 @@
 //! Closed, data-only portable project packages and recoverable local restore.
 
-use forge_storage::{ProjectSession, ProjectStore, StoreError, StoredEntity, StoredProject};
+use forge_storage::{
+    CURRENT_SCHEMA_VERSION, ProjectSession, ProjectStore, StoreError, StoredEntity, StoredProject,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
@@ -627,9 +629,13 @@ fn validate_manifest_project(
     manifest: &Manifest,
     project: &StoredProject,
 ) -> Result<(), ExportError> {
+    let schema_compatible = manifest.database_schema_version == project.envelope.schema_version.0
+        || (manifest.database_schema_version == 1
+            && project.envelope.schema_version.0 == CURRENT_SCHEMA_VERSION as u16);
     if manifest.project_id != project.envelope.id.uuid().to_string()
         || manifest.project_name != project.name
-        || manifest.database_schema_version != project.envelope.schema_version.0
+        || !schema_compatible
+        || manifest.database_schema_version > CURRENT_SCHEMA_VERSION as u16
         || manifest.generator_version != project.envelope.generator_version.0
         || manifest.content_version != project.envelope.content_version.0
     {
@@ -831,7 +837,7 @@ mod tests {
     };
     use forge_contracts::{
         ContentVersion, CreativeAxes, FieldKey, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
-        INITIAL_SCHEMA_VERSION, ProjectEnvelope, ProjectId, RootSeed,
+        ProjectEnvelope, ProjectId, RootSeed, SchemaVersion,
     };
     use std::collections::BTreeMap;
     use zip::write::SimpleFileOptions;
@@ -857,7 +863,7 @@ mod tests {
         StoredProject {
             envelope: ProjectEnvelope {
                 id: ProjectId::from_bytes([1; 16]),
-                schema_version: INITIAL_SCHEMA_VERSION,
+                schema_version: SchemaVersion(CURRENT_SCHEMA_VERSION as u16),
                 generator_version: INITIAL_GENERATOR_VERSION,
                 content_version: INITIAL_CONTENT_VERSION,
             },
@@ -959,7 +965,7 @@ mod tests {
         assert_eq!(manifest.format_version, FORMAT_VERSION);
         assert_eq!(manifest.project_id, project_id.uuid().to_string());
         assert_eq!(manifest.project_name, "Vault Test World");
-        assert_eq!(manifest.database_schema_version, 1);
+        assert_eq!(manifest.database_schema_version, 2);
         assert_eq!(manifest.application, "Character Forge / Quest Forge");
         assert_eq!(manifest.members[0].name, DATABASE_MEMBER);
         assert!(source.with_extension("sqlite3-wal").exists() || source.exists());

@@ -4,15 +4,15 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** Mission 09 — RELEASE
-**Current status:** PASS — v1.0.0 FOUNDATION release gates verified, including fresh-install-like operator smoke of the final portable ZIP
+**Current mission:** THE_FORGE_A_SUBSTRATE — schema-2 compatibility foundation + first-class Relationship persistence
+**Current status:** PASS — schema-1 migration, semantic preservation, Relationship persistence/revision parity, Vault compatibility, and full verification gates passed
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
-**Last committed baseline:** `54e1d7b1aff072f01e553ce338036820742b026d` (Mission 08 ARMOR closeout)
+**FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `54e1d7b1aff072f01e553ce338036820742b026d`
-**Worktree:** Mission 09 docs, version/build configuration, and release scripts modified/untracked; ignored release payloads present locally; two untracked Mission 09 logs and two operator export files left untouched; nothing staged or committed.
-**Schema version:** 1
+**HEAD:** `31f69ac800c07ffdf5ab5f567f80d5593b9684e2` (`docs: canonicalize The Forge entity universe discovery`)
+**Worktree:** Mission A source/tests/config/docs and frozen schema-1 fixture modified or untracked, unstaged and uncommitted; pre-existing operator exports and Mission 09 logs remain untouched.
+**Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
@@ -29,6 +29,8 @@
 - UI must not own persistence; generator/domain must not depend on Tauri UI; persistence must not depend on visual components
 
 ## Completed mission gates
+
+- THE_FORGE_A_SUBSTRATE and R1 are PASS. Schema-2 migration preserves schema-1 project/entity/revision/history/settings rows and semantic readback; the frozen fixture includes locked/manual Character and Quest v3 Candidate state, Canon revisions, favorites, Unicode/tags/notes, forge history, and settings. First-class Relationships support four app-owned directed definitions, project isolation, Candidate/Canon/archive lifecycle, immutable A/B/C revision history, duplicates, endpoint validation, stale-write protection, and reopen persistence. Verification: 121 Rust tests, 36 frontend tests, `scripts/verify.ps1`, and `git diff --check` passed; the workspace has 1 ignored one-time fixture writer. See `docs/missions/THE_FORGE_A_SUBSTRATE_REPORT.md` and `docs/missions/THE_FORGE_A_R1_RELATIONSHIP_REVISION_PARITY_REPORT.md`.
 
 - Repository structure, architecture documentation, package manifests and lockfiles, React desktop shell, strict TypeScript, formatter/linter, and Mission 00 report are present.
 - Frontend formatting, lint, typecheck, one React UI test, and production frontend build passed.
