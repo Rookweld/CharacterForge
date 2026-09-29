@@ -220,6 +220,7 @@ pub type Constraints = BTreeMap<ConstraintKey, String>;
 pub enum GenerationKind {
     Character,
     Quest,
+    Location,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -651,6 +652,18 @@ mod tests {
         assert_eq!(
             unsupported.validate().unwrap_err().errors[0].code,
             ValidationCode::UnsupportedVersion
+        );
+    }
+
+    #[test]
+    fn location_generation_kind_has_a_stable_independent_key() {
+        assert_eq!(
+            serde_json::to_string(&GenerationKind::Location).unwrap(),
+            "\"location\""
+        );
+        assert_eq!(
+            serde_json::from_str::<GenerationKind>("\"location\"").unwrap(),
+            GenerationKind::Location
         );
     }
 }

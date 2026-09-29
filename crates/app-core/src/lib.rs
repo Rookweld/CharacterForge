@@ -3,6 +3,7 @@
 mod character;
 mod character_content;
 mod field_stream;
+mod location;
 mod quest;
 mod quest_content;
 mod relationship;
@@ -12,6 +13,10 @@ pub use character::{
     CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, FieldValueOrigin,
 };
 pub use field_stream::FieldStream;
+pub use location::{
+    LOCATION_FIELD_ORDER, LocationCandidate, LocationField, LocationFieldValue, LocationForge,
+    LocationOrigin,
+};
 pub use quest::{QuestCandidate, QuestField, QuestFieldValue, QuestForge};
 pub use relationship::{
     RELATIONSHIP_DEFINITIONS, RelationshipDefinition, relationship_definition,

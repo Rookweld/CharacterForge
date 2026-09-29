@@ -1,10 +1,10 @@
 use forge_app_core::{
-    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, QuestField,
-    QuestFieldValue, QuestForge,
+    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, LocationField,
+    LocationFieldValue, LocationForge, QuestField, QuestFieldValue, QuestForge,
 };
 use forge_contracts::{
     CanonState, CreativeAxes, CreativeAxis, EntityId, INITIAL_CONTENT_VERSION,
-    INITIAL_GENERATOR_VERSION, ProjectEnvelope, ProjectId, RootSeed,
+    INITIAL_GENERATOR_VERSION, LocationProfile, ProjectEnvelope, ProjectId, RootSeed,
 };
 use forge_export::{
     ExportError, create_backup, export_project, import_project_to_directory, project_database_path,
@@ -724,6 +724,14 @@ fn set_entity_field_lock(
                 QuestForge::unlock(candidate, target)?
             }
         }
+        StoredEntity::LocationCandidate(candidate) => {
+            let target = location_field(field)?;
+            if locked {
+                LocationForge::lock(candidate, target)?
+            } else {
+                LocationForge::unlock(candidate, target)?
+            }
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon records cannot be edited as candidates.",
@@ -741,6 +749,9 @@ fn reroll_entity_field(entity: &mut StoredEntity, field: &str) -> Result<(), UiE
         StoredEntity::QuestCandidate(candidate) => {
             QuestForge::reroll_field(candidate, quest_field(field)?)?;
         }
+        StoredEntity::LocationCandidate(candidate) => {
+            LocationForge::reroll_field(candidate, location_field(field)?)?;
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon records cannot be rerolled.",
@@ -757,6 +768,9 @@ fn reroll_entity_unlocked(entity: &mut StoredEntity) -> Result<(), UiError> {
         }
         StoredEntity::QuestCandidate(candidate) => {
             QuestForge::reroll_all(candidate)?;
+        }
+        StoredEntity::LocationCandidate(candidate) => {
+            LocationForge::reroll_all_unlocked(candidate)?;
         }
         _ => {
             return Err(invalid_candidate_operation(
@@ -776,6 +790,10 @@ fn edit_entity_field(entity: &mut StoredEntity, field: &str, value: Value) -> Re
         StoredEntity::QuestCandidate(candidate) => {
             let target = quest_field(field)?;
             candidate.manual_edit(target, quest_value(target, value)?)?;
+        }
+        StoredEntity::LocationCandidate(candidate) => {
+            let target = location_field(field)?;
+            candidate.manual_edit(target, location_value(target, value)?)?;
         }
         _ => {
             return Err(invalid_candidate_operation(
@@ -856,6 +874,33 @@ fn forge_quest(
     let dna = QuestForge::new_dna(RootSeed::new(seed), &preset, creative_axes, constraints)?;
     let candidate = QuestForge::generate_in_project(&dna, project.envelope.id)?;
     let entity = StoredEntity::QuestCandidate(candidate);
+    session.working = Some(entity.clone());
+    session.write_version = None;
+    session.history = Some(SessionHistory::new(entity.clone()));
+    Ok(entity)
+}
+
+#[tauri::command]
+fn forge_location(
+    state: State<'_, AppState>,
+    preset: String,
+    seed: u64,
+    axes: BTreeMap<CreativeAxis, u8>,
+) -> Result<StoredEntity, UiError> {
+    let mut session = lock_state(&state)?;
+    let project = active_store(&mut session)?
+        .load_project()?
+        .ok_or_else(|| UiError {
+            kind: "no_project",
+            message: "Open or create a project first.".into(),
+            expected: None,
+            actual: None,
+        })?;
+    let mut creative_axes = CreativeAxes { levels: axes };
+    creative_axes.normalize()?;
+    let dna = LocationForge::new_dna(RootSeed::new(seed), &preset, creative_axes)?;
+    let candidate = LocationForge::generate_in_project(&dna, project.envelope.id)?;
+    let entity = StoredEntity::LocationCandidate(candidate);
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
@@ -1048,6 +1093,9 @@ fn revise_canon(state: State<'_, AppState>, reason: String) -> Result<EntityView
         StoredEntity::QuestCandidate(candidate) => {
             candidate.quest.envelope.canon_state = CanonState::Canon;
         }
+        StoredEntity::LocationCandidate(candidate) => {
+            candidate.location.envelope.canon_state = CanonState::Canon;
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon revisions require the structured working candidate.",
@@ -1180,6 +1228,9 @@ fn as_working_candidate(mut entity: StoredEntity) -> Result<StoredEntity, UiErro
         StoredEntity::QuestCandidate(candidate) => {
             candidate.quest.envelope.canon_state = CanonState::Candidate;
         }
+        StoredEntity::LocationCandidate(candidate) => {
+            candidate.location.envelope.canon_state = CanonState::Candidate;
+        }
         _ => {
             return Err(UiError {
                 kind: "invalid_history",
@@ -1300,6 +1351,14 @@ fn quest_field(value: &str) -> Result<QuestField, UiError> {
         actual: None,
     })
 }
+fn location_field(value: &str) -> Result<LocationField, UiError> {
+    serde_json::from_value(Value::String(value.to_owned())).map_err(|_| UiError {
+        kind: "validation",
+        message: format!("Unknown Location field: {value}"),
+        expected: None,
+        actual: None,
+    })
+}
 fn string_values(value: Value) -> Result<Vec<String>, UiError> {
     match value {
         Value::String(text) => Ok(text
@@ -1362,6 +1421,22 @@ fn quest_value(field: QuestField, value: Value) -> Result<QuestFieldValue, UiErr
         Ok(QuestFieldValue::Text(scalar_value(value)?))
     }
 }
+fn location_value(field: LocationField, value: Value) -> Result<LocationFieldValue, UiError> {
+    match field {
+        LocationField::Profile => serde_json::from_value::<LocationProfile>(value)
+            .map(LocationFieldValue::Profile)
+            .map_err(|_| UiError {
+                kind: "validation",
+                message: "Choose a supported Location profile.".into(),
+                expected: None,
+                actual: None,
+            }),
+        LocationField::NotableFeatures | LocationField::StoryHooks => {
+            Ok(LocationFieldValue::Texts(string_values(value)?))
+        }
+        _ => Ok(LocationFieldValue::Text(scalar_value(value)?)),
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -1384,6 +1459,7 @@ pub fn run() {
             get_project,
             forge_character,
             forge_quest,
+            forge_location,
             set_field_lock,
             reroll_field,
             reroll_unlocked,

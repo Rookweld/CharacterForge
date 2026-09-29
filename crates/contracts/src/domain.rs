@@ -333,6 +333,70 @@ impl Quest {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocationProfile {
+    Settlement,
+    District,
+    Building,
+    Dungeon,
+    Ruins,
+    Wilderness,
+    Landmark,
+    Interior,
+    Site,
+    Other,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Location {
+    pub envelope: EntityEnvelope,
+    pub location_profile: LocationProfile,
+    pub summary: String,
+    pub visual_identity: String,
+    pub atmosphere: String,
+    pub purpose: String,
+    pub history: String,
+    pub inhabitants_summary: String,
+    pub notable_features: Vec<String>,
+    pub danger: String,
+    pub secret: String,
+    pub story_hooks: Vec<String>,
+}
+
+impl Location {
+    pub fn validate(&self) -> ValidationResult<()> {
+        self.envelope.validate(EntityType::Location)?;
+        for (path, value) in [
+            ("location.summary", &self.summary),
+            ("location.visual_identity", &self.visual_identity),
+            ("location.atmosphere", &self.atmosphere),
+            ("location.purpose", &self.purpose),
+            ("location.history", &self.history),
+            ("location.inhabitants_summary", &self.inhabitants_summary),
+            ("location.danger", &self.danger),
+            ("location.secret", &self.secret),
+        ] {
+            validate_text(path, value)?;
+        }
+        for (path, values) in [
+            ("location.notable_features", &self.notable_features),
+            ("location.story_hooks", &self.story_hooks),
+        ] {
+            validate_text_list(path, values)?;
+            if values.is_empty() {
+                return Err(ValidationErrors::one(ValidationError::new(
+                    ValidationCode::MissingField,
+                    path,
+                    "must contain at least one value",
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
 fn validate_version(version: u16, path: &str) -> ValidationResult<()> {
     if version == 0 {
         return Err(ValidationErrors::one(ValidationError::new(
@@ -487,6 +551,35 @@ mod tests {
         assert_eq!(
             quest.validate().unwrap_err().errors[0].code,
             ValidationCode::EmptyValue
+        );
+    }
+
+    #[test]
+    fn location_contract_is_typed_validated_and_profile_keys_are_stable() {
+        let mut location = Location {
+            envelope: envelope(EntityType::Location),
+            location_profile: LocationProfile::Ruins,
+            summary: "A collapsed observatory watches the salt flats.".into(),
+            visual_identity: "Copper ribs rise through pale stone.".into(),
+            atmosphere: "Wind carries a low metallic note.".into(),
+            purpose: "It once measured the returning tide.".into(),
+            history: "Its keepers sealed the western stair.".into(),
+            inhabitants_summary: "Three families shelter in the dry vault.".into(),
+            notable_features: vec!["A cracked meridian lens".into()],
+            danger: "The upper gallery sheds stone without warning.".into(),
+            secret: "The tide charts were altered before the collapse.".into(),
+            story_hooks: vec!["A fresh lamp burns below the sealed stair.".into()],
+        };
+        assert!(location.validate().is_ok());
+        assert_eq!(
+            serde_json::to_string(&location.location_profile).unwrap(),
+            "\"ruins\""
+        );
+        location.notable_features.clear();
+        assert!(location.validate().is_err());
+        assert_eq!(
+            serde_json::to_string(&LocationProfile::Other).unwrap(),
+            "\"other\""
         );
     }
 

@@ -4,17 +4,21 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_A_SUBSTRATE — schema-2 compatibility foundation + first-class Relationship persistence
-**Current status:** PASS — schema-1 migration, semantic preservation, Relationship persistence/revision parity, Vault compatibility, and full verification gates passed
+**Current mission:** THE_FORGE_B1_PLACE_CORE — standalone deterministic Location Forge
+**Current status:** PARTIAL — R2 automated remediation PASS; final minimal Location lock/profile operator recheck required
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `31f69ac800c07ffdf5ab5f567f80d5593b9684e2` (`docs: canonicalize The Forge entity universe discovery`)
-**Worktree:** Mission A source/tests/config/docs and frozen schema-1 fixture modified or untracked, unstaged and uncommitted; pre-existing operator exports and Mission 09 logs remain untouched.
+**HEAD:** `e76cc225f0071cc77a57d9e47b6b773376d20639` (`docs: prepare Location Forge core mission`)
+**Worktree:** B1 implementation and sample-audit files are unstaged/uncommitted; four pre-existing Mission 09/operator files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
+
+## Current The Forge handoff
+
+THE_FORGE_B1_PLACE_CORE is **PARTIAL — R2 AUTOMATED REMEDIATION PASS; FINAL MINIMAL OPERATOR RECHECK REQUIRED**. R2 aligns the Location Profile display property (`location_profile`) with its typed action key (`profile`) and stable control key (`01-location-profile`). Profile lock display/action, reroll, valid enum edit, and locked-profile reroll-all behavior are covered. R1 Name display source fix remains intact and its regression passes, but the operator's last recheck used the stale default executable because Windows denied replacement while it was running. The current verification executable is `apps/desktop/src-tauri/target/mission-b1-r2-verify/release/character-forge-desktop.exe`, built 2026-09-29 15:10:57.056 UTC; launch this exact file for the final check. Verification: 131 Rust tests (1 existing ignored fixture-writer test), 40 frontend tests, `scripts/verify.ps1`, formatting/lint/typecheck/frontend build, strict Clippy, Cargo metadata, optimized Windows Tauri no-bundle build, and `git diff --check` passed. Global `npm test` remains unavailable because its configured npm-cli.js is missing; repository pnpm tests passed. The B1 sample audit contains 52 Codex-reviewed outputs and does not claim operator acceptance. No P0/P1/P2/P3 finding was identified in automated review. Branch `master`, HEAD `e76cc225f0071cc77a57d9e47b6b773376d20639`; B1 changes remain uncommitted. Do not begin B2. See the R1/R2 reports and B1 report.
 
 ## Architecture decisions currently locked
 

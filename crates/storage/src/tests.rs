@@ -1,7 +1,7 @@
 use super::*;
 use forge_app_core::{
-    CharacterField, CharacterFieldValue, CharacterForge, FieldValueOrigin, QuestField,
-    QuestFieldValue, QuestForge,
+    CharacterField, CharacterFieldValue, CharacterForge, FieldValueOrigin, LocationField,
+    LocationFieldValue, LocationForge, QuestField, QuestFieldValue, QuestForge,
 };
 use forge_contracts::{
     ContentVersion, CreativeAxes, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -29,6 +29,59 @@ impl TestDb {
     fn path(&self) -> &Path {
         &self.0
     }
+}
+
+#[test]
+fn location_candidate_persists_favorites_promotes_revises_and_reopens() {
+    let db = TestDb::new("location-lifecycle");
+    let mut store = create_store(&db);
+    let dna =
+        LocationForge::new_dna(RootSeed::new(55), "steampunk", CreativeAxes::neutral()).unwrap();
+    let candidate = LocationForge::generate_in_project(&dna, project_id()).unwrap();
+    let id = candidate.location.envelope.id;
+    assert_eq!(
+        store
+            .persist_candidate(StoredEntity::LocationCandidate(candidate.clone()))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        store.get_entity(id).unwrap().unwrap().entity,
+        StoredEntity::LocationCandidate(candidate)
+    );
+    assert_eq!(store.toggle_favorite(id, true, 1).unwrap(), 2);
+    assert_eq!(store.promote_candidate(id, 2).unwrap(), 3);
+    let mut canon = match store.get_entity(id).unwrap().unwrap().entity {
+        StoredEntity::LocationCandidate(value) => value,
+        _ => panic!("Location candidate wrapper was not retained"),
+    };
+    LocationForge::manual_edit(
+        &mut canon,
+        LocationField::Purpose,
+        LocationFieldValue::Text("The community maintains a public pressure archive.".into()),
+    )
+    .unwrap();
+    assert_eq!(
+        store
+            .revise_canon(
+                StoredEntity::LocationCandidate(canon),
+                3,
+                "clarified public purpose"
+            )
+            .unwrap(),
+        4
+    );
+    assert_eq!(store.list_revisions(id).unwrap().len(), 2);
+    drop(store);
+    let reopened = ProjectStore::open(db.path()).unwrap();
+    let current = reopened.get_entity(id).unwrap().unwrap();
+    assert!(current.entity.envelope().favorite);
+    assert_eq!(current.write_version, 4);
+    assert_eq!(reopened.list_revisions(id).unwrap().len(), 2);
+    let history = reopened.list_history(Some(id)).unwrap();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].action, "forge");
+    assert_eq!(history[1].action, "manual_edit");
 }
 impl Drop for TestDb {
     fn drop(&mut self) {

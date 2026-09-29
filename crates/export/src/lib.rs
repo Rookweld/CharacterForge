@@ -274,6 +274,9 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
             ("Character", &value.character.envelope, Some(&value.dna))
         }
         StoredEntity::QuestCandidate(value) => ("Quest", &value.quest.envelope, Some(&value.dna)),
+        StoredEntity::LocationCandidate(value) => {
+            ("Location", &value.location.envelope, Some(&value.dna))
+        }
         StoredEntity::Character(value) => (
             "Character",
             &value.envelope,
@@ -292,6 +295,15 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
                 .as_ref()
                 .map(|p| &p.dna),
         ),
+        StoredEntity::Location(value) => (
+            "Location",
+            &value.envelope,
+            value
+                .envelope
+                .generation_provenance
+                .as_ref()
+                .map(|p| &p.dna),
+        ),
     };
     let preset = dna
         .map(|value| value.recipe.universe_preset.as_str())
@@ -299,6 +311,45 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
     let seed = dna
         .map(|value| value.recipe.root_seed.to_string())
         .unwrap_or_else(|| "not recorded".into());
+    let location = match entity {
+        StoredEntity::LocationCandidate(value) => Some(&value.location),
+        StoredEntity::Location(value) => Some(value),
+        _ => None,
+    };
+    if let Some(location) = location {
+        let features = location
+            .notable_features
+            .iter()
+            .map(|v| format!("- {}", escape_markdown(v)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let hooks = location
+            .story_hooks
+            .iter()
+            .map(|v| format!("- {}", escape_markdown(v)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Ok(format!(
+            "# Location: {}\n\n- Project ID: `{}`\n- Entity ID: `{}`\n- State: {:?}\n- Profile: {:?}\n- Preset: `{}`\n- Seed: `{}`\n\n## Summary\n\n{}\n\n## Visual identity\n\n{}\n\n## Atmosphere\n\n{}\n\n## Purpose\n\n{}\n\n## History\n\n{}\n\n## Inhabitants\n\n{}\n\n## Notable features\n\n{}\n\n## Danger\n\n{}\n\n## Secret\n\n{}\n\n## Story hooks\n\n{}\n\n## Complete canonical data\n\n{ticks}json\n{encoded}\n{ticks}\n",
+            escape_markdown(&location.envelope.name),
+            location.envelope.project_id.uuid(),
+            location.envelope.id.uuid(),
+            location.envelope.canon_state,
+            location.location_profile,
+            preset,
+            seed,
+            escape_markdown(&location.summary),
+            escape_markdown(&location.visual_identity),
+            escape_markdown(&location.atmosphere),
+            escape_markdown(&location.purpose),
+            escape_markdown(&location.history),
+            escape_markdown(&location.inhabitants_summary),
+            features,
+            escape_markdown(&location.danger),
+            escape_markdown(&location.secret),
+            hooks,
+        ));
+    }
     Ok(format!(
         "# {kind}: {}\n\n- Project ID: `{}`\n- Entity ID: `{}`\n- State: {:?}\n- Preset: `{}`\n- Seed: `{}`\n\n## Complete canonical data\n\n{ticks}json\n{encoded}\n{ticks}\n",
         escape_markdown(&envelope.name),
@@ -832,8 +883,8 @@ fn storage(error: StoreError) -> ExportError {
 mod tests {
     use super::*;
     use forge_app_core::{
-        CharacterField, CharacterFieldValue, CharacterForge, QuestField, QuestFieldValue,
-        QuestForge,
+        CharacterField, CharacterFieldValue, CharacterForge, LocationForge, QuestField,
+        QuestFieldValue, QuestForge,
     };
     use forge_contracts::{
         ContentVersion, CreativeAxes, FieldKey, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -933,6 +984,55 @@ mod tests {
             .set_setting("vault.test", "\"committed immediately before export\"")
             .unwrap();
         (id, character, quest, legacy_quest)
+    }
+
+    #[test]
+    fn location_json_markdown_and_forgeproject_v1_roundtrip_are_supported() {
+        let dir = Dir::new();
+        let source = dir.path("location-source.sqlite3");
+        let mut store = ProjectStore::open(&source).unwrap();
+        let project = project();
+        store.create_project(&project).unwrap();
+        let dna = LocationForge::new_dna(
+            RootSeed::new(808),
+            "contemporary-weird",
+            CreativeAxes::neutral(),
+        )
+        .unwrap();
+        let candidate = LocationForge::generate_in_project(&dna, project.envelope.id).unwrap();
+        let entity = StoredEntity::LocationCandidate(candidate);
+        let entity_id = entity.envelope().id;
+        let json = entity_json(&entity).unwrap();
+        let decoded: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        assert_eq!(
+            serde_json::from_value::<StoredEntity>(decoded["entity"].clone()).unwrap(),
+            entity
+        );
+        let markdown = entity_markdown(&entity).unwrap();
+        assert!(markdown.contains("# Location:"));
+        assert!(markdown.contains("## Notable features"));
+        store.persist_candidate(entity.clone()).unwrap();
+        let package = dir.path("location.forgeproject");
+        export_project(&store, &package).unwrap();
+        drop(store);
+        let imported_path = dir.path("location-import.sqlite3");
+        import_project(&package, &imported_path).unwrap();
+        let imported = ProjectStore::open(&imported_path).unwrap();
+        let imported_entity = imported.get_entity(entity_id).unwrap().unwrap().entity;
+        assert_eq!(imported_entity, entity);
+        let backup = dir.path("location-backup.forgeproject");
+        create_backup(&imported, &backup).unwrap();
+        let restore_target = dir.path("location-restore.sqlite3");
+        ProjectStore::open(&restore_target)
+            .unwrap()
+            .create_project(&project)
+            .unwrap();
+        restore_backup(&backup, &restore_target).unwrap();
+        let restored = ProjectStore::open(&restore_target).unwrap();
+        assert_eq!(
+            restored.get_entity(entity_id).unwrap().unwrap().entity,
+            entity
+        );
     }
 
     #[test]

@@ -23,10 +23,11 @@ type Section =
   | 'forge'
   | 'characters'
   | 'quests'
+  | 'locations'
   | 'canon'
   | 'history'
   | 'project';
-type Mode = 'character' | 'quest';
+type Mode = 'character' | 'quest' | 'location';
 type ProjectStartMode = 'create' | 'open' | 'import';
 type Field = { key: string; label: string; value: FieldValue; list?: boolean };
 const blankAxes = (): Record<Axis, number> =>
@@ -65,6 +66,31 @@ function payloadEntity(payload: ForgePayload) {
       briefing: wrapper.briefing,
     };
   }
+  if (payload.kind === 'location_candidate') {
+    const wrapper = raw as unknown as import('./api').LocationCandidate;
+    return {
+      envelope: wrapper.location.envelope,
+      location: wrapper.location,
+      dna: wrapper.dna,
+      field_origins: wrapper.field_origins,
+      clue: undefined,
+      briefing: undefined,
+    };
+  }
+  if (payload.kind === 'location') {
+    const location = raw as unknown as import('./api').Location;
+    return {
+      envelope: location.envelope,
+      location,
+      dna: required(
+        location.envelope.generation_provenance,
+        'Location generation metadata',
+      ).dna,
+      field_origins: {},
+      clue: undefined,
+      briefing: undefined,
+    };
+  }
   if (payload.kind === 'character') {
     const character = raw as unknown as Character;
     return {
@@ -95,10 +121,18 @@ function payloadEntity(payload: ForgePayload) {
 function isCharacter(payload: ForgePayload) {
   return payload.kind === 'character_candidate' || payload.kind === 'character';
 }
+function isLocation(payload: ForgePayload) {
+  return payload.kind === 'location_candidate' || payload.kind === 'location';
+}
+function isQuest(payload: ForgePayload) {
+  return payload.kind === 'quest_candidate' || payload.kind === 'quest';
+}
 function payloadTitle(payload: ForgePayload) {
   const value = payloadEntity(payload);
   if (isCharacter(payload))
     return required(value.character, 'Character payload').title;
+  if (isLocation(payload))
+    return required(value.location, 'Location payload').envelope.name;
   return required(value.quest, 'Quest payload').envelope.name;
 }
 function payloadFields(payload: ForgePayload): Field[] {
@@ -147,6 +181,45 @@ function payloadFields(payload: ForgePayload): Field[] {
     ];
   }
   const value = payloadEntity(payload);
+  if (isLocation(payload)) {
+    const l = required(value.location, 'Location payload');
+    return [
+      {
+        key: 'profile',
+        label: 'Location profile',
+        value: l.location_profile,
+      },
+      { key: 'name', label: 'Name', value: l.envelope.name },
+      {
+        key: 'visual_identity',
+        label: 'Visual identity',
+        value: l.visual_identity,
+      },
+      { key: 'atmosphere', label: 'Atmosphere', value: l.atmosphere },
+      { key: 'purpose', label: 'Purpose', value: l.purpose },
+      { key: 'summary', label: 'Summary', value: l.summary },
+      { key: 'history', label: 'History', value: l.history },
+      {
+        key: 'inhabitants_summary',
+        label: 'Inhabitants',
+        value: l.inhabitants_summary,
+      },
+      {
+        key: 'notable_features',
+        label: 'Notable features',
+        value: l.notable_features,
+        list: true,
+      },
+      { key: 'danger', label: 'Danger', value: l.danger },
+      { key: 'secret', label: 'Secret', value: l.secret },
+      {
+        key: 'story_hooks',
+        label: 'Story hooks',
+        value: l.story_hooks,
+        list: true,
+      },
+    ];
+  }
   const q = required(value.quest, 'Quest payload');
   const fields: Field[] = [
     { key: 'title', label: 'Title', value: q.envelope.name },
@@ -196,15 +269,14 @@ function fieldsOf(
   return payloadEntity(payload).dna.recipe.field_controls;
 }
 function fieldControl(payload: ForgePayload, field: string) {
-  const suffix =
-    field === 'name' ? '03-name' : `-${field.replaceAll('_', '-')}`;
+  const suffix = `-${field.replaceAll('_', '-')}`;
   const key = Object.keys(fieldsOf(payload)).find(
     (value) => value === suffix || value.endsWith(suffix),
   );
   return key ? fieldsOf(payload)[key] : undefined;
 }
 function originOf(payload: ForgePayload, field: string) {
-  const key = field === 'name' ? '03-name' : field.replaceAll('_', '-');
+  const key = field.replaceAll('_', '-');
   const control = Object.keys(fieldsOf(payload)).find((value) =>
     value.endsWith(`-${key}`),
   );
@@ -375,7 +447,10 @@ export function App() {
     if (project) void refreshRecords();
   }, [project, refreshRecords]);
   useEffect(() => {
-    if (project && ['characters', 'quests', 'canon'].includes(section))
+    if (
+      project &&
+      ['characters', 'quests', 'locations', 'canon'].includes(section)
+    )
       void refreshRecords();
   }, [project, section, refreshRecords]);
 
@@ -523,13 +598,15 @@ export function App() {
         if (constraints[key]) activeConstraints[key] = 'true';
       if (constraints.inspiration?.trim())
         activeConstraints.inspiration = constraints.inspiration.trim();
-    } else if (constraints.inspiration?.trim())
+    } else if (mode === 'quest' && constraints.inspiration?.trim())
       activeConstraints.inspiration = constraints.inspiration.trim();
     void run(
       () =>
         mode === 'character'
           ? api.forgeCharacter(preset, numericSeed, axes, activeConstraints)
-          : api.forgeQuest(preset, numericSeed, axes, activeConstraints),
+          : mode === 'quest'
+            ? api.forgeQuest(preset, numericSeed, axes, activeConstraints)
+            : api.forgeLocation(preset, numericSeed, axes),
       (value) => {
         setCandidate(value);
         setCanUndo(false);
@@ -537,7 +614,7 @@ export function App() {
         setDirty(true);
         setSelectedRecord(null);
         setNotice(
-          `${mode === 'character' ? 'Character' : 'Quest'} forged from seed ${numericSeed}.`,
+          `${mode === 'character' ? 'Character' : mode === 'quest' ? 'Quest' : 'Location'} forged from seed ${numericSeed}.`,
         );
       },
     );
@@ -1070,6 +1147,7 @@ export function App() {
               ['forge', '✦', 'Forge'],
               ['characters', '♙', 'Characters'],
               ['quests', '⚑', 'Quests'],
+              ['locations', '⌂', 'Locations'],
               ['canon', '◆', 'Canon'],
               ['history', '◷', 'History'],
               ['project', '▤', 'Project'],
@@ -1135,7 +1213,7 @@ export function App() {
                 </div>
               </div>
               <div className="mode-switch">
-                {(['character', 'quest'] as Mode[]).map((item) => (
+                {(['character', 'quest', 'location'] as Mode[]).map((item) => (
                   <button
                     type="button"
                     key={item}
@@ -1143,7 +1221,11 @@ export function App() {
                     className={mode === item ? 'selected' : ''}
                     onClick={() => setMode(item)}
                   >
-                    {item === 'character' ? 'Character' : 'Quest'}
+                    {item === 'character'
+                      ? 'Character'
+                      : item === 'quest'
+                        ? 'Quest'
+                        : 'Location'}
                   </button>
                 ))}
               </div>
@@ -1289,7 +1371,7 @@ export function App() {
               >
                 {busy
                   ? 'Forging…'
-                  : `Forge ${mode === 'character' ? 'Character' : 'Quest'}`}
+                  : `Forge ${mode === 'character' ? 'Character' : mode === 'quest' ? 'Quest' : 'Location'}`}
                 <span className="forge-button-icon" aria-hidden="true">
                   ✦
                 </span>
@@ -1348,15 +1430,7 @@ export function App() {
               ) : (
                 <div className="field-list">
                   {allFields.map((field) => {
-                    const controlKey =
-                      field.key === 'name'
-                        ? '03-name'
-                        : Object.keys(fieldsOf(current)).find((key) =>
-                            key.endsWith(`-${field.key.replaceAll('_', '-')}`),
-                          );
-                    const control = controlKey
-                      ? fieldsOf(current)[controlKey]
-                      : undefined;
+                    const control = fieldControl(current, field.key);
                     const locked = Boolean(control?.locked);
                     const modified =
                       originOf(current, field.key) === 'user_modified';
@@ -1564,7 +1638,7 @@ export function App() {
                   <span className="library-count-label">Characters</span>
                 </p>
                 <p className="library-count">
-                  {records.filter((row) => !isCharacter(row.entity)).length}{' '}
+                  {records.filter((row) => isQuest(row.entity)).length}{' '}
                   <span className="library-count-label">Quests</span>
                 </p>
                 <button
@@ -1572,11 +1646,21 @@ export function App() {
                   className="quiet full"
                   onClick={() =>
                     navigateToSection(
-                      mode === 'character' ? 'characters' : 'quests',
+                      mode === 'character'
+                        ? 'characters'
+                        : mode === 'quest'
+                          ? 'quests'
+                          : 'locations',
                     )
                   }
                 >
-                  Browse {mode === 'character' ? 'Characters' : 'Quests'} →
+                  Browse{' '}
+                  {mode === 'character'
+                    ? 'Characters'
+                    : mode === 'quest'
+                      ? 'Quests'
+                      : 'Locations'}{' '}
+                  →
                 </button>
               </section>
             </aside>
@@ -1602,12 +1686,29 @@ export function App() {
         {section === 'quests' && (
           <LibraryView
             title="Quests"
-            records={records.filter((row) => !isCharacter(row.entity))}
+            records={records.filter((row) => isQuest(row.entity))}
             loading={loading}
             empty="No Quests yet. Forge your first Quest."
             emptyActionLabel="Forge a Quest"
             onEmptyAction={() => {
               setMode('quest');
+              navigateToSection('forge');
+            }}
+            onSelect={selectRecord}
+            onFavorite={favorite}
+            onPromote={promote}
+            onExport={exportEntity}
+          />
+        )}
+        {section === 'locations' && (
+          <LibraryView
+            title="Locations"
+            records={records.filter((row) => isLocation(row.entity))}
+            loading={loading}
+            empty="No Locations yet. Forge your first Location."
+            emptyActionLabel="Forge a Location"
+            onEmptyAction={() => {
+              setMode('location');
               navigateToSection('forge');
             }}
             onSelect={selectRecord}
@@ -1899,6 +2000,7 @@ function sectionTitle(section: Section) {
       forge: 'Forge',
       characters: 'Characters',
       quests: 'Quests',
+      locations: 'Locations',
       canon: 'Canon',
       history: 'History',
       project: 'Project',
@@ -2050,9 +2152,12 @@ function RecordRow({
 }) {
   const entity = payloadEntity(record.entity);
   const character = isCharacter(record.entity);
+  const location = isLocation(record.entity);
   const summary = character
     ? required(entity.character, 'Character payload').archetype
-    : required(entity.quest, 'Quest payload').objective;
+    : location
+      ? required(entity.location, 'Location payload').summary
+      : required(entity.quest, 'Quest payload').objective;
   return (
     <article className="record-row">
       <button
@@ -2061,7 +2166,9 @@ function RecordRow({
         aria-pressed={selected}
         onClick={() => onSelect(record)}
       >
-        <span className="record-glyph">{character ? '♙' : '⚑'}</span>
+        <span className="record-glyph">
+          {character ? '♙' : location ? '⌂' : '⚑'}
+        </span>
         <span>
           <strong>{payloadTitle(record.entity)}</strong>
           <small>{summary}</small>

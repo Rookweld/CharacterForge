@@ -1,218 +1,143 @@
 # THE FORGE — DISCOVERY STATE
 
-## Current Discovery
+## Current Phase
 
-01 — Entity Universe
+THE_FORGE_B2_HOMETOWN — first Forge Further proof slice
 
 ## Status
 
-**MISSION A PASS — ENTITY/RELATIONSHIP SUBSTRATE COMMITTED**
+**B1 ACCEPTED FOR CONTINUED DEVELOPMENT WITH KNOWN P3 UI DEBT**
 
-Mission A and bounded R1 remediation are closed as PASS.
+The human operator approved continuing development despite one remaining non-blocking Workbench feedback defect:
 
-Current implementation baseline:
+- functional Location locks hold
+- lock visual state can fail to show Locked / Unlock correctly
+- tracked in GAZINGA/KNOWN_ISSUES.md as UI-001
+- must be revisited before a release-quality gate
 
-- branch: `master`
-- HEAD: `8edc134` — `feat: add The Forge entity relationship substrate`
-- prior design baseline: `31f69ac`
-- v1.0.0 FOUNDATION release baseline: `98777fe`
+## Current Baseline
 
-Only four old unrelated files remain untracked:
+- branch: master
+- B1 implementation is ready to be committed before B2 starts
+- v1.0.0 FOUNDATION release baseline remains protected
+- schema version: 2
+- Character / Quest compatibility remains green
+- Location standalone Forge is implemented
+- first-class Relationships are implemented
 
-- `The Ashen Claim.json`
-- `The Ashen Claim.md`
-- `mission09-final-verify.log`
-- `mission09-rust-test.log`
+Unrelated files to preserve and never absorb:
 
-Do not absorb them into future commits.
+- The Ashen Claim.json
+- The Ashen Claim.md
+- mission09-final-verify.log
+- mission09-rust-test.log
 
-## Verified Mission A Result
+## Verified B1 Result
 
-Schema 2 is active.
+Location now supports:
 
-Verified:
-
-- schema 1 → 2 migration with WAL checkpoint, no-clobber recovery copy, transaction and rollback
-- frozen populated schema-1 fixture
-- semantic preservation of Character/Quest content, IDs, revisions, history and settings
-- Character v1/current v2 replay preserved
-- Quest v2/current v3 replay preserved
-- lock/reroll behavior preserved
-- six EntityType serialization keys:
-  - Character
-  - Quest
-  - Location
-  - Faction
-  - Item
-  - Creature
-- first-class Relationship persistence
-- four app-owned Relationship Definitions:
-  - `born_in`
-  - `member_of`
-  - `owns`
-  - `opposed_by`
-- Relationship Candidate → Canon lifecycle
-- Relationship Canon revision parity:
-  - R1=A
-  - R2=B
-  - R3=C
-  - current=C
-- stale Relationship writes rejected without mutating history
-- Relationship chain survives close/reopen
-- Vault / forgeproject format v1 compatibility retained
-- no Location/Faction/Item/Creature generator or unfinished Forge Further UI exposed
-
-Codex full verification reported:
-
-- 121 Rust tests passed
-- 36 frontend tests passed
-- `scripts/verify.ps1` PASS
-- `git diff --check` PASS
-
-Independent Bridge review reran:
-
-- focused Relationship A/B/C lifecycle — PASS
-- full `forge-storage` suite — 23 passed, 1 ignored one-time fixture writer
-- 1,000-sequence deterministic state gauntlet — PASS
-
-Reports:
-
-- `docs/missions/THE_FORGE_A_SUBSTRATE_REPORT.md`
-- `docs/missions/THE_FORGE_A_R1_RELATIONSHIP_REVISION_PARITY_REPORT.md`
-
-## Canonical Process Files
-
-- `GAZINGA/CANON_CORE.md`
-- `GAZINGA/THE_FORGE_CANON_CORE.md`
-- `GAZINGA/THE_FORGE_OPERATING_MODEL.md`
-- `GAZINGA/THE_FORGE_CODEX_LAUNCHER_PROMPT.txt`
-
-## Canonical Design Files
-
-- `docs/design/THE_FORGE_DESIGN_INDEX.md`
-- `docs/design/THE_FORGE_ENTITY_UNIVERSE.md`
-- `docs/design/ENTITY_SCHEMA_REFERENCE.md`
-- `docs/design/ENTITY_SUBSTRATE_AND_MIGRATION.md`
-- `docs/design/FORGE_FURTHER_AND_CONTEXT.md`
-- `docs/design/VISUALS_AND_ENGINE_BOUNDARY.md`
-
-## Design Locks
-
-- stable Entity identity
-- immutable revision history
-- typed payloads
-- profiles instead of entity explosion
-- first-class Relationships
-- Forge Further is data-driven
-- generation proposes; humans establish Canon
-- Canon-first bounded context
-- frozen version-specific Context Snapshots
-- provider-neutral context
-- Forge Result Bundles
-- no automatic concept promotion
-- no automatic Relationship inference during migration
-- v1 ForgeDNA remains unchanged unless explicitly versioned
-- The Forge remains authoring source of truth
-- engines consume exports
-- schema evolution preserves v1 Character/Quest meaning
-
-## Initial Entity Universe
-
-1. Character — implemented
-2. Quest — implemented
-3. Location — next
-4. Faction
-5. Item
-6. Creature
-
-## Refined PLACE Sequence
-
-To keep implementation bounded, PLACE is split:
-
-### THE_FORGE_B1_PLACE_CORE
-
-Standalone typed deterministic Location Forge.
-
-Must prove Location can use the universal lifecycle:
-
-- deterministic generation
-- locks/rerolls/manual edits
-- persistence
+- typed Location payload
+- 10 Location profiles
+- 12 deterministic fields
+- all 11 core presets
+- ForgeDNA / field streams
+- locks / rerolls / reroll-all
+- manual edits / origins
+- undo / redo
+- Candidate save
+- favorite
+- Canon promotion / revision
 - history
-- Candidate/Canon/revisions
-- close/reopen
-- JSON/Markdown export
-- desktop Workbench integration
+- JSON / Markdown export
+- close / reopen
+- Vault / forgeproject v1 roundtrip
+- desktop Workbench Location mode and library
 
-It must NOT implement Forge Further or Character → Hometown yet.
+Automated evidence after R2:
 
-### THE_FORGE_B2_HOMETOWN
+- 131 Rust tests passed
+- 40 frontend tests passed
+- 1 existing fixture-writer test ignored
+- 1,000-sequence state gauntlet passed
+- scripts/verify.ps1 PASS using isolated target
+- strict Clippy PASS
+- frontend format/lint/typecheck/build PASS
+- optimized Tauri build PASS
+- git diff --check PASS
 
-First full Forge Further proof slice:
+Human smoke:
+- all requested B1 workflows functioned
+- Location Name/Profile locks functionally held
+- visual locked feedback remained unreliable
+- operator explicitly approved moving on
+
+## Known Issue
+
+See:
+
+GAZINGA/KNOWN_ISSUES.md
+
+UI-001 is non-blocking for B2 but must remain open.
+
+## Next Mission
+
+GAZINGA/missions/THE_FORGE_B2_HOMETOWN.md
+
+Goal:
 
     Existing saved Character
       → Forge Hometown
+      → versioned Forge Action
       → bounded Context Recipe
       → frozen Context Snapshot
-      → Location Candidate
+      → deterministic Location Candidate
       → proposed born_in Relationship
-      → atomic bundle persistence
-      → review/history/close-reopen
+      → atomic bundle save
+      → close/reopen/provenance review
 
-B2 starts only after B1 PASS.
+## B2 Design Decisions
 
-## Open Questions
+For the first proof slice:
 
-Still OPEN unless a future mission requires a decision:
+- Forge Further generation creates Candidate Entity + Candidate Relationship.
+- Source Character is never mutated.
+- Link Existing is NOT part of B2.
+- Entity/Relationship Canon promotion UX remains separate and deferred.
+- Existing forge_runs remains the durable operation/event backbone.
+- B2 may extend it with structured context/output persistence rather than replacing historical forge_runs.
+- Context compilation is read-only and Canon-first.
+- exact source state used by generation must be frozen in provenance.
 
-1. Manual Link Existing: Candidate or Canon by default?
-2. Entity + Relationship Canon promotion UX?
-3. Exact long-term evolution of `forge_runs` into richer ForgeOperation provenance?
-4. Degree of metadata-driven Workbench rendering?
-5. Hard-vs-warning cardinality policies beyond current minimal Relationship definitions?
-6. Visual Canon terminology/UX?
-7. World/Lore epistemic model?
+## Still Open
 
-B1 does not require these answers.
+- Manual Link Existing Candidate vs Canon default
+- bundled Entity + Relationship Canon promotion UX
+- richer multi-source Forge
+- generalized relationship cardinality UX
+- Visual Canon
+- World/Lore epistemic truth
 
-## Explicitly Deferred
+None are required to complete B2.
 
-- Forge Further until B2
+## Deferred
+
 - Faction Forge
 - Item Forge
 - Creature Forge
 - full six-entity Forge Further matrix
 - multi-source Forge
-- Visual generation / Visual Asset persistence
+- Visual generation
 - Game Schema Packs
-- Unity/Unreal/Godot adapters
-- World Forge
-- Ability/Spell Forge
-- AI providers
+- engine adapters
+- World / Ability Forge
 - Graph UI
 - Timeline
-- collaboration/cloud
+- collaboration / cloud
 - arbitrary plugin code execution
 
-## Next Action
+## Resume
 
-Execute:
-
-`GAZINGA/missions/THE_FORGE_B1_PLACE_CORE.md`
-
-using:
-
-`GAZINGA/THE_FORGE_CODEX_LAUNCHER_PROMPT.txt`
-
-Do not start B2 in the same Codex session.
-
-## Resume Instruction
-
-A new ChatGPT conversation can resume with:
-
-    Connect to Nullfeather Bridge.
-    Read C:\dev\CharacterForge\GAZINGA\DISCOVERY_STATE.md
-    and continue the current The Forge work.
+Connect to Nullfeather Bridge and read this file first.
 
 ## Last Updated
 

@@ -2,10 +2,12 @@
 //!
 //! This crate depends on domain contracts and candidate types, never on Tauri or UI code.
 
-use forge_app_core::{CharacterCandidate, QuestCandidate, validate_relationship_endpoints};
+use forge_app_core::{
+    CharacterCandidate, LocationCandidate, QuestCandidate, validate_relationship_endpoints,
+};
 use forge_contracts::{
     CanonState, Character, EntityEnvelope, EntityId, EntityOrigin, EntityType, GenerationAction,
-    GenerationMetadata, ProjectEnvelope, ProjectId, Quest, Relationship, RelationshipId,
+    GenerationMetadata, Location, ProjectEnvelope, ProjectId, Quest, Relationship, RelationshipId,
     RelationshipState, SchemaVersion, Uuid128, ValidationCode, ValidationError, ValidationErrors,
     ValidationResult,
 };
@@ -53,15 +55,15 @@ impl StoredProject {
 
 /// Complete persisted representation. Candidate wrappers retain per-field manual-edit origins,
 /// including Quest v3 clue/briefing data, while canonical entities retain their full contract.
-/// Intentionally remains limited to Character/Quest until each future Entity Type receives a
-/// real typed payload contract; schema-2 vocabulary alone does not create placeholder entities.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum StoredEntity {
     CharacterCandidate(CharacterCandidate),
     QuestCandidate(QuestCandidate),
+    LocationCandidate(LocationCandidate),
     Character(Character),
     Quest(Quest),
+    Location(Location),
 }
 
 impl StoredEntity {
@@ -69,8 +71,10 @@ impl StoredEntity {
         match self {
             Self::CharacterCandidate(value) => &value.character.envelope,
             Self::QuestCandidate(value) => &value.quest.envelope,
+            Self::LocationCandidate(value) => &value.location.envelope,
             Self::Character(value) => &value.envelope,
             Self::Quest(value) => &value.envelope,
+            Self::Location(value) => &value.envelope,
         }
     }
 
@@ -78,8 +82,10 @@ impl StoredEntity {
         match self {
             Self::CharacterCandidate(value) => value.validate(),
             Self::QuestCandidate(value) => value.validate(),
+            Self::LocationCandidate(value) => value.validate(),
             Self::Character(value) => value.validate(),
             Self::Quest(value) => value.validate(),
+            Self::Location(value) => value.validate(),
         }
     }
 
@@ -87,8 +93,10 @@ impl StoredEntity {
         match self {
             Self::CharacterCandidate(value) => value.character.envelope.canon_state = state,
             Self::QuestCandidate(value) => value.quest.envelope.canon_state = state,
+            Self::LocationCandidate(value) => value.location.envelope.canon_state = state,
             Self::Character(value) => value.envelope.canon_state = state,
             Self::Quest(value) => value.envelope.canon_state = state,
+            Self::Location(value) => value.envelope.canon_state = state,
         }
     }
 
@@ -96,8 +104,10 @@ impl StoredEntity {
         match self {
             Self::CharacterCandidate(value) => value.character.envelope.favorite = favorite,
             Self::QuestCandidate(value) => value.quest.envelope.favorite = favorite,
+            Self::LocationCandidate(value) => value.location.envelope.favorite = favorite,
             Self::Character(value) => value.envelope.favorite = favorite,
             Self::Quest(value) => value.envelope.favorite = favorite,
+            Self::Location(value) => value.envelope.favorite = favorite,
         }
     }
 
@@ -107,8 +117,12 @@ impl StoredEntity {
                 value.character.envelope.updated_at_unix_ms = updated_at
             }
             Self::QuestCandidate(value) => value.quest.envelope.updated_at_unix_ms = updated_at,
+            Self::LocationCandidate(value) => {
+                value.location.envelope.updated_at_unix_ms = updated_at
+            }
             Self::Character(value) => value.envelope.updated_at_unix_ms = updated_at,
             Self::Quest(value) => value.envelope.updated_at_unix_ms = updated_at,
+            Self::Location(value) => value.envelope.updated_at_unix_ms = updated_at,
         }
     }
 

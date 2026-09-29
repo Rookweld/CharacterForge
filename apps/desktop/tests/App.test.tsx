@@ -12,6 +12,7 @@ import {
   type CharacterCandidate,
   type EntityRecord,
   type ForgePayload,
+  type LocationCandidate,
   type Project,
   type Revision,
 } from '../src/api';
@@ -79,11 +80,19 @@ const dna = {
     },
   },
 };
-const envelope = (id: string, type: 'character' | 'quest' = 'character') => ({
+const envelope = (
+  id: string,
+  type: 'character' | 'quest' | 'location' = 'character',
+) => ({
   id,
   project_id: project.id,
   entity_type: type,
-  name: type === 'character' ? 'Mara Vale' : 'The Bell Below',
+  name:
+    type === 'character'
+      ? 'Mara Vale'
+      : type === 'location'
+        ? 'North Bell Lodge'
+        : 'The Bell Below',
   schema_version: 1,
   canon_state: 'candidate' as const,
   origin: 'generated',
@@ -151,6 +160,56 @@ const quest: ForgePayload = {
     },
   },
 };
+const locationDna = {
+  recipe: {
+    ...dna.recipe,
+    universe_preset: 'dark-fantasy',
+    field_controls: {
+      '01-location-profile': { nonce: 0, locked: false },
+      '02-name': { nonce: 0, locked: false },
+      '03-visual-identity': { nonce: 0, locked: false },
+      '04-atmosphere': { nonce: 0, locked: false },
+      '05-purpose': { nonce: 0, locked: false },
+      '06-summary': { nonce: 0, locked: false },
+      '07-history': { nonce: 0, locked: false },
+      '08-inhabitants-summary': { nonce: 0, locked: false },
+      '09-notable-features': { nonce: 0, locked: false },
+      '10-danger': { nonce: 0, locked: false },
+      '11-secret': { nonce: 0, locked: false },
+      '12-story-hooks': { nonce: 0, locked: false },
+    },
+  },
+};
+const locationCandidate: LocationCandidate = {
+  dna: locationDna,
+  field_origins: Object.fromEntries(
+    Object.keys(locationDna.recipe.field_controls).map((key) => [
+      key,
+      'generated',
+    ]),
+  ),
+  location: {
+    envelope: {
+      ...envelope('location-1', 'location'),
+      generation_provenance: { dna: locationDna, action: 'forge' },
+    },
+    location_profile: 'settlement',
+    summary: 'A frontier settlement beside the north road.',
+    visual_identity: 'Pale stone walls surround the watch lodge.',
+    atmosphere: 'A quiet watchfulness settles over the road.',
+    purpose: 'It shelters travelers and maintains the warning bell.',
+    history: 'The lodge grew around an old road marker.',
+    inhabitants_summary: 'Road wardens and local families live here.',
+    notable_features: ['North bell tower', 'Road marker', 'Covered well'],
+    danger: 'The eastern road becomes unsafe after dusk.',
+    secret: 'The bell rings before anyone touches it.',
+    story_hooks: ['A missing patrol', 'An unmarked road', 'A bell at noon'],
+  },
+};
+const locationPayload: ForgePayload = {
+  kind: 'location_candidate',
+  value: locationCandidate,
+};
 const record = (entity: ForgePayload, writeVersion = 1): EntityRecord => ({
   entity,
   writeVersion,
@@ -179,6 +238,7 @@ beforeEach(() => {
   );
   vi.mocked(api.forgeCharacter).mockResolvedValue(character);
   vi.mocked(api.forgeQuest).mockResolvedValue(quest);
+  vi.mocked(api.forgeLocation).mockResolvedValue(quest);
   vi.mocked(api.setLock).mockResolvedValue(character);
   vi.mocked(api.reroll).mockResolvedValue(character);
   vi.mocked(api.rerollUnlocked).mockResolvedValue(character);
@@ -510,6 +570,22 @@ describe('desktop creative workflows', () => {
     expect(api.forgeQuest).toHaveBeenCalled();
   });
 
+  it('supports the standalone Location Forge mode and library', async () => {
+    await openWorkspace();
+    expect(
+      screen.getByRole('button', { name: 'Locations' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Location' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Location' }));
+    await waitFor(() =>
+      expect(api.forgeLocation).toHaveBeenCalledWith(
+        'dark-fantasy',
+        42,
+        expect.any(Object),
+      ),
+    );
+  });
+
   it('selects a canonical preset', async () => {
     await openWorkspace();
     fireEvent.change(screen.getByLabelText('Universe'), {
@@ -627,6 +703,119 @@ describe('desktop creative workflows', () => {
       screen.getByRole('button', { name: 'Unlock Name' }),
     ).toBeInTheDocument();
     expect(screen.getAllByText('Mara Vale').length).toBeGreaterThan(0);
+  });
+
+  it('shows Location Name locked state from its 02-name control', async () => {
+    const lockedLocation: ForgePayload = {
+      kind: 'location_candidate',
+      value: {
+        ...locationCandidate,
+        dna: {
+          ...locationCandidate.dna,
+          recipe: {
+            ...locationCandidate.dna.recipe,
+            field_controls: {
+              ...locationCandidate.dna.recipe.field_controls,
+              '02-name': { nonce: 0, locked: true },
+            },
+          },
+        },
+      },
+    };
+    vi.mocked(api.forgeLocation).mockResolvedValue(locationPayload);
+    vi.mocked(api.setLock).mockResolvedValue(lockedLocation);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Location' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Location' }));
+    await screen.findByText('North Bell Lodge', { selector: 'h2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Name' }));
+
+    await waitFor(() => expect(api.setLock).toHaveBeenCalledWith('name', true));
+    const nameField = screen
+      .getByRole('heading', { name: 'Name' })
+      .closest('article');
+    expect(nameField).not.toBeNull();
+    expect(
+      within(nameField as HTMLElement).getByText('Locked'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock Name' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('locks the Location profile using its domain action key', async () => {
+    const lockedLocation: ForgePayload = {
+      kind: 'location_candidate',
+      value: {
+        ...locationCandidate,
+        dna: {
+          ...locationCandidate.dna,
+          recipe: {
+            ...locationCandidate.dna.recipe,
+            field_controls: {
+              ...locationCandidate.dna.recipe.field_controls,
+              '01-location-profile': { nonce: 0, locked: true },
+            },
+          },
+        },
+      },
+    };
+    vi.mocked(api.forgeLocation).mockResolvedValue(locationPayload);
+    vi.mocked(api.setLock).mockResolvedValue(lockedLocation);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Location' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Location' }));
+    await screen.findByText('North Bell Lodge', { selector: 'h2' });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Lock Location profile' }),
+    );
+
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenCalledWith('profile', true),
+    );
+    const profileField = screen
+      .getByRole('heading', { name: 'Location profile' })
+      .closest('article');
+    expect(profileField).not.toBeNull();
+    expect(
+      within(profileField as HTMLElement).getByText('Locked'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Unlock Location profile' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('rerolls and edits Location profile through its domain action key', async () => {
+    vi.mocked(api.forgeLocation).mockResolvedValue(locationPayload);
+    vi.mocked(api.reroll).mockResolvedValue(locationPayload);
+    vi.mocked(api.editField).mockResolvedValue(locationPayload);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Location' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Location' }));
+    await screen.findByText('North Bell Lodge', { selector: 'h2' });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reroll Location profile' }),
+    );
+    await waitFor(() => expect(api.reroll).toHaveBeenCalledWith('profile'));
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit Location profile' }),
+    );
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Edit Location profile' }),
+      {
+        target: { value: 'ruins' },
+      },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    await waitFor(() =>
+      expect(api.editField).toHaveBeenCalledWith('profile', 'ruins'),
+    );
   });
 
   it('rerolls a single requested field', async () => {

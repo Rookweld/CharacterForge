@@ -4,8 +4,10 @@ export type FieldValue = string | string[];
 export type ForgePayload =
   | { kind: 'character_candidate'; value: CharacterCandidate }
   | { kind: 'quest_candidate'; value: QuestCandidate }
+  | { kind: 'location_candidate'; value: LocationCandidate }
   | { kind: 'character'; value: Character }
-  | { kind: 'quest'; value: Quest };
+  | { kind: 'quest'; value: Quest }
+  | { kind: 'location'; value: Location };
 export type CharacterCandidate = {
   character: Character;
   dna: ForgeDNA;
@@ -17,6 +19,11 @@ export type QuestCandidate = {
   field_origins: Record<string, string>;
   clue?: string | null;
   briefing?: string | null;
+};
+export type LocationCandidate = {
+  location: Location;
+  dna: ForgeDNA;
+  field_origins: Record<string, string>;
 };
 export type Character = {
   envelope: Envelope;
@@ -54,10 +61,34 @@ export type Quest = {
   failure_consequences: string[];
   follow_up_hooks: string[];
 };
+export type Location = {
+  envelope: Envelope;
+  location_profile:
+    | 'settlement'
+    | 'district'
+    | 'building'
+    | 'dungeon'
+    | 'ruins'
+    | 'wilderness'
+    | 'landmark'
+    | 'interior'
+    | 'site'
+    | 'other';
+  summary: string;
+  visual_identity: string;
+  atmosphere: string;
+  purpose: string;
+  history: string;
+  inhabitants_summary: string;
+  notable_features: string[];
+  danger: string;
+  secret: string;
+  story_hooks: string[];
+};
 export type Envelope = {
   id: string;
   project_id: string;
-  entity_type: 'character' | 'quest';
+  entity_type: 'character' | 'quest' | 'location';
   name: string;
   canon_state: 'draft' | 'candidate' | 'canon' | 'archived';
   favorite: boolean;
@@ -240,6 +271,8 @@ export const api = {
     axes: Record<Axis, number>,
     constraints: Record<string, string>,
   ) => invoke<ForgePayload>('forge_quest', { preset, seed, axes, constraints }),
+  forgeLocation: (preset: string, seed: number, axes: Record<Axis, number>) =>
+    invoke<ForgePayload>('forge_location', { preset, seed, axes }),
   setLock: (field: string, locked: boolean) =>
     invoke<ForgePayload>('set_field_lock', { field, locked }),
   reroll: (field: string) => invoke<ForgePayload>('reroll_field', { field }),
