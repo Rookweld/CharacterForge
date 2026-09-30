@@ -1,12 +1,13 @@
 use forge_app_core::{
     CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, FactionCandidate,
     FactionField, FactionFieldValue, FactionForge, ForgeResultBundle, HometownSource,
-    LocationField, LocationFieldValue, LocationForge, QuestField, QuestFieldValue, QuestForge,
-    finalize_hometown_review, forge_hometown as forge_hometown_core,
+    ItemCandidate, ItemField, ItemFieldValue, ItemForge, LocationField, LocationFieldValue,
+    LocationForge, QuestField, QuestFieldValue, QuestForge, finalize_hometown_review,
+    forge_hometown as forge_hometown_core,
 };
 use forge_contracts::{
     CanonState, CreativeAxes, CreativeAxis, EntityId, FactionProfile, INITIAL_CONTENT_VERSION,
-    INITIAL_GENERATOR_VERSION, LocationProfile, ProjectEnvelope, ProjectId, RootSeed,
+    INITIAL_GENERATOR_VERSION, ItemProfile, LocationProfile, ProjectEnvelope, ProjectId, RootSeed,
 };
 use forge_export::{
     ExportError, create_backup, export_project, import_project_to_directory, project_database_path,
@@ -761,6 +762,19 @@ fn set_entity_field_lock(
                 FactionForge::unlock(candidate, target)?
             }
         }
+        StoredEntity::ItemCandidate(candidate) => {
+            let target = ItemField::from_action_key(field).ok_or_else(|| UiError {
+                kind: "validation",
+                message: format!("Unknown Item field: {field}"),
+                expected: None,
+                actual: None,
+            })?;
+            if locked {
+                ItemForge::lock(candidate, target)?
+            } else {
+                ItemForge::unlock(candidate, target)?
+            }
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon records cannot be edited as candidates.",
@@ -792,6 +806,17 @@ fn reroll_entity_field(entity: &mut StoredEntity, field: &str) -> Result<(), UiE
                 })?,
             )?;
         }
+        StoredEntity::ItemCandidate(candidate) => {
+            ItemForge::reroll_field(
+                candidate,
+                ItemField::from_action_key(field).ok_or_else(|| UiError {
+                    kind: "validation",
+                    message: format!("Unknown Item field: {field}"),
+                    expected: None,
+                    actual: None,
+                })?,
+            )?;
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon records cannot be rerolled.",
@@ -814,6 +839,9 @@ fn reroll_entity_unlocked(entity: &mut StoredEntity) -> Result<(), UiError> {
         }
         StoredEntity::FactionCandidate(candidate) => {
             FactionForge::reroll_all_unlocked(candidate)?;
+        }
+        StoredEntity::ItemCandidate(candidate) => {
+            ItemForge::reroll_all_unlocked(candidate)?;
         }
         _ => {
             return Err(invalid_candidate_operation(
@@ -860,6 +888,29 @@ fn edit_entity_field(entity: &mut StoredEntity, field: &str, value: Value) -> Re
                 FactionFieldValue::Text(scalar_value(value)?)
             };
             FactionForge::manual_edit(candidate, target, typed)?;
+        }
+        StoredEntity::ItemCandidate(candidate) => {
+            let target = ItemField::from_action_key(field).ok_or_else(|| UiError {
+                kind: "validation",
+                message: format!("Unknown Item field: {field}"),
+                expected: None,
+                actual: None,
+            })?;
+            let typed = if target == ItemField::Profile {
+                serde_json::from_value::<ItemProfile>(value)
+                    .map(ItemFieldValue::Profile)
+                    .map_err(|_| UiError {
+                        kind: "validation",
+                        message: "Choose a supported Item profile.".into(),
+                        expected: None,
+                        actual: None,
+                    })?
+            } else if target == ItemField::StoryHooks {
+                ItemFieldValue::Texts(string_values(value)?)
+            } else {
+                ItemFieldValue::Text(scalar_value(value)?)
+            };
+            ItemForge::manual_edit(candidate, target, typed)?;
         }
         _ => {
             return Err(invalid_candidate_operation(
@@ -1005,6 +1056,47 @@ fn forge_faction(
             actual: None,
         })?;
     let entity = StoredEntity::FactionCandidate(generate_faction_candidate(
+        project.envelope.id,
+        &preset,
+        seed,
+        axes,
+    )?);
+    session.working = Some(entity.clone());
+    session.write_version = None;
+    session.history = Some(SessionHistory::new(entity.clone()));
+    session.hometown = None;
+    Ok(entity)
+}
+
+fn generate_item_candidate(
+    project_id: ProjectId,
+    preset: &str,
+    seed: u64,
+    axes: BTreeMap<CreativeAxis, u8>,
+) -> Result<ItemCandidate, UiError> {
+    let mut creative_axes = CreativeAxes { levels: axes };
+    creative_axes.normalize()?;
+    let dna = ItemForge::new_dna(RootSeed::new(seed), preset, creative_axes)?;
+    Ok(ItemForge::generate_in_project(&dna, project_id)?)
+}
+
+#[tauri::command]
+fn forge_item(
+    state: State<'_, AppState>,
+    preset: String,
+    seed: u64,
+    axes: BTreeMap<CreativeAxis, u8>,
+) -> Result<StoredEntity, UiError> {
+    let mut session = lock_state(&state)?;
+    let project = active_store(&mut session)?
+        .load_project()?
+        .ok_or_else(|| UiError {
+            kind: "no_project",
+            message: "Open or create a project first.".into(),
+            expected: None,
+            actual: None,
+        })?;
+    let entity = StoredEntity::ItemCandidate(generate_item_candidate(
         project.envelope.id,
         &preset,
         seed,
@@ -1316,7 +1408,7 @@ fn revise_canon(state: State<'_, AppState>, reason: String) -> Result<EntityView
         });
     }
     let mut session = lock_state(&state)?;
-    let mut entity = session.working.clone().ok_or_else(|| UiError {
+    let entity = session.working.clone().ok_or_else(|| UiError {
         kind: "no_candidate",
         message: "Open a Canon item as a working copy before revising it.".into(),
         expected: None,
@@ -1328,22 +1420,7 @@ fn revise_canon(state: State<'_, AppState>, reason: String) -> Result<EntityView
         expected: None,
         actual: None,
     })?;
-    match &mut entity {
-        StoredEntity::CharacterCandidate(candidate) => {
-            candidate.character.envelope.canon_state = CanonState::Canon;
-        }
-        StoredEntity::QuestCandidate(candidate) => {
-            candidate.quest.envelope.canon_state = CanonState::Canon;
-        }
-        StoredEntity::LocationCandidate(candidate) => {
-            candidate.location.envelope.canon_state = CanonState::Canon;
-        }
-        _ => {
-            return Err(invalid_candidate_operation(
-                "Canon revisions require the structured working candidate.",
-            ));
-        }
-    }
+    let entity = as_canon_candidate(entity)?;
     let version =
         active_store(&mut session)?.revise_canon(entity.clone(), expected, reason.trim())?;
     session.working = Some(entity.clone());
@@ -1463,6 +1540,33 @@ fn get_history_snapshot(
         .map_err(Into::into)
 }
 
+fn as_canon_candidate(mut entity: StoredEntity) -> Result<StoredEntity, UiError> {
+    match &mut entity {
+        StoredEntity::CharacterCandidate(candidate) => {
+            candidate.character.envelope.canon_state = CanonState::Canon
+        }
+        StoredEntity::QuestCandidate(candidate) => {
+            candidate.quest.envelope.canon_state = CanonState::Canon
+        }
+        StoredEntity::LocationCandidate(candidate) => {
+            candidate.location.envelope.canon_state = CanonState::Canon
+        }
+        StoredEntity::FactionCandidate(candidate) => {
+            candidate.faction.envelope.canon_state = CanonState::Canon
+        }
+        StoredEntity::ItemCandidate(candidate) => {
+            candidate.item.envelope.canon_state = CanonState::Canon
+        }
+        _ => {
+            return Err(invalid_candidate_operation(
+                "Canon revisions require the structured working candidate.",
+            ));
+        }
+    }
+    entity.validate().map_err(UiError::from)?;
+    Ok(entity)
+}
+
 fn as_working_candidate(mut entity: StoredEntity) -> Result<StoredEntity, UiError> {
     match &mut entity {
         StoredEntity::CharacterCandidate(candidate) => {
@@ -1473,6 +1577,12 @@ fn as_working_candidate(mut entity: StoredEntity) -> Result<StoredEntity, UiErro
         }
         StoredEntity::LocationCandidate(candidate) => {
             candidate.location.envelope.canon_state = CanonState::Candidate;
+        }
+        StoredEntity::FactionCandidate(candidate) => {
+            candidate.faction.envelope.canon_state = CanonState::Candidate;
+        }
+        StoredEntity::ItemCandidate(candidate) => {
+            candidate.item.envelope.canon_state = CanonState::Candidate;
         }
         _ => {
             return Err(UiError {
@@ -1704,6 +1814,7 @@ pub fn run() {
             forge_quest,
             forge_location,
             forge_faction,
+            forge_item,
             forge_hometown,
             discard_forge_bundle,
             save_forge_bundle,
@@ -2036,6 +2147,130 @@ mod tests {
         assert_eq!(
             restored.field_origins[&name_key],
             forge_app_core::FieldValueOrigin::UserModified
+        );
+        history.undo();
+        history.push(original);
+        assert!(!history.can_redo());
+    }
+
+    #[test]
+    fn item_command_actions_use_typed_profile_and_preserve_name_lock() {
+        let candidate = generate_item_candidate(
+            ProjectId::from_bytes([1; 16]),
+            "pirate",
+            447,
+            CreativeAxes::neutral().levels,
+        )
+        .unwrap();
+        let mut entity = StoredEntity::ItemCandidate(candidate);
+        set_entity_field_lock(&mut entity, "name", true).unwrap();
+        set_entity_field_lock(&mut entity, "item_profile", true).unwrap();
+        let before = entity.clone();
+        reroll_entity_unlocked(&mut entity).unwrap();
+        let (StoredEntity::ItemCandidate(before), StoredEntity::ItemCandidate(after)) =
+            (&before, &entity)
+        else {
+            panic!("lost wrapper")
+        };
+        assert_eq!(before.item.envelope.name, after.item.envelope.name);
+        assert_eq!(before.item.item_profile, after.item.item_profile);
+        for field in [ItemField::Name, ItemField::Profile] {
+            assert_eq!(
+                before.dna.recipe.field_controls[&field.key().unwrap()],
+                after.dna.recipe.field_controls[&field.key().unwrap()]
+            );
+        }
+        let before = entity.clone();
+        assert!(
+            edit_entity_field(&mut entity, "item_profile", serde_json::json!("invalid")).is_err()
+        );
+        assert_eq!(before, entity);
+        edit_entity_field(&mut entity, "item_profile", serde_json::json!("book")).unwrap();
+        set_entity_field_lock(&mut entity, "item_profile", false).unwrap();
+        reroll_entity_field(&mut entity, "item_profile").unwrap();
+        assert_eq!(entity.envelope().name, before.envelope().name);
+    }
+
+    #[test]
+    fn item_and_faction_history_and_canon_adapters_preserve_complete_snapshots() {
+        let project_id = ProjectId::from_bytes([1; 16]);
+        let item =
+            generate_item_candidate(project_id, "occult", 511, CreativeAxes::neutral().levels)
+                .unwrap();
+        let faction =
+            generate_faction_candidate(project_id, "occult", 511, CreativeAxes::neutral().levels)
+                .unwrap();
+        for mut original in [
+            StoredEntity::ItemCandidate(item),
+            StoredEntity::FactionCandidate(faction),
+        ] {
+            set_entity_field_lock(&mut original, "name", true).unwrap();
+            let canon = as_canon_candidate(original.clone()).unwrap();
+            assert_eq!(canon.envelope().canon_state, CanonState::Canon);
+            let working = as_working_candidate(canon.clone()).unwrap();
+            assert_eq!(working, original);
+            assert_eq!(canon.envelope().canon_state, CanonState::Canon);
+            let mut edited = working;
+            let field = if matches!(&edited, StoredEntity::ItemCandidate(_)) {
+                "secret"
+            } else {
+                "hidden_truth"
+            };
+            edit_entity_field(
+                &mut edited,
+                field,
+                serde_json::json!("A revised secret — Åland 🜁"),
+            )
+            .unwrap();
+            let revised = as_canon_candidate(edited).unwrap();
+            assert_eq!(revised.envelope().id, canon.envelope().id);
+            assert_ne!(revised, canon);
+            assert_eq!(
+                as_canon_candidate(as_working_candidate(revised.clone()).unwrap()).unwrap(),
+                revised
+            );
+        }
+    }
+
+    #[test]
+    fn item_session_history_restores_complete_candidate_snapshot_and_discards_redo_branch() {
+        let original = StoredEntity::ItemCandidate(
+            generate_item_candidate(
+                ProjectId::from_bytes([1; 16]),
+                "occult",
+                91,
+                CreativeAxes::neutral().levels,
+            )
+            .unwrap(),
+        );
+        let original_name = original.envelope().name.clone();
+        let mut changed = original.clone();
+        edit_entity_field(
+            &mut changed,
+            "name",
+            Value::String("Manual sentinel".into()),
+        )
+        .unwrap();
+        set_entity_field_lock(&mut changed, "name", true).unwrap();
+        let mut history = SessionHistory::new(original.clone());
+        history.push(changed.clone());
+        assert!(history.can_undo());
+        assert_eq!(history.undo(), Some(&original));
+        assert_eq!(history.redo(), Some(&changed));
+        let Some(StoredEntity::ItemCandidate(restored)) = history.undo() else {
+            panic!("undo lost the Item candidate wrapper");
+        };
+        assert_eq!(restored.item.envelope.name, original_name);
+        let restored = history.redo().unwrap();
+        let StoredEntity::ItemCandidate(restored) = restored else {
+            panic!("redo lost the Item candidate wrapper");
+        };
+        assert_eq!(restored.item.envelope.name, "Manual sentinel");
+        let name_key = ItemField::Name.key().unwrap();
+        assert!(restored.dna.recipe.field_controls[&name_key].locked);
+        assert_eq!(
+            restored.field_origins[&name_key],
+            forge_app_core::ItemOrigin::UserModified
         );
         history.undo();
         history.push(original);

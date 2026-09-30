@@ -280,6 +280,7 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
         StoredEntity::FactionCandidate(value) => {
             ("Faction", &value.faction.envelope, Some(&value.dna))
         }
+        StoredEntity::ItemCandidate(value) => ("Item", &value.item.envelope, Some(&value.dna)),
         StoredEntity::Character(value) => (
             "Character",
             &value.envelope,
@@ -309,6 +310,15 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
         ),
         StoredEntity::Faction(value) => (
             "Faction",
+            &value.envelope,
+            value
+                .envelope
+                .generation_provenance
+                .as_ref()
+                .map(|p| &p.dna),
+        ),
+        StoredEntity::Item(value) => (
+            "Item",
             &value.envelope,
             value
                 .envelope
@@ -393,6 +403,40 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
             escape_markdown(&faction.hidden_truth),
             escape_markdown(&faction.symbols),
             escape_markdown(&faction.reputation),
+            hooks,
+        ));
+    }
+    let item = match entity {
+        StoredEntity::ItemCandidate(value) => Some(&value.item),
+        StoredEntity::Item(value) => Some(value),
+        _ => None,
+    };
+    if let Some(item) = item {
+        let hooks = item
+            .story_hooks
+            .iter()
+            .map(|hook| format!("- {}", escape_markdown(hook)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Ok(format!(
+            "# Item: {}\n\n- Project ID: `{}`\n- Entity ID: `{}`\n- State: {:?}\n- Profile: {:?}\n- Preset: `{}`\n- Seed: `{}`\n\n## Appearance\n\n{}\n\n## Purpose\n\n{}\n\n## Properties\n\n{}\n\n## Origin\n\n{}\n\n## History\n\n{}\n\n## Power or function\n\n{}\n\n## Cost or drawback\n\n{}\n\n## Rarity\n\n{}\n\n## Condition\n\n{}\n\n## Secret\n\n{}\n\n## Story hooks\n\n{}\n\n## Complete canonical data\n\n{ticks}json\n{encoded}\n{ticks}\n",
+            escape_markdown(&item.envelope.name),
+            item.envelope.project_id.uuid(),
+            item.envelope.id.uuid(),
+            item.envelope.canon_state,
+            item.item_profile,
+            preset,
+            seed,
+            escape_markdown(&item.appearance),
+            escape_markdown(&item.purpose),
+            escape_markdown(&item.properties),
+            escape_markdown(&item.origin),
+            escape_markdown(&item.history),
+            escape_markdown(&item.power_or_function),
+            escape_markdown(&item.cost_or_drawback),
+            escape_markdown(&item.rarity),
+            escape_markdown(&item.condition),
+            escape_markdown(&item.secret),
             hooks,
         ));
     }
@@ -929,8 +973,8 @@ fn storage(error: StoreError) -> ExportError {
 mod tests {
     use super::*;
     use forge_app_core::{
-        CharacterField, CharacterFieldValue, CharacterForge, FactionForge, LocationForge,
-        QuestField, QuestFieldValue, QuestForge,
+        CharacterField, CharacterFieldValue, CharacterForge, FactionForge, ItemForge,
+        LocationForge, QuestField, QuestFieldValue, QuestForge,
     };
     use forge_contracts::{
         ContentVersion, CreativeAxes, FieldKey, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -1121,6 +1165,62 @@ mod tests {
             imported.get_entity(entity_id).unwrap().unwrap().entity,
             entity
         );
+    }
+
+    #[test]
+    fn item_json_markdown_and_forgeproject_v1_roundtrip_are_supported() {
+        let dir = Dir::new();
+        let source = dir.path("item-source.sqlite3");
+        let mut store = ProjectStore::open(&source).unwrap();
+        let project = project();
+        store.create_project(&project).unwrap();
+        let dna =
+            ItemForge::new_dna(RootSeed::new(980), "occult", CreativeAxes::neutral()).unwrap();
+        let candidate = ItemForge::generate_in_project(&dna, project.envelope.id).unwrap();
+        let entity = StoredEntity::ItemCandidate(candidate);
+        let entity_id = entity.envelope().id;
+        let json = entity_json(&entity).unwrap();
+        let decoded: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        assert_eq!(
+            serde_json::from_value::<StoredEntity>(decoded["entity"].clone()).unwrap(),
+            entity
+        );
+        let markdown = entity_markdown(&entity).unwrap();
+        assert!(markdown.contains("# Item:"));
+        for field in [
+            "Profile",
+            "Appearance",
+            "Purpose",
+            "Properties",
+            "Story hooks",
+        ] {
+            assert!(markdown.to_lowercase().contains(&field.to_lowercase()));
+        }
+        store.persist_candidate(entity.clone()).unwrap();
+        let package = dir.path("item.forgeproject");
+        export_project(&store, &package).unwrap();
+        drop(store);
+        let imported_path = dir.path("item-import.sqlite3");
+        import_project(&package, &imported_path).unwrap();
+        let imported = ProjectStore::open(&imported_path).unwrap();
+        assert_eq!(
+            imported.get_entity(entity_id).unwrap().unwrap().entity,
+            entity
+        );
+        let backup = dir.path("item-backup.forgeproject");
+        create_backup(&imported, &backup).unwrap();
+        let restore_target = dir.path("item-restore.sqlite3");
+        ProjectStore::open(&restore_target)
+            .unwrap()
+            .create_project(&project)
+            .unwrap();
+        restore_backup(&backup, &restore_target).unwrap();
+        let restored = ProjectStore::open(&restore_target).unwrap();
+        assert_eq!(
+            restored.get_entity(entity_id).unwrap().unwrap().entity,
+            entity
+        );
+        assert!(restored.list_relationships().unwrap().is_empty());
     }
 
     #[test]

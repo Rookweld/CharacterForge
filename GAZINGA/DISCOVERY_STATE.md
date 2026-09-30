@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B4_ITEM_CORE — prepared for execution
+THE_FORGE_B4_ITEM_CORE — closed at exit gate
 
 ## Status
 
-**B3 PASS — B4 ITEM CORE AUTHORIZED**
+**B4 PASS — standalone Item Core automated exit gates satisfied**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -20,7 +20,7 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `82440ff`
+- HEAD: `983398e5c407156ab18f394b1c1ab22efcdbda2a` (B4 starting/current HEAD)
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -29,7 +29,7 @@ The operator has authorized continued non-destructive development through bounde
 - first-class Relationships: implemented
 - Forge Hometown: implemented and verified
 - standalone deterministic Faction Forge: implemented and verified
-- next bounded mission: standalone Item Forge
+- standalone deterministic Item Forge: implemented and verified; B4 closed
 
 Unrelated files to preserve and never absorb:
 
@@ -167,23 +167,19 @@ B3 automated evidence:
 
 Independent review inspected the typed Faction contract, storage/export/Tauri/UI integration, Name/Profile action/control mapping, reran all Faction app-core tests including preset/Chaos sweeps, reran the Faction storage lifecycle test, and found no new P0/P1/P2 blocker.
 
-## Next Mission
+## B4 Result
 
-`GAZINGA/missions/THE_FORGE_B4_ITEM_CORE.md`
+B4 Item Core is **PASS — automated exit gates satisfied**. Item has 13 required fields, 11 stable profiles, independent generator/content versions 1/1, all 11 presets, deterministic DNA/field streams, lock/reroll/edit/origins, shared undo/redo, Candidate/favorite/Canon/revision/history persistence, Item Workbench/library/detail, and JSON/Markdown/project/Vault support. Standalone Item creates no Relationships. Name/Profile actual-control and invalid typed-edit regressions pass. Final adapter review also repaired the omitted Item/Faction historical-working-copy and Canon-revision eligibility cases, with a complete-snapshot parity regression.
 
-Scope:
+Final verification: **166 Rust tests PASS, 1 existing fixture writer ignored; 48 frontend tests PASS**; format/lint/typecheck/frontend build, Rust format, strict Clippy, Cargo metadata, `scripts/verify.ps1`, explicit `cargo test --workspace --no-fail-fast`, 1,000-sequence state gauntlet, optimized Tauri no-bundle build, and `git diff --check` PASS. The exact executable is `C:\dev\CharacterForge\target\mission-b4-verify\release\character-forge-desktop.exe`. The npm launcher remains unavailable (missing npm-cli.js); configured pnpm checks pass. An earlier Relationship lifecycle test showed the known 1 ms timestamp fluctuation; isolated and subsequent full reruns passed without changing Relationship code/tests.
 
-**Standalone deterministic Item Forge only.**
+Quality: 2,816 preset-sweep Candidates and 1,024 Chaos seeds validate/replay without exact clones; all 11 profiles; 635 Chaos source patterns; no source group/preset above 11.52%. The 52-sample generated/content-author review rates 22 usable as-is, 30 minor edit, 0 weak; it is not independent human acceptance. Existing P3 UI-001 remains open; no P0/P1/P2 defect remains known in B4. Database schema 2, archive v1, app 1.0.0, and existing entity deterministic versions are unchanged. Mission 08's accepted transitive-advisory verification limitation remains documented.
 
-B4 must not implement:
+Branch `master`, starting/final HEAD `983398e5c407156ab18f394b1c1ab22efcdbda2a`; B4 changes remain unstaged/uncommitted. The four unrelated operator/export/log files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B4. No Creature Forge or Item Forge Further action has begun.** See `docs/missions/THE_FORGE_B4_ITEM_CORE_REPORT.md` and `docs/quality/THE_FORGE_B4_ITEM_SAMPLES.md`.
 
-- Item Forge Further actions
-- owner/creator/location/guardian Relationships
-- Creature Forge
-- Visual generation
-- Ability entities
-- Game Schema Packs
-- engine adapters
+## B4 Exit Gate
+
+**PASS. STOP.** No later mission is authorized by this closeout. Creature Forge and Item Forge Further remain deferred.
 
 ## Still Open
 

@@ -431,6 +431,85 @@ impl Faction {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ItemProfile {
+    Weapon,
+    Armor,
+    Artifact,
+    Consumable,
+    Tool,
+    KeyItem,
+    Resource,
+    Treasure,
+    Book,
+    QuestItem,
+    Other,
+}
+
+impl ItemProfile {
+    pub const ALL: [Self; 11] = [
+        Self::Weapon,
+        Self::Armor,
+        Self::Artifact,
+        Self::Consumable,
+        Self::Tool,
+        Self::KeyItem,
+        Self::Resource,
+        Self::Treasure,
+        Self::Book,
+        Self::QuestItem,
+        Self::Other,
+    ];
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Item {
+    pub envelope: EntityEnvelope,
+    pub item_profile: ItemProfile,
+    pub appearance: String,
+    pub purpose: String,
+    pub properties: String,
+    pub origin: String,
+    pub history: String,
+    pub power_or_function: String,
+    pub cost_or_drawback: String,
+    pub rarity: String,
+    pub condition: String,
+    pub secret: String,
+    pub story_hooks: Vec<String>,
+}
+
+impl Item {
+    pub fn validate(&self) -> ValidationResult<()> {
+        self.envelope.validate(EntityType::Item)?;
+        for (path, value) in [
+            ("item.appearance", &self.appearance),
+            ("item.purpose", &self.purpose),
+            ("item.properties", &self.properties),
+            ("item.origin", &self.origin),
+            ("item.history", &self.history),
+            ("item.power_or_function", &self.power_or_function),
+            ("item.cost_or_drawback", &self.cost_or_drawback),
+            ("item.rarity", &self.rarity),
+            ("item.condition", &self.condition),
+            ("item.secret", &self.secret),
+        ] {
+            validate_text(path, value)?;
+        }
+        validate_text_list("item.story_hooks", &self.story_hooks)?;
+        if self.story_hooks.is_empty() {
+            return Err(ValidationErrors::one(ValidationError::new(
+                ValidationCode::MissingField,
+                "item.story_hooks",
+                "must contain at least one value",
+            )));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Location {
@@ -697,6 +776,94 @@ mod tests {
         invalid.identity.clear();
         assert!(invalid.validate().is_err());
         assert!(serde_json::from_str::<Faction>("{\"unknown\": true}").is_err());
+    }
+
+    #[test]
+    fn item_contract_is_typed_validated_and_profiles_have_stable_keys() {
+        let item = Item {
+            envelope: envelope(EntityType::Item),
+            item_profile: ItemProfile::KeyItem,
+            appearance: "A Unicode-safe appearance — with purpose.".into(),
+            purpose: "Belief".into(),
+            properties: "Goal".into(),
+            origin: "Origin".into(),
+            history: "History".into(),
+            power_or_function: "PowerOrFunction".into(),
+            cost_or_drawback: "Public face".into(),
+            rarity: "Hidden truth".into(),
+            condition: "Condition".into(),
+            secret: "Secret".into(),
+            story_hooks: vec!["Hook one".into(), "Hook two".into(), "Hook three".into()],
+        };
+        item.validate().unwrap();
+        for (profile, key) in ItemProfile::ALL.into_iter().zip([
+            "weapon",
+            "armor",
+            "artifact",
+            "consumable",
+            "tool",
+            "key-item",
+            "resource",
+            "treasure",
+            "book",
+            "quest-item",
+            "other",
+        ]) {
+            assert_eq!(serde_json::to_value(profile).unwrap(), key);
+            assert_eq!(
+                serde_json::from_value::<ItemProfile>(serde_json::json!(key)).unwrap(),
+                profile
+            );
+        }
+        let encoded = serde_json::to_value(&item).unwrap();
+        for field in [
+            "appearance",
+            "purpose",
+            "properties",
+            "origin",
+            "history",
+            "power_or_function",
+            "cost_or_drawback",
+            "rarity",
+            "condition",
+            "secret",
+        ] {
+            let mut invalid = encoded.clone();
+            invalid[field] = serde_json::json!("  ");
+            assert!(
+                serde_json::from_value::<Item>(invalid)
+                    .unwrap()
+                    .validate()
+                    .is_err(),
+                "{field}"
+            );
+        }
+        let mut invalid = item.clone();
+        invalid.envelope.entity_type = EntityType::Faction;
+        assert!(invalid.validate().is_err());
+        invalid = item.clone();
+        invalid.story_hooks.clear();
+        assert!(invalid.validate().is_err());
+        let mut invalid = encoded.clone();
+        invalid["owner_id"] = serde_json::json!("not-authorized");
+        assert!(serde_json::from_value::<Item>(invalid).is_err());
+        let mut invalid = encoded;
+        invalid["item_profile"] = serde_json::json!("inventory-stat-pack");
+        assert!(serde_json::from_value::<Item>(invalid).is_err());
+
+        assert_eq!(ItemProfile::ALL.len(), 11);
+        assert_eq!(
+            serde_json::to_string(&ItemProfile::KeyItem).unwrap(),
+            "\"key-item\""
+        );
+        assert_eq!(
+            serde_json::from_str::<ItemProfile>("\"quest-item\"").unwrap(),
+            ItemProfile::QuestItem
+        );
+        let mut invalid = item.clone();
+        invalid.appearance.clear();
+        assert!(invalid.validate().is_err());
+        assert!(serde_json::from_str::<Item>("{\"unknown\": true}").is_err());
     }
 
     #[test]

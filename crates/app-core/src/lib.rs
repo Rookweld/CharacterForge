@@ -6,6 +6,8 @@ mod faction;
 mod faction_content;
 mod field_stream;
 mod forge_further;
+mod item;
+mod item_content;
 mod location;
 mod quest;
 mod quest_content;
@@ -24,6 +26,10 @@ pub use forge_further::{
     FORGE_HOMETOWN_ACTION, FORGE_HOMETOWN_RECIPE, ForgeActionDefinition, ForgeFurtherRecipeRecord,
     ForgeResultBundle, ForgeResultMapping, HometownContextSnapshot, HometownSource,
     compile_hometown_context, finalize_hometown_review, forge_hometown,
+};
+pub use item::{
+    ITEM_CONTENT_VERSION, ITEM_FIELD_ORDER, ITEM_GENERATOR_VERSION, ItemCandidate, ItemField,
+    ItemFieldValue, ItemForge, ItemOrigin,
 };
 pub use location::{
     LOCATION_FIELD_ORDER, LocationCandidate, LocationField, LocationFieldValue, LocationForge,

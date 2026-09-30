@@ -1,8 +1,9 @@
 use super::*;
 use forge_app_core::{
     CharacterField, CharacterFieldValue, CharacterForge, FactionField, FactionFieldValue,
-    FactionForge, FieldValueOrigin, LocationField, LocationFieldValue, LocationForge, QuestField,
-    QuestFieldValue, QuestForge, finalize_hometown_review, forge_hometown,
+    FactionForge, FieldValueOrigin, ItemField, ItemFieldValue, ItemForge, LocationField,
+    LocationFieldValue, LocationForge, QuestField, QuestFieldValue, QuestForge,
+    finalize_hometown_review, forge_hometown,
 };
 use forge_contracts::{
     ContentVersion, CreativeAxes, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -170,6 +171,92 @@ fn faction_candidate_persists_favorites_promotes_revises_and_reopens() {
         saved.dna.recipe.kind,
         forge_contracts::GenerationKind::Faction
     );
+    assert_eq!(saved.field_origins.len(), 13);
+    assert!(reopened.list_relationships().unwrap().is_empty());
+}
+
+#[test]
+fn item_candidate_persists_favorites_promotes_revises_and_reopens() {
+    let db = TestDb::new("item-lifecycle");
+    let mut store = create_store(&db);
+    let dna =
+        ItemForge::new_dna(RootSeed::new(607), "nordic-myth", CreativeAxes::neutral()).unwrap();
+    let mut candidate = ItemForge::generate_in_project(&dna, project_id()).unwrap();
+    candidate.item.envelope.tags.push("operator-tag".into());
+    candidate.item.envelope.notes = Some("reviewed locally".into());
+    let id = candidate.item.envelope.id;
+    store
+        .persist_candidate(StoredEntity::ItemCandidate(candidate.clone()))
+        .unwrap();
+    assert!(store.list_relationships().unwrap().is_empty());
+    assert_eq!(store.toggle_favorite(id, true, 1).unwrap(), 2);
+    assert_eq!(store.promote_candidate(id, 2).unwrap(), 3);
+    let mut canon = match store.get_entity(id).unwrap().unwrap().entity {
+        StoredEntity::ItemCandidate(value) => value,
+        _ => panic!("Item candidate wrapper was not retained"),
+    };
+    ItemForge::manual_edit(
+        &mut canon,
+        ItemField::History,
+        ItemFieldValue::Text("Members gather beneath the northern lights.".into()),
+    )
+    .unwrap();
+    assert_eq!(
+        store
+            .revise_canon(
+                StoredEntity::ItemCandidate(canon),
+                3,
+                "clarified seasonal practice"
+            )
+            .unwrap(),
+        4
+    );
+    assert!(
+        store
+            .save_candidate(StoredEntity::ItemCandidate(candidate), 1)
+            .is_err()
+    );
+    assert!(store.list_relationships().unwrap().is_empty());
+    let history = store.list_history(Some(id)).unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|entry| entry.action.as_str())
+            .collect::<Vec<_>>(),
+        ["forge", "manual_edit"]
+    );
+    let schema: i64 = store
+        .connection
+        .query_row("SELECT schema_version FROM projects LIMIT 1", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(schema, 2);
+    let entity_type: String = store
+        .connection
+        .query_row(
+            "SELECT entity_type FROM entities WHERE id=?1",
+            [id.uuid().to_string()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(entity_type, "item");
+    drop(store);
+    let reopened = ProjectStore::open(db.path()).unwrap();
+    let current = reopened.get_entity(id).unwrap().unwrap();
+    assert_eq!(current.entity.envelope().entity_type, EntityType::Item);
+    assert!(current.entity.envelope().favorite);
+    assert_eq!(current.write_version, 4);
+    assert_eq!(reopened.list_revisions(id).unwrap().len(), 2);
+    let StoredEntity::ItemCandidate(saved) = current.entity else {
+        panic!("Item typed payload was not retained")
+    };
+    assert!(saved.item.envelope.tags.contains(&"operator-tag".into()));
+    assert_eq!(
+        saved.item.envelope.notes.as_deref(),
+        Some("reviewed locally")
+    );
+    assert_eq!(saved.dna.recipe.kind, forge_contracts::GenerationKind::Item);
     assert_eq!(saved.field_origins.len(), 13);
     assert!(reopened.list_relationships().unwrap().is_empty());
 }
@@ -2204,4 +2291,97 @@ fn project_session_keeps_current_project_if_switch_target_cannot_open() {
     assert_eq!(session.active().unwrap().path(), before);
     session.close();
     assert!(session.active().is_none());
+}
+
+#[test]
+fn item_actions_history_canonical_payload_and_column_mismatch_are_checked() {
+    let db = TestDb::new("item-history");
+    let mut store = create_store(&db);
+    let dna = ItemForge::new_dna(RootSeed::new(616), "occult", CreativeAxes::neutral()).unwrap();
+    let mut candidate = ItemForge::generate_in_project(&dna, project_id()).unwrap();
+    let id = candidate.item.envelope.id;
+    let mut version = store
+        .persist_candidate(StoredEntity::ItemCandidate(candidate.clone()))
+        .unwrap();
+    ItemForge::lock(&mut candidate, ItemField::Name).unwrap();
+    ItemForge::lock(&mut candidate, ItemField::Profile).unwrap();
+    ItemForge::reroll_field(&mut candidate, ItemField::Secret).unwrap();
+    version = store
+        .save_candidate(StoredEntity::ItemCandidate(candidate.clone()), version)
+        .unwrap();
+    ItemForge::reroll_all_unlocked(&mut candidate).unwrap();
+    version = store
+        .save_candidate(StoredEntity::ItemCandidate(candidate.clone()), version)
+        .unwrap();
+    ItemForge::manual_edit(
+        &mut candidate,
+        ItemField::Origin,
+        ItemFieldValue::Text("A maker in Åland — 東京".into()),
+    )
+    .unwrap();
+    version = store
+        .save_candidate(StoredEntity::ItemCandidate(candidate.clone()), version)
+        .unwrap();
+    candidate
+        .item
+        .envelope
+        .generation_provenance
+        .as_mut()
+        .unwrap()
+        .action = GenerationAction::RestoreHistory;
+    store
+        .save_candidate(StoredEntity::ItemCandidate(candidate), version)
+        .unwrap();
+    let history = store.list_history(Some(id)).unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|h| h.action.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "forge",
+            "reroll_field",
+            "reroll_all_unlocked",
+            "manual_edit",
+            "restore_history"
+        ]
+    );
+    let current = store.get_entity(id).unwrap().unwrap();
+    let snapshot = store
+        .load_history_event_snapshot(history[1].event_id)
+        .unwrap()
+        .unwrap();
+    assert_ne!(snapshot, current.entity);
+    drop(store);
+    let store = ProjectStore::open(db.path()).unwrap();
+    assert_eq!(store.get_entity(id).unwrap().unwrap(), current);
+    assert_eq!(
+        store
+            .load_history_event_snapshot(history[1].event_id)
+            .unwrap()
+            .unwrap(),
+        snapshot
+    );
+    let StoredEntity::ItemCandidate(candidate) = &current.entity else {
+        panic!("lost wrapper")
+    };
+    assert_eq!(candidate.item.origin, "A maker in Åland — 東京");
+    for field in [ItemField::Name, ItemField::Profile] {
+        assert!(candidate.dna.recipe.field_controls[&field.key().unwrap()].locked);
+    }
+    let canonical = StoredEntity::Item(candidate.item.clone());
+    canonical.validate().unwrap();
+    assert_eq!(
+        serde_json::from_str::<StoredEntity>(&serde_json::to_string(&canonical).unwrap()).unwrap(),
+        canonical
+    );
+    store
+        .connection
+        .execute(
+            "UPDATE entities SET entity_type='faction' WHERE id=?1",
+            [id.uuid().to_string()],
+        )
+        .unwrap();
+    assert!(matches!(store.get_entity(id), Err(StoreError::Corrupt(_))));
+    assert!(store.list_relationships().unwrap().is_empty());
 }

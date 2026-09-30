@@ -13,6 +13,8 @@ import {
   type ForgeRelationship,
   type ForgeResultBundle,
   type HistoryRecord,
+  type Item,
+  type ItemProfile,
   type Project,
   presets,
   type Quest,
@@ -29,10 +31,11 @@ type Section =
   | 'quests'
   | 'locations'
   | 'factions'
+  | 'items'
   | 'canon'
   | 'history'
   | 'project';
-type Mode = 'character' | 'quest' | 'location' | 'faction';
+type Mode = 'character' | 'quest' | 'location' | 'faction' | 'item';
 type ProjectStartMode = 'create' | 'open' | 'import';
 type Field = {
   key: string;
@@ -110,6 +113,28 @@ function payloadEntity(payload: ForgePayload) {
       briefing: undefined,
     };
   }
+  if (payload.kind === 'item_candidate') {
+    const wrapper = raw as unknown as import('./api').ItemCandidate;
+    return {
+      envelope: wrapper.item.envelope,
+      item: wrapper.item,
+      dna: wrapper.dna,
+      field_origins: wrapper.field_origins,
+      clue: undefined,
+      briefing: undefined,
+    };
+  }
+  if (payload.kind === 'item') {
+    const item = raw as unknown as Item;
+    return {
+      envelope: item.envelope,
+      item,
+      dna: item.envelope.generation_provenance?.dna,
+      field_origins: {},
+      clue: undefined,
+      briefing: undefined,
+    };
+  }
   if (payload.kind === 'location') {
     const location = raw as unknown as import('./api').Location;
     return {
@@ -154,6 +179,9 @@ function isQuest(payload: ForgePayload) {
 function isFaction(payload: ForgePayload) {
   return payload.kind === 'faction_candidate' || payload.kind === 'faction';
 }
+function isItem(payload: ForgePayload) {
+  return payload.kind === 'item_candidate' || payload.kind === 'item';
+}
 function payloadTitle(payload: ForgePayload) {
   const value = payloadEntity(payload);
   if (isCharacter(payload))
@@ -162,6 +190,8 @@ function payloadTitle(payload: ForgePayload) {
     return required(value.location, 'Location payload').envelope.name;
   if (isFaction(payload))
     return required(value.faction, 'Faction payload').envelope.name;
+  if (isItem(payload))
+    return required(value.item, 'Item payload').envelope.name;
   return required(value.quest, 'Quest payload').envelope.name;
 }
 function payloadFields(payload: ForgePayload): Field[] {
@@ -284,6 +314,55 @@ function payloadFields(payload: ForgePayload): Field[] {
       { key: 'hidden_truth', label: 'Hidden Truth', value: f.hidden_truth },
       { key: 'symbols', label: 'Symbols', value: f.symbols },
       { key: 'reputation', label: 'Reputation', value: f.reputation },
+      {
+        key: 'story_hooks',
+        label: 'Story Hooks',
+        value: f.story_hooks,
+        list: true,
+      },
+    ];
+  }
+  if (isItem(payload)) {
+    const f = required(value.item, 'Item payload');
+    const profiles: { id: ItemProfile; label: string }[] = [
+      { id: 'weapon', label: 'Weapon' },
+      { id: 'armor', label: 'Armor' },
+      { id: 'artifact', label: 'Artifact' },
+      { id: 'consumable', label: 'Consumable' },
+      { id: 'tool', label: 'Tool' },
+      { id: 'key-item', label: 'Key Item' },
+      { id: 'resource', label: 'Resource' },
+      { id: 'treasure', label: 'Treasure' },
+      { id: 'book', label: 'Book' },
+      { id: 'quest-item', label: 'Quest Item' },
+      { id: 'other', label: 'Other' },
+    ];
+    return [
+      { key: 'name', label: 'Name', value: f.envelope.name },
+      {
+        key: 'item_profile',
+        label: 'Item Profile',
+        value: f.item_profile,
+        options: profiles,
+      },
+      { key: 'appearance', label: 'Appearance', value: f.appearance },
+      { key: 'purpose', label: 'Purpose', value: f.purpose },
+      { key: 'properties', label: 'Properties', value: f.properties },
+      { key: 'origin', label: 'Origin', value: f.origin },
+      { key: 'history', label: 'History', value: f.history },
+      {
+        key: 'power_or_function',
+        label: 'Power or Function',
+        value: f.power_or_function,
+      },
+      {
+        key: 'cost_or_drawback',
+        label: 'Cost or Drawback',
+        value: f.cost_or_drawback,
+      },
+      { key: 'rarity', label: 'Rarity', value: f.rarity },
+      { key: 'condition', label: 'Condition', value: f.condition },
+      { key: 'secret', label: 'Secret', value: f.secret },
       {
         key: 'story_hooks',
         label: 'Story Hooks',
@@ -532,9 +611,14 @@ export function App() {
   useEffect(() => {
     if (
       project &&
-      ['characters', 'quests', 'locations', 'factions', 'canon'].includes(
-        section,
-      )
+      [
+        'characters',
+        'quests',
+        'locations',
+        'factions',
+        'items',
+        'canon',
+      ].includes(section)
     )
       void refreshRecords();
   }, [project, section, refreshRecords]);
@@ -693,7 +777,9 @@ export function App() {
             ? api.forgeQuest(preset, numericSeed, axes, activeConstraints)
             : mode === 'location'
               ? api.forgeLocation(preset, numericSeed, axes)
-              : api.forgeFaction(preset, numericSeed, axes),
+              : mode === 'faction'
+                ? api.forgeFaction(preset, numericSeed, axes)
+                : api.forgeItem(preset, numericSeed, axes),
       (value) => {
         setHometownReview(null);
         setHometownPending(false);
@@ -1127,6 +1213,11 @@ export function App() {
     setEditValue(displayField(field.value));
   };
   const saveEdit = (field: Field) => {
+    if (
+      field.options &&
+      !field.options.some((option) => option.id === editValue)
+    )
+      return;
     const value: FieldValue = field.list
       ? editValue
           .split('\n')
@@ -1321,6 +1412,7 @@ export function App() {
               ['quests', '⚑', 'Quests'],
               ['locations', '⌂', 'Locations'],
               ['factions', '♜', 'Factions'],
+              ['items', '◇', 'Items'],
               ['canon', '◆', 'Canon'],
               ['history', '◷', 'History'],
               ['project', '▤', 'Project'],
@@ -1386,19 +1478,25 @@ export function App() {
                 </div>
               </div>
               <div className="mode-switch">
-                {(['character', 'quest', 'location', 'faction'] as Mode[]).map(
-                  (item) => (
-                    <button
-                      type="button"
-                      key={item}
-                      aria-pressed={mode === item}
-                      className={mode === item ? 'selected' : ''}
-                      onClick={() => setMode(item)}
-                    >
-                      {modeLabel(item)}
-                    </button>
-                  ),
-                )}
+                {(
+                  [
+                    'character',
+                    'quest',
+                    'location',
+                    'faction',
+                    'item',
+                  ] as Mode[]
+                ).map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    aria-pressed={mode === item}
+                    className={mode === item ? 'selected' : ''}
+                    onClick={() => setMode(item)}
+                  >
+                    {modeLabel(item)}
+                  </button>
+                ))}
               </div>
               <label>
                 Universe
@@ -1942,6 +2040,10 @@ export function App() {
                   {records.filter((row) => isFaction(row.entity)).length}{' '}
                   <span className="library-count-label">Factions</span>
                 </p>
+                <p className="library-count">
+                  {records.filter((row) => isItem(row.entity)).length}{' '}
+                  <span className="library-count-label">Items</span>
+                </p>
                 <button
                   type="button"
                   className="quiet full"
@@ -1953,7 +2055,9 @@ export function App() {
                           ? 'quests'
                           : mode === 'location'
                             ? 'locations'
-                            : 'factions',
+                            : mode === 'faction'
+                              ? 'factions'
+                              : 'items',
                     )
                   }
                 >
@@ -1964,7 +2068,9 @@ export function App() {
                       ? 'Quests'
                       : mode === 'location'
                         ? 'Locations'
-                        : 'Factions'}{' '}
+                        : mode === 'faction'
+                          ? 'Factions'
+                          : 'Items'}{' '}
                   →
                 </button>
               </section>
@@ -2034,6 +2140,23 @@ export function App() {
             emptyActionLabel="Forge a Faction"
             onEmptyAction={() => {
               setMode('faction');
+              navigateToSection('forge');
+            }}
+            onSelect={selectRecord}
+            onFavorite={favorite}
+            onPromote={promote}
+            onExport={exportEntity}
+          />
+        )}
+        {section === 'items' && (
+          <LibraryView
+            title="Items"
+            records={records.filter((row) => isItem(row.entity))}
+            loading={loading}
+            empty="No Items yet. Forge your first Item."
+            emptyActionLabel="Forge an Item"
+            onEmptyAction={() => {
+              setMode('item');
               navigateToSection('forge');
             }}
             onSelect={selectRecord}
@@ -2198,6 +2321,8 @@ export function App() {
               <dd>{records.filter((r) => isCharacter(r.entity)).length}</dd>
               <dt>Quests</dt>
               <dd>{records.filter((r) => isQuest(r.entity)).length}</dd>
+              <dt>Items</dt>
+              <dd>{records.filter((r) => isItem(r.entity)).length}</dd>
               <dt>Factions</dt>
               <dd>{records.filter((r) => isFaction(r.entity)).length}</dd>
               <dt>Created</dt>
@@ -2334,6 +2459,7 @@ function sectionTitle(section: Section) {
       quests: 'Quests',
       locations: 'Locations',
       factions: 'Factions',
+      items: 'Items',
       canon: 'Canon',
       history: 'History',
       project: 'Project',
@@ -2346,6 +2472,7 @@ function modeLabel(mode: Mode) {
     quest: 'Quest',
     location: 'Location',
     faction: 'Faction',
+    item: 'Item',
   }[mode];
 }
 function friendlyAction(action: string) {
@@ -2506,7 +2633,9 @@ function RecordRow({
       ? required(entity.location, 'Location payload').summary
       : faction
         ? required(entity.faction, 'Faction payload').identity
-        : required(entity.quest, 'Quest payload').objective;
+        : isItem(record.entity)
+          ? required(entity.item, 'Item payload').purpose
+          : required(entity.quest, 'Quest payload').objective;
   return (
     <article className="record-row">
       <button
@@ -2516,7 +2645,15 @@ function RecordRow({
         onClick={() => onSelect(record)}
       >
         <span className="record-glyph">
-          {character ? '♙' : location ? '⌂' : faction ? '♜' : '⚑'}
+          {character
+            ? '♙'
+            : location
+              ? '⌂'
+              : faction
+                ? '♜'
+                : isItem(record.entity)
+                  ? '◇'
+                  : '⚑'}
         </span>
         <span>
           <strong>{payloadTitle(record.entity)}</strong>

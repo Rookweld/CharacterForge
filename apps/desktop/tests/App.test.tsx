@@ -16,6 +16,7 @@ import {
   type FactionCandidate,
   type ForgePayload,
   type ForgeResultBundle,
+  type ItemCandidate,
   type LocationCandidate,
   type Project,
   type Revision,
@@ -87,7 +88,7 @@ const dna = {
 };
 const envelope = (
   id: string,
-  type: 'character' | 'quest' | 'location' | 'faction' = 'character',
+  type: 'character' | 'quest' | 'location' | 'faction' | 'item' = 'character',
 ) => ({
   id,
   project_id: project.id,
@@ -284,6 +285,60 @@ const factionCandidate: FactionCandidate = {
 const factionPayload: ForgePayload = {
   kind: 'faction_candidate',
   value: factionCandidate,
+};
+const itemDna = {
+  recipe: {
+    ...dna.recipe,
+    kind: 'item' as const,
+    field_controls: {
+      '01-item-profile': { nonce: 0, locked: false },
+      '02-name': { nonce: 0, locked: false },
+      '03-appearance': { nonce: 0, locked: false },
+      '04-purpose': { nonce: 0, locked: false },
+      '05-properties': { nonce: 0, locked: false },
+      '06-origin': { nonce: 0, locked: false },
+      '07-history': { nonce: 0, locked: false },
+      '08-power-or-function': { nonce: 0, locked: false },
+      '09-cost-or-drawback': { nonce: 0, locked: false },
+      '10-rarity': { nonce: 0, locked: false },
+      '11-condition': { nonce: 0, locked: false },
+      '12-secret': { nonce: 0, locked: false },
+      '13-story-hooks': { nonce: 0, locked: false },
+    },
+  },
+};
+const itemCandidate: ItemCandidate = {
+  dna: itemDna,
+  field_origins: Object.fromEntries(
+    Object.keys(itemDna.recipe.field_controls).map((key) => [key, 'generated']),
+  ),
+  item: {
+    envelope: {
+      ...envelope('item-1', 'item'),
+      name: 'The Winter Pledge',
+      generation_provenance: { dna: itemDna, action: 'forge' },
+    },
+    item_profile: 'weapon',
+    appearance: 'A guild tending the old border beacons.',
+    purpose: 'Every road deserves a witness.',
+    properties: 'Keep the winter passage open.',
+    origin: 'They maintain beacons and escort supply wagons.',
+    history: 'Members mark each journey on a shared map.',
+    power_or_function: 'They control the beacon stations and local stores.',
+    cost_or_drawback: 'A practical guild of guides and repairers.',
+    rarity: 'Its oldest route records omit one vanished village.',
+    condition: 'A black lantern over a white road.',
+    secret: 'Reliable in storms, secretive about old maps.',
+    story_hooks: [
+      'A beacon is lit from inside.',
+      'A route vanishes.',
+      'A courier brings a blank map.',
+    ],
+  },
+};
+const itemPayload: ForgePayload = {
+  kind: 'item_candidate',
+  value: itemCandidate,
 };
 const hometownBundle: ForgeResultBundle = {
   primary: locationCandidate,
@@ -1061,6 +1116,146 @@ describe('desktop creative workflows', () => {
     await waitFor(() =>
       expect(api.reroll).toHaveBeenCalledWith('faction_profile'),
     );
+  });
+
+  it('locks Item Name and reflects the actual 02-name control', async () => {
+    const locked: ForgePayload = {
+      kind: 'item_candidate',
+      value: {
+        ...itemCandidate,
+        dna: {
+          ...itemCandidate.dna,
+          recipe: {
+            ...itemCandidate.dna.recipe,
+            field_controls: {
+              ...itemCandidate.dna.recipe.field_controls,
+              '02-name': { nonce: 0, locked: true },
+            },
+          },
+        },
+      },
+    };
+    vi.mocked(api.forgeItem).mockResolvedValue(itemPayload);
+    vi.mocked(api.setLock)
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(itemPayload);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Item' }));
+    await screen.findByText('The Winter Pledge', { selector: 'h2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Name' }));
+
+    await waitFor(() => expect(api.setLock).toHaveBeenCalledWith('name', true));
+    const nameField = screen
+      .getByRole('heading', { name: 'Name' })
+      .closest('article');
+    expect(nameField).not.toBeNull();
+    expect(
+      within(nameField as HTMLElement).getByText('Locked'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock Name' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('locks and rerolls the typed Item Profile action key', async () => {
+    const locked: ForgePayload = {
+      kind: 'item_candidate',
+      value: {
+        ...itemCandidate,
+        dna: {
+          ...itemCandidate.dna,
+          recipe: {
+            ...itemCandidate.dna.recipe,
+            field_controls: {
+              ...itemCandidate.dna.recipe.field_controls,
+              '01-item-profile': { nonce: 0, locked: true },
+            },
+          },
+        },
+      },
+    };
+    vi.mocked(api.forgeItem).mockResolvedValue(itemPayload);
+    vi.mocked(api.setLock)
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(itemPayload);
+    vi.mocked(api.reroll).mockResolvedValue(itemPayload);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Item' }));
+    await screen.findByText('The Winter Pledge', { selector: 'h2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Item Profile' }));
+
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenCalledWith('item_profile', true),
+    );
+    const profileField = screen
+      .getByRole('heading', { name: 'Item Profile' })
+      .closest('article');
+    expect(profileField).not.toBeNull();
+    expect(
+      within(profileField as HTMLElement).getByText('Locked'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Unlock Item Profile' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Unlock Item Profile' }),
+    );
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenLastCalledWith('item_profile', false),
+    );
+    const rerollProfile = screen.getByRole('button', {
+      name: 'Reroll Item Profile',
+    });
+    await waitFor(() => expect(rerollProfile).toBeEnabled());
+    fireEvent.click(rerollProfile);
+    await waitFor(() =>
+      expect(api.reroll).toHaveBeenCalledWith('item_profile'),
+    );
+  });
+
+  it('edits Item Profile through only supported select values', async () => {
+    vi.mocked(api.forgeItem).mockResolvedValue(itemPayload);
+    vi.mocked(api.editField).mockResolvedValue(itemPayload);
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Item' }));
+    await screen.findByText('The Winter Pledge', { selector: 'h2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Item Profile' }));
+    const select = screen.getByRole('combobox', { name: 'Edit Item Profile' });
+    expect(within(select).getAllByRole('option')).toHaveLength(11);
+    expect(
+      screen.queryByRole('textbox', { name: 'Edit Item Profile' }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(select, { target: { value: 'invalid-profile' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    expect(api.editField).not.toHaveBeenCalled();
+    fireEvent.change(select, { target: { value: 'book' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    await waitFor(() =>
+      expect(api.editField).toHaveBeenCalledWith('item_profile', 'book'),
+    );
+  });
+
+  it('opens the Item library and typed saved detail', async () => {
+    await openWorkspace([record(itemPayload)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Items/ }));
+    expect(
+      screen.getByRole('heading', { name: 'Items', level: 1 }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: /The Winter Pledge.*candidate/i,
+      }),
+    );
+    expect(
+      await screen.findByRole('heading', { name: 'Item Profile' }),
+    ).toBeInTheDocument();
   });
 
   it('rerolls a single requested field', async () => {
