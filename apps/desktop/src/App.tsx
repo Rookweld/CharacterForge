@@ -8,6 +8,8 @@ import {
   errorMessage,
   type FieldValue,
   type ForgePayload,
+  type ForgeRelationship,
+  type ForgeResultBundle,
   type HistoryRecord,
   type Project,
   presets,
@@ -82,10 +84,7 @@ function payloadEntity(payload: ForgePayload) {
     return {
       envelope: location.envelope,
       location,
-      dna: required(
-        location.envelope.generation_provenance,
-        'Location generation metadata',
-      ).dna,
+      dna: location.envelope.generation_provenance?.dna,
       field_origins: {},
       clue: undefined,
       briefing: undefined,
@@ -96,10 +95,7 @@ function payloadEntity(payload: ForgePayload) {
     return {
       envelope: character.envelope,
       character,
-      dna: required(
-        character.envelope.generation_provenance,
-        'Character generation metadata',
-      ).dna,
+      dna: character.envelope.generation_provenance?.dna,
       field_origins: {},
       clue: undefined,
       briefing: undefined,
@@ -109,10 +105,7 @@ function payloadEntity(payload: ForgePayload) {
   return {
     envelope: quest.envelope,
     quest,
-    dna: required(
-      quest.envelope.generation_provenance,
-      'Quest generation metadata',
-    ).dna,
+    dna: quest.envelope.generation_provenance?.dna,
     field_origins: {},
     clue: undefined,
     briefing: undefined,
@@ -266,7 +259,7 @@ function payloadFields(payload: ForgePayload): Field[] {
 function fieldsOf(
   payload: ForgePayload,
 ): Record<string, { nonce: number; locked: boolean }> {
-  return payloadEntity(payload).dna.recipe.field_controls;
+  return payloadEntity(payload).dna?.recipe.field_controls ?? {};
 }
 function fieldControl(payload: ForgePayload, field: string) {
   const suffix = `-${field.replaceAll('_', '-')}`;
@@ -281,7 +274,7 @@ function originOf(payload: ForgePayload, field: string) {
     value.endsWith(`-${key}`),
   );
   return payload.kind.endsWith('candidate') && control
-    ? payloadEntity(payload).field_origins[control]
+    ? (payloadEntity(payload).field_origins as Record<string, string>)[control]
     : undefined;
 }
 function displayField(value: FieldValue) {
@@ -307,6 +300,14 @@ export function App() {
   const [selectedRecord, setSelectedRecord] = useState<EntityRecord | null>(
     null,
   );
+  const [hometownReview, setHometownReview] =
+    useState<ForgeResultBundle | null>(null);
+  const [hometownPending, setHometownPending] = useState(false);
+  const [hometownSeed, setHometownSeed] = useState('42');
+  const [hometownSourceId, setHometownSourceId] = useState<string | null>(null);
+  const [selectedRelationships, setSelectedRelationships] = useState<
+    ForgeRelationship[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -358,6 +359,9 @@ export function App() {
     setSelectedHistory(null);
     setSnapshot(null);
     setRevisionBase(null);
+    setHometownReview(null);
+    setHometownPending(false);
+    setHometownSourceId(null);
   }, []);
 
   const setProjectLocationDefaults = useCallback((active: Project) => {
@@ -608,6 +612,9 @@ export function App() {
             ? api.forgeQuest(preset, numericSeed, axes, activeConstraints)
             : api.forgeLocation(preset, numericSeed, axes),
       (value) => {
+        setHometownReview(null);
+        setHometownPending(false);
+        setHometownSourceId(null);
         setCandidate(value);
         setCanUndo(false);
         setCanRedo(false);
@@ -638,15 +645,46 @@ export function App() {
     current?.kind.endsWith('candidate') &&
     payloadEntity(current).envelope.canon_state !== 'canon';
   const allFields = current ? payloadFields(current) : [];
+  const currentDna = current ? payloadEntity(current).dna : undefined;
   const label = current
-    ? (labels[payloadEntity(current).dna.recipe.universe_preset] ??
-      payloadEntity(current).dna.recipe.universe_preset)
+    ? currentDna
+      ? (labels[currentDna.recipe.universe_preset] ??
+        currentDna.recipe.universe_preset)
+      : 'Saved Character has no generation recipe'
     : labels[preset];
   const canonRecords = records.filter(
     (record) => payloadEntity(record.entity).envelope.canon_state === 'canon',
   );
 
   const save = async () => {
+    if (hometownPending) {
+      await run(
+        () => api.saveForgeBundle(),
+        (saved) => {
+          setRecords((old) =>
+            old.some(
+              (row) => entityId(row.entity) === entityId(saved.location.entity),
+            )
+              ? old.map((row) =>
+                  entityId(row.entity) === entityId(saved.location.entity)
+                    ? saved.location
+                    : row,
+                )
+              : [saved.location, ...old],
+          );
+          setSelectedRecord(saved.location);
+          setCandidate(saved.location.entity);
+          setDirty(false);
+          setHometownPending(false);
+          setSelectedRelationships([saved.relationship]);
+          void api.listEntities().then(setRecords);
+          setNotice(
+            'Hometown Location and born_in Candidate relationship saved together.',
+          );
+        },
+      );
+      return;
+    }
     if (revisionTarget) {
       if (!candidate) return;
       const savedCanon = revisionBase?.entity;
@@ -733,7 +771,11 @@ export function App() {
       () => api.getEntity(entityId(record.entity)),
       (fresh) => {
         if (fresh) {
+          setHometownReview(null);
+          setHometownPending(false);
+          setHometownSourceId(null);
           setSelectedRecord(fresh);
+          setSelectedRelationships([]);
           setCandidate(fresh.entity);
           setDirty(false);
           setCanUndo(false);
@@ -741,6 +783,12 @@ export function App() {
           setRevisionTarget(false);
           setSelectedRevision(null);
           setRevisions([]);
+          if (isCharacter(fresh.entity)) {
+            void api
+              .relationshipsForEntity(entityId(fresh.entity))
+              .then(setSelectedRelationships)
+              .catch(() => setSelectedRelationships([]));
+          }
           void api
             .revisions(entityId(fresh.entity))
             .then(setRevisions)
@@ -788,6 +836,49 @@ export function App() {
           ),
         ),
     );
+  const forgeHometownFrom = (record: EntityRecord) => {
+    const actionSeed = Number(hometownSeed);
+    if (!Number.isSafeInteger(actionSeed) || actionSeed < 0) {
+      setError(
+        'Enter a non-negative whole number for the Hometown action seed.',
+      );
+      return;
+    }
+    const sourceId = entityId(record.entity);
+    setHometownSourceId(sourceId);
+    setHometownReview(null);
+    void run(
+      () => api.forgeHometown(sourceId, actionSeed),
+      (bundle) => {
+        setHometownReview(bundle);
+        setHometownPending(true);
+        setCandidate({ kind: 'location_candidate', value: bundle.primary });
+        setMode('location');
+        setSelectedRecord(null);
+        setDirty(true);
+        setCanUndo(false);
+        setCanRedo(false);
+        setRevisionTarget(false);
+        navigateToSection('forge');
+        setNotice(
+          'Review this Hometown and its proposed born_in relationship before saving the bundle.',
+        );
+      },
+    );
+  };
+  const discardHometown = () => {
+    void run(
+      () => api.discardForgeBundle(),
+      () => {
+        setHometownReview(null);
+        setHometownPending(false);
+        setHometownSourceId(null);
+        clearWorkingView();
+        setNotice('Unsaved Hometown bundle discarded.');
+        navigateToSection('characters');
+      },
+    );
+  };
   const loadHistory = useCallback(() => {
     if (!project) return;
     setBusy(true);
@@ -1428,109 +1519,188 @@ export function App() {
                   </p>
                 </div>
               ) : (
-                <div className="field-list">
-                  {allFields.map((field) => {
-                    const control = fieldControl(current, field.key);
-                    const locked = Boolean(control?.locked);
-                    const modified =
-                      originOf(current, field.key) === 'user_modified';
-                    return (
-                      <article
-                        className={`result-field ${locked ? 'locked' : ''}`}
-                        key={field.key}
-                      >
-                        <div className="field-title">
-                          <h3>{field.label}</h3>
-                          <div className="field-tags">
-                            {locked && (
-                              <span className="tag lock-tag">Locked</span>
-                            )}
-                            {modified && (
-                              <span className="tag edit-tag">Edited</span>
-                            )}
-                          </div>
-                        </div>
-                        {editing === field.key ? (
-                          <div className="edit-box">
-                            <textarea
-                              aria-label={`Edit ${field.label}`}
-                              value={editValue}
-                              onChange={(event) =>
-                                setEditValue(event.target.value)
-                              }
-                              onKeyDown={(event) => {
-                                if (event.key === 'Escape') setEditing(null);
-                              }}
-                            />
-                            <div className="button-row">
-                              <button
-                                type="button"
-                                className="primary small"
-                                onClick={() => saveEdit(field)}
-                              >
-                                Save edit
-                              </button>
-                              <button
-                                type="button"
-                                className="small"
-                                onClick={() => setEditing(null)}
-                              >
-                                Cancel
-                              </button>
+                <>
+                  {hometownPending && hometownReview && (
+                    <section
+                      className="panel context-card"
+                      aria-label="Hometown review"
+                    >
+                      <p className="eyebrow">FORGE FURTHER REVIEW</p>
+                      <h3>Hometown · Candidate</h3>
+                      <p>
+                        Source Character:{' '}
+                        {records
+                          .filter(
+                            (row) => entityId(row.entity) === hometownSourceId,
+                          )
+                          .map((row) => payloadTitle(row.entity))[0] ??
+                          hometownSourceId}
+                      </p>
+                      <label className="field-control">
+                        Action seed
+                        <input
+                          aria-label="Hometown action seed"
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={hometownSeed}
+                          onChange={(event) =>
+                            setHometownSeed(event.target.value)
+                          }
+                        />
+                      </label>
+                      <p>
+                        Proposed relationship: Born in{' '}
+                        {payloadTitle({
+                          kind: 'location_candidate',
+                          value: hometownReview.primary,
+                        })}
+                      </p>
+                      <p>
+                        Context:{' '}
+                        {Object.entries(
+                          hometownReview.recipe.context_snapshot.facts,
+                        )
+                          .map(([key, value]) => `${key}: ${value}`)
+                          .join(' · ')}
+                      </p>
+                      <small>
+                        Context hash:{' '}
+                        {hometownReview.recipe.context_snapshot.context_hash}
+                      </small>
+                      <div className="button-row">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            if (hometownSourceId) {
+                              const source = records.find(
+                                (row) =>
+                                  entityId(row.entity) === hometownSourceId,
+                              );
+                              if (source) forgeHometownFrom(source);
+                            }
+                          }}
+                        >
+                          Forge Again
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={discardHometown}
+                        >
+                          Discard Bundle
+                        </button>
+                      </div>
+                    </section>
+                  )}
+                  <div className="field-list">
+                    {allFields.map((field) => {
+                      const control = fieldControl(current, field.key);
+                      const locked = Boolean(control?.locked);
+                      const modified =
+                        originOf(current, field.key) === 'user_modified';
+                      return (
+                        <article
+                          className={`result-field ${locked ? 'locked' : ''}`}
+                          key={field.key}
+                        >
+                          <div className="field-title">
+                            <h3>{field.label}</h3>
+                            <div className="field-tags">
+                              {locked && (
+                                <span className="tag lock-tag">Locked</span>
+                              )}
+                              {modified && (
+                                <span className="tag edit-tag">Edited</span>
+                              )}
                             </div>
                           </div>
-                        ) : (
-                          <FieldContent field={field} />
-                        )}
-                        {canShape && (
-                          <div className="field-actions">
-                            <button
-                              type="button"
-                              aria-pressed={locked}
-                              aria-label={`${locked ? 'Unlock' : 'Lock'} ${field.label}`}
-                              className={`icon-button ${locked ? 'pressed' : ''}`}
-                              onClick={() => changeLock(field)}
-                            >
-                              {locked ? '▣' : '▢'}{' '}
-                              <span className="icon-button-label">
-                                {locked ? 'Unlock' : 'Lock'}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Reroll ${field.label}`}
-                              className="icon-button"
-                              disabled={locked || busy}
-                              title={
-                                locked
-                                  ? 'Unlock this field before rerolling'
-                                  : `Reroll ${field.label}`
-                              }
-                              onClick={() =>
-                                updateCandidate(
-                                  () => api.reroll(field.key),
-                                  `${field.label} rerolled.`,
-                                )
-                              }
-                            >
-                              ↻{' '}
-                              <span className="icon-button-label">Reroll</span>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Edit ${field.label}`}
-                              className="icon-button"
-                              disabled={busy}
-                              onClick={() => startEdit(field)}
-                            >
-                              ✎ <span className="icon-button-label">Edit</span>
-                            </button>
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
+                          {editing === field.key ? (
+                            <div className="edit-box">
+                              <textarea
+                                aria-label={`Edit ${field.label}`}
+                                value={editValue}
+                                onChange={(event) =>
+                                  setEditValue(event.target.value)
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Escape') setEditing(null);
+                                }}
+                              />
+                              <div className="button-row">
+                                <button
+                                  type="button"
+                                  className="primary small"
+                                  onClick={() => saveEdit(field)}
+                                >
+                                  Save edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="small"
+                                  onClick={() => setEditing(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <FieldContent field={field} />
+                          )}
+                          {canShape && (
+                            <div className="field-actions">
+                              <button
+                                type="button"
+                                aria-pressed={locked}
+                                aria-label={`${locked ? 'Unlock' : 'Lock'} ${field.label}`}
+                                className={`icon-button ${locked ? 'pressed' : ''}`}
+                                onClick={() => changeLock(field)}
+                              >
+                                {locked ? '▣' : '▢'}{' '}
+                                <span className="icon-button-label">
+                                  {locked ? 'Unlock' : 'Lock'}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Reroll ${field.label}`}
+                                className="icon-button"
+                                disabled={locked || busy}
+                                title={
+                                  locked
+                                    ? 'Unlock this field before rerolling'
+                                    : `Reroll ${field.label}`
+                                }
+                                onClick={() =>
+                                  updateCandidate(
+                                    () => api.reroll(field.key),
+                                    `${field.label} rerolled.`,
+                                  )
+                                }
+                              >
+                                ↻{' '}
+                                <span className="icon-button-label">
+                                  Reroll
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Edit ${field.label}`}
+                                className="icon-button"
+                                disabled={busy}
+                                onClick={() => startEdit(field)}
+                              >
+                                ✎{' '}
+                                <span className="icon-button-label">Edit</span>
+                              </button>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </section>
             <aside className="context-panel">
@@ -1539,7 +1709,9 @@ export function App() {
                 <h2>{current ? 'Ready to shape' : 'A new beginning'}</h2>
                 <p className="muted">
                   {current
-                    ? `Seed ${payloadEntity(current).dna.recipe.root_seed} · ${label}`
+                    ? currentDna
+                      ? `Seed ${currentDna.recipe.root_seed} · ${label}`
+                      : label
                     : 'Your settings stay ready while you explore the project.'}
                 </p>
                 {current && (
@@ -1551,7 +1723,7 @@ export function App() {
                     <div>
                       <span className="context-stat-label">Seed</span>
                       <strong className="context-stat-value">
-                        {payloadEntity(current).dna.recipe.root_seed}
+                        {currentDna?.recipe.root_seed ?? 'Unavailable'}
                       </strong>
                     </div>
                     <div>
@@ -1587,48 +1759,78 @@ export function App() {
               {current && (
                 <section className="panel action-card">
                   <p className="eyebrow">KEEP THIS WORK</p>
-                  <button
-                    type="button"
-                    className="primary full"
-                    disabled={busy || !canShape}
-                    onClick={save}
-                  >
-                    {candidateSaved || selectedRecord
-                      ? revisionTarget
-                        ? 'Save Canon revision'
-                        : 'Save changes'
-                      : 'Save candidate'}
-                  </button>
-                  <button
-                    type="button"
-                    className="full"
-                    disabled={
-                      busy ||
-                      (!candidateSaved && !selectedRecord) ||
-                      payloadEntity(current).envelope.canon_state === 'canon'
-                    }
-                    onClick={() => {
-                      const record = candidateSaved ?? selectedRecord;
-                      if (record) promote(record);
-                    }}
-                  >
-                    Promote to canon
-                  </button>
-                  <button
-                    type="button"
-                    className="full"
-                    disabled={busy || !current}
-                    onClick={() => {
-                      void run(
-                        () => api.history(entityId(current)),
-                        setHistory,
-                      );
-                      navigateToSection('history');
-                    }}
-                  >
-                    View history
-                  </button>
-                  <small>Changes to saved work are kept when you save.</small>
+                  {hometownPending ? (
+                    <>
+                      <button
+                        type="button"
+                        className="primary full"
+                        disabled={busy}
+                        onClick={save}
+                      >
+                        Save Bundle
+                      </button>
+                      <button
+                        type="button"
+                        className="full"
+                        disabled={busy}
+                        onClick={discardHometown}
+                      >
+                        Discard Bundle
+                      </button>
+                      <small>
+                        Location and born_in relationship save together with
+                        frozen provenance.
+                      </small>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="primary full"
+                        disabled={busy || !canShape}
+                        onClick={save}
+                      >
+                        {candidateSaved || selectedRecord
+                          ? revisionTarget
+                            ? 'Save Canon revision'
+                            : 'Save changes'
+                          : 'Save candidate'}
+                      </button>
+                      <button
+                        type="button"
+                        className="full"
+                        disabled={
+                          busy ||
+                          (!candidateSaved && !selectedRecord) ||
+                          payloadEntity(current).envelope.canon_state ===
+                            'canon'
+                        }
+                        onClick={() => {
+                          const record = candidateSaved ?? selectedRecord;
+                          if (record) promote(record);
+                        }}
+                      >
+                        Promote to canon
+                      </button>
+                      <button
+                        type="button"
+                        className="full"
+                        disabled={busy || !current}
+                        onClick={() => {
+                          void run(
+                            () => api.history(entityId(current)),
+                            setHistory,
+                          );
+                          navigateToSection('history');
+                        }}
+                      >
+                        View history
+                      </button>
+                      <small>
+                        Changes to saved work are kept when you save.
+                      </small>
+                    </>
+                  )}
                 </section>
               )}
               <section className="panel context-card">
@@ -1681,6 +1883,9 @@ export function App() {
             onFavorite={favorite}
             onPromote={promote}
             onExport={exportEntity}
+            onForgeHometown={forgeHometownFrom}
+            relationships={selectedRelationships}
+            allRecords={records}
           />
         )}
         {section === 'quests' && (
@@ -1749,7 +1954,12 @@ export function App() {
                 ))
               )}
             </section>
-            <DetailView record={selectedRecord} />
+            <DetailView
+              record={selectedRecord}
+              onForgeHometown={forgeHometownFrom}
+              relationships={selectedRelationships}
+              records={records}
+            />
             {selectedRecord && (
               <RevisionPanel
                 revisions={revisions}
@@ -2151,6 +2361,7 @@ function RecordRow({
   onPromote: (record: EntityRecord) => void;
 }) {
   const entity = payloadEntity(record.entity);
+  const recipe = entity.dna?.recipe;
   const character = isCharacter(record.entity);
   const location = isLocation(record.entity);
   const summary = character
@@ -2173,8 +2384,9 @@ function RecordRow({
           <strong>{payloadTitle(record.entity)}</strong>
           <small>{summary}</small>
           <em>
-            {labels[entity.dna.recipe.universe_preset] ??
-              entity.dna.recipe.universe_preset}{' '}
+            {recipe
+              ? (labels[recipe.universe_preset] ?? recipe.universe_preset)
+              : 'No generation recipe'}{' '}
             · {friendlyAction(entity.envelope.canon_state)}
           </em>
         </span>
@@ -2204,10 +2416,16 @@ function RecordRow({
 function DetailView({
   record,
   onExport,
+  onForgeHometown,
+  relationships = [],
+  records = [],
 }: {
   record: EntityRecord | null;
   revisions?: Revision[];
   onExport?: (record: EntityRecord, format: 'json' | 'markdown') => void;
+  onForgeHometown?: (record: EntityRecord) => void;
+  relationships?: ForgeRelationship[];
+  records?: EntityRecord[];
 }) {
   if (!record)
     return (
@@ -2215,6 +2433,14 @@ function DetailView({
         <Empty text="Select a saved item to see the complete structured result." />
       </section>
     );
+  const entity = payloadEntity(record.entity);
+  const recipe = entity.dna?.recipe;
+  const character = isCharacter(record.entity);
+  const hometownSupported = Boolean(
+    character &&
+      entity.envelope.origin === 'generated' &&
+      entity.envelope.generation_provenance?.dna.recipe.kind === 'character',
+  );
   return (
     <section className="detail-panel panel">
       <div className="panel-heading">
@@ -2231,10 +2457,32 @@ function DetailView({
         </span>
       </div>
       <p className="detail-meta">
-        {labels[payloadEntity(record.entity).dna.recipe.universe_preset] ??
-          payloadEntity(record.entity).dna.recipe.universe_preset}{' '}
-        · seed {payloadEntity(record.entity).dna.recipe.root_seed}
+        {recipe
+          ? `${labels[recipe.universe_preset] ?? recipe.universe_preset} · seed ${recipe.root_seed}`
+          : 'No generation provenance'}
       </p>
+      {character && onForgeHometown && (
+        <div className="button-row">
+          <button
+            type="button"
+            className="primary"
+            disabled={!hometownSupported}
+            title={
+              hometownSupported
+                ? 'Create a Settlement Candidate from this saved Character.'
+                : 'Forge Hometown requires a saved generated Character with valid generation provenance.'
+            }
+            onClick={() => onForgeHometown(record)}
+          >
+            Forge Hometown
+          </button>
+          {!hometownSupported && (
+            <small>
+              Unavailable: this Character has no supported generated ForgeDNA.
+            </small>
+          )}
+        </div>
+      )}
       {onExport && (
         <div className="button-row">
           <button type="button" onClick={() => onExport(record, 'json')}>
@@ -2259,6 +2507,31 @@ function DetailView({
           </article>
         ))}
       </div>
+      {character && relationships.length > 0 && (
+        <section className="detail-connections" aria-label="Connections">
+          <h3>Connections</h3>
+          {relationships.map((relationship) => {
+            const relatedId =
+              relationship.source_id === entity.envelope.id
+                ? relationship.target_id
+                : relationship.source_id;
+            const related = records.find(
+              (row) => entityId(row.entity) === relatedId,
+            );
+            const relatedName = related
+              ? payloadTitle(related.entity)
+              : relatedId;
+            return (
+              <p key={relationship.id}>
+                {relationship.relationship_type === 'born_in'
+                  ? `Born in ${relatedName}`
+                  : `${relationship.relationship_type}: ${relatedName}`}{' '}
+                · {friendlyAction(relationship.state)}
+              </p>
+            );
+          })}
+        </section>
+      )}
     </section>
   );
 }
@@ -2324,6 +2597,9 @@ function LibraryView({
   onFavorite,
   onPromote,
   onExport,
+  onForgeHometown,
+  relationships = [],
+  allRecords = [],
 }: {
   title: string;
   records: EntityRecord[];
@@ -2335,6 +2611,9 @@ function LibraryView({
   onFavorite: (record: EntityRecord) => void;
   onPromote: (record: EntityRecord) => void;
   onExport: (record: EntityRecord, format: 'json' | 'markdown') => void;
+  onForgeHometown?: (record: EntityRecord) => void;
+  relationships?: ForgeRelationship[];
+  allRecords?: EntityRecord[];
 }) {
   const [selected, setSelected] = useState<EntityRecord | null>(null);
   const select = (record: EntityRecord) => {
@@ -2383,6 +2662,9 @@ function LibraryView({
           ) ?? selected
         }
         onExport={onExport}
+        onForgeHometown={onForgeHometown}
+        relationships={relationships}
+        records={allRecords}
       />
     </div>
   );

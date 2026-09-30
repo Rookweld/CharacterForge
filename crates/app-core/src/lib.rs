@@ -3,6 +3,7 @@
 mod character;
 mod character_content;
 mod field_stream;
+mod forge_further;
 mod location;
 mod quest;
 mod quest_content;
@@ -13,6 +14,11 @@ pub use character::{
     CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, FieldValueOrigin,
 };
 pub use field_stream::FieldStream;
+pub use forge_further::{
+    FORGE_HOMETOWN_ACTION, FORGE_HOMETOWN_RECIPE, ForgeActionDefinition, ForgeFurtherRecipeRecord,
+    ForgeResultBundle, ForgeResultMapping, HometownContextSnapshot, HometownSource,
+    compile_hometown_context, finalize_hometown_review, forge_hometown,
+};
 pub use location::{
     LOCATION_FIELD_ORDER, LocationCandidate, LocationField, LocationFieldValue, LocationForge,
     LocationOrigin,

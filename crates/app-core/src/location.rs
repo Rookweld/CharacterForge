@@ -115,6 +115,20 @@ impl LocationCandidate {
     pub fn validate(&self) -> ValidationResult<()> {
         self.location.validate()?;
         validate_location_dna(&self.dna)?;
+        if self
+            .dna
+            .recipe
+            .constraints
+            .get(&forge_contracts::ConstraintKey::new("location.profile").expect("static key"))
+            .and_then(|value| parse_profile(value))
+            .is_some_and(|forced| forced != self.location.location_profile)
+        {
+            return Err(error(
+                ValidationCode::InvalidConstraint,
+                "location.location_profile",
+                "Location profile does not satisfy its explicit generation constraint",
+            ));
+        }
         let expected: BTreeSet<_> = LOCATION_FIELD_ORDER
             .into_iter()
             .map(LocationField::key)
@@ -1049,6 +1063,15 @@ fn validate_location_dna(dna: &ForgeDNA) -> ValidationResult<()> {
             "unsupported Location preset",
         ));
     }
+    for (key, value) in &dna.recipe.constraints {
+        if key.as_str() != "location.profile" || parse_profile(value).is_none() {
+            return Err(error(
+                ValidationCode::InvalidConstraint,
+                "constraints.location.profile",
+                "Location supports only the location.profile constraint with a supported profile value",
+            ));
+        }
+    }
     let expected: BTreeSet<_> = LOCATION_FIELD_ORDER
         .into_iter()
         .map(LocationField::key)
@@ -1130,7 +1153,12 @@ fn generate_field(
     let key = field.key()?;
     let theme = theme_for(dna, &key, stream)?;
     let index = stream.next_bounded(6)? as usize;
-    let profile = profile.unwrap_or_else(|| {
+    let constrained_profile = dna
+        .recipe
+        .constraints
+        .get(&forge_contracts::ConstraintKey::new("location.profile").expect("static key"))
+        .and_then(|value| parse_profile(value));
+    let profile = constrained_profile.or(profile).unwrap_or_else(|| {
         [
             LocationProfile::Settlement,
             LocationProfile::District,
@@ -1395,6 +1423,22 @@ fn generate_field(
         }
     };
     Ok(value)
+}
+
+fn parse_profile(value: &str) -> Option<LocationProfile> {
+    Some(match value {
+        "settlement" => LocationProfile::Settlement,
+        "district" => LocationProfile::District,
+        "building" => LocationProfile::Building,
+        "dungeon" => LocationProfile::Dungeon,
+        "ruins" => LocationProfile::Ruins,
+        "wilderness" => LocationProfile::Wilderness,
+        "landmark" => LocationProfile::Landmark,
+        "interior" => LocationProfile::Interior,
+        "site" => LocationProfile::Site,
+        "other" => LocationProfile::Other,
+        _ => return None,
+    })
 }
 
 fn articleless(value: &str) -> &str {
@@ -1919,6 +1963,29 @@ mod tests {
         assert_eq!(dna, before);
         assert_eq!(left.location.envelope.entity_type, EntityType::Location);
         assert!(left.validate().is_ok());
+    }
+
+    #[test]
+    fn explicit_profile_constraint_forces_settlement_and_rejects_unknown_profiles() {
+        let mut dna =
+            LocationForge::new_dna(RootSeed::new(8080), "nordic-myth", CreativeAxes::neutral())
+                .unwrap();
+        dna.recipe.constraints.insert(
+            forge_contracts::ConstraintKey::new("location.profile").unwrap(),
+            "settlement".into(),
+        );
+        let candidate = LocationForge::generate(&dna).unwrap();
+        assert_eq!(
+            candidate.location.location_profile,
+            LocationProfile::Settlement
+        );
+        assert!(candidate.validate().is_ok());
+
+        dna.recipe.constraints.insert(
+            forge_contracts::ConstraintKey::new("location.profile").unwrap(),
+            "moon-colony".into(),
+        );
+        assert!(LocationForge::generate(&dna).is_err());
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use forge_app_core::{
-    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, LocationField,
-    LocationFieldValue, LocationForge, QuestField, QuestFieldValue, QuestForge,
+    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, ForgeResultBundle,
+    HometownSource, LocationField, LocationFieldValue, LocationForge, QuestField, QuestFieldValue,
+    QuestForge, finalize_hometown_review, forge_hometown as forge_hometown_core,
 };
 use forge_contracts::{
     CanonState, CreativeAxes, CreativeAxis, EntityId, INITIAL_CONTENT_VERSION,
@@ -11,8 +12,8 @@ use forge_export::{
     restore_active, write_entity_json, write_entity_markdown,
 };
 use forge_storage::{
-    CURRENT_SCHEMA_VERSION, EntityRecord, EntityRevision, ForgeRunRecord, ProjectSession,
-    ProjectStore, SessionHistory, StoreError, StoredEntity, StoredProject,
+    CURRENT_SCHEMA_VERSION, EntityRecord, EntityRevision, ForgeBundleSaveReceipt, ForgeRunRecord,
+    ProjectSession, ProjectStore, SessionHistory, StoreError, StoredEntity, StoredProject,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -34,6 +35,7 @@ struct AppSession {
     working: Option<StoredEntity>,
     write_version: Option<i64>,
     history: Option<SessionHistory<StoredEntity>>,
+    hometown: Option<ForgeResultBundle>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -259,6 +261,14 @@ fn remember_recent_project(app: &AppHandle, project: &ProjectInfo) {
 struct EntityView {
     entity: StoredEntity,
     write_version: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ForgeBundleSaveView {
+    location: EntityView,
+    relationship: forge_contracts::Relationship,
+    event_id: i64,
 }
 
 #[derive(Serialize)]
@@ -494,6 +504,7 @@ fn create_project(
     session.working = None;
     session.write_version = None;
     session.history = None;
+    session.hometown = None;
     remember_recent_project(&app, &project);
     Ok(project)
 }
@@ -530,6 +541,7 @@ fn open_project(
     session.working = None;
     session.write_version = None;
     session.history = None;
+    session.hometown = None;
     let project = project_info(&session)?;
     remember_recent_project(&app, &project);
     Ok(project)
@@ -590,6 +602,7 @@ fn close_project(state: State<'_, AppState>) -> Result<(), UiError> {
     session.working = None;
     session.write_version = None;
     session.history = None;
+    session.hometown = None;
     Ok(())
 }
 
@@ -642,6 +655,7 @@ fn import_project_command(
     session.working = None;
     session.write_version = None;
     session.history = None;
+    session.hometown = None;
     let project = project_info(&session)?;
     debug_assert_eq!(project.name, imported.name);
     remember_recent_project(&app, &project);
@@ -655,6 +669,7 @@ fn restore_backup_command(state: State<'_, AppState>, archive_path: String) -> R
     session.working = None;
     session.write_version = None;
     session.history = None;
+    session.hometown = None;
     Ok(())
 }
 
@@ -849,6 +864,7 @@ fn forge_character(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
+    session.hometown = None;
     Ok(entity)
 }
 
@@ -877,6 +893,7 @@ fn forge_quest(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
+    session.hometown = None;
     Ok(entity)
 }
 
@@ -904,7 +921,135 @@ fn forge_location(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
+    session.hometown = None;
     Ok(entity)
+}
+
+fn hometown_source(record: &EntityRecord) -> Result<HometownSource, UiError> {
+    match &record.entity {
+        StoredEntity::CharacterCandidate(candidate) => Ok(HometownSource {
+            character: candidate.character.clone(),
+            field_origins: candidate.field_origins.clone(),
+            write_version: record.write_version,
+        }),
+        StoredEntity::Character(character) => Ok(HometownSource {
+            character: character.clone(),
+            field_origins: BTreeMap::new(),
+            write_version: record.write_version,
+        }),
+        _ => Err(invalid_candidate_operation(
+            "Forge Hometown requires a saved Character with supported generation provenance.",
+        )),
+    }
+}
+
+#[tauri::command]
+fn forge_hometown(
+    state: State<'_, AppState>,
+    source_id: String,
+    seed: u64,
+) -> Result<ForgeResultBundle, UiError> {
+    let mut session = lock_state(&state)?;
+    let source_id = parse_entity_id(&source_id)?;
+    let store = active_store(&mut session)?;
+    let project = store.load_project()?.ok_or_else(|| UiError {
+        kind: "no_project",
+        message: "Open or create a project first.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    let source_record = store.get_entity(source_id)?.ok_or_else(|| UiError {
+        kind: "not_found",
+        message: "The saved Character could not be found.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    let source = hometown_source(&source_record)?;
+    let bundle = forge_hometown_core(&source, seed, project.envelope.id)?;
+    let working = StoredEntity::LocationCandidate(bundle.primary.clone());
+    session.working = Some(working.clone());
+    session.write_version = None;
+    session.history = Some(SessionHistory::new(working));
+    session.hometown = Some(bundle.clone());
+    Ok(bundle)
+}
+
+#[tauri::command]
+fn discard_forge_bundle(state: State<'_, AppState>) -> Result<(), UiError> {
+    let mut session = lock_state(&state)?;
+    session.hometown = None;
+    session.working = None;
+    session.write_version = None;
+    session.history = None;
+    session.hometown = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn save_forge_bundle(state: State<'_, AppState>) -> Result<ForgeBundleSaveView, UiError> {
+    let mut session = lock_state(&state)?;
+    let mut bundle = session.hometown.clone().ok_or_else(|| UiError {
+        kind: "invalid_operation",
+        message: "There is no Forge Hometown bundle to save.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    let working = session.working.clone().ok_or_else(|| UiError {
+        kind: "no_candidate",
+        message: "Forge a Hometown before saving its bundle.".into(),
+        expected: None,
+        actual: None,
+    })?;
+    let reviewed_primary = match working {
+        StoredEntity::LocationCandidate(candidate) => candidate,
+        _ => {
+            return Err(invalid_candidate_operation(
+                "The Forge Hometown review no longer contains a Location Candidate.",
+            ));
+        }
+    };
+    bundle = finalize_hometown_review(&bundle, reviewed_primary)?;
+    let source_id = bundle.recipe.context_snapshot.source_entity_id;
+    let expected_source_version = bundle.recipe.context_snapshot.source_write_version;
+    let receipt: ForgeBundleSaveReceipt = active_store(&mut session)?.save_forge_bundle(
+        source_id,
+        expected_source_version,
+        &bundle,
+    )?;
+    let store = active_store(&mut session)?;
+    let location = store
+        .get_entity(bundle.primary.location.envelope.id)?
+        .ok_or_else(|| ui_storage_error("The saved Hometown Location could not be reloaded."))?;
+    let relationship = store
+        .get_relationship(bundle.relationship.id)?
+        .ok_or_else(|| ui_storage_error("The saved born_in relationship could not be reloaded."))?;
+    let entity = location.entity.clone();
+    session.working = Some(entity.clone());
+    session.write_version = Some(receipt.location_write_version);
+    session.history = Some(SessionHistory::new(entity.clone()));
+    session.hometown = None;
+    Ok(ForgeBundleSaveView {
+        location: entity_view(EntityRecord {
+            entity,
+            write_version: receipt.location_write_version,
+        }),
+        relationship: relationship.relationship,
+        event_id: receipt.forge_event_id,
+    })
+}
+
+#[tauri::command]
+fn list_relationships_for_entity(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Vec<forge_contracts::Relationship>, UiError> {
+    let mut session = lock_state(&state)?;
+    let id = parse_entity_id(&id)?;
+    Ok(active_store(&mut session)?
+        .list_relationships_for_entity(id)?
+        .into_iter()
+        .map(|record| record.relationship)
+        .collect())
 }
 
 #[tauri::command]
@@ -1046,6 +1191,11 @@ fn redo_session(state: State<'_, AppState>) -> Result<WorkingState, UiError> {
 #[tauri::command]
 fn save_candidate(state: State<'_, AppState>) -> Result<EntityView, UiError> {
     let mut session = lock_state(&state)?;
+    if session.hometown.is_some() {
+        return Err(invalid_candidate_operation(
+            "Save this Hometown with Save Bundle so its Location and relationship stay atomic.",
+        ));
+    }
     let entity = session.working.clone().ok_or_else(|| UiError {
         kind: "no_candidate",
         message: "Forge or open a candidate first.".into(),
@@ -1138,6 +1288,7 @@ fn get_entity(state: State<'_, AppState>, id: String) -> Result<Option<EntityVie
         session.working = Some(record.entity.clone());
         session.write_version = Some(record.write_version);
         session.history = Some(SessionHistory::new(record.entity.clone()));
+        session.hometown = None;
     }
     Ok(record.map(entity_view))
 }
@@ -1460,6 +1611,10 @@ pub fn run() {
             forge_character,
             forge_quest,
             forge_location,
+            forge_hometown,
+            discard_forge_bundle,
+            save_forge_bundle,
+            list_relationships_for_entity,
             set_field_lock,
             reroll_field,
             reroll_unlocked,

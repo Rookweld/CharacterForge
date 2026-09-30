@@ -2,6 +2,7 @@ use super::*;
 use forge_app_core::{
     CharacterField, CharacterFieldValue, CharacterForge, FieldValueOrigin, LocationField,
     LocationFieldValue, LocationForge, QuestField, QuestFieldValue, QuestForge,
+    finalize_hometown_review, forge_hometown,
 };
 use forge_contracts::{
     ContentVersion, CreativeAxes, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -82,6 +83,254 @@ fn location_candidate_persists_favorites_promotes_revises_and_reopens() {
     assert_eq!(history.len(), 2);
     assert_eq!(history[0].action, "forge");
     assert_eq!(history[1].action, "manual_edit");
+}
+
+fn saved_hometown_bundle(
+    store: &mut ProjectStore,
+    seed: u64,
+) -> (EntityId, i64, ForgeResultBundle) {
+    let source = character_candidate(seed);
+    let source_id = source.character.envelope.id;
+    store
+        .persist_candidate(StoredEntity::CharacterCandidate(source))
+        .unwrap();
+    let record = store.get_entity(source_id).unwrap().unwrap();
+    let snapshot = hometown_source(&record).unwrap();
+    let bundle = forge_hometown(&snapshot, 9876, project_id()).unwrap();
+    (source_id, record.write_version, bundle)
+}
+
+#[test]
+fn hometown_bundle_saves_atomically_and_roundtrips_typed_provenance() {
+    let db = TestDb::new("hometown-bundle");
+    let mut store = create_store(&db);
+    let (source_id, source_version, bundle) = saved_hometown_bundle(&mut store, 7001);
+    let original_source = store.get_entity(source_id).unwrap().unwrap();
+    let location_id = bundle.primary.location.envelope.id;
+    let relationship_id = bundle.relationship.id;
+    let receipt = store
+        .save_forge_bundle(source_id, source_version, &bundle)
+        .unwrap();
+    assert_eq!(receipt.location_write_version, 1);
+    assert_eq!(receipt.relationship_write_version, 1);
+    assert_eq!(
+        store.get_entity(source_id).unwrap().unwrap(),
+        original_source
+    );
+    assert!(matches!(
+        store.get_entity(location_id).unwrap().unwrap().entity,
+        StoredEntity::LocationCandidate(_)
+    ));
+    let relationship = store.get_relationship(relationship_id).unwrap().unwrap();
+    assert_eq!(relationship.relationship, bundle.relationship);
+    assert_eq!(
+        relationship.relationship.state,
+        RelationshipState::Candidate
+    );
+    let events = store.list_history(Some(location_id)).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].action, "forge_hometown");
+    let recipe: forge_app_core::ForgeFurtherRecipeRecord =
+        serde_json::from_str(&events[0].recipe_json).unwrap();
+    assert_eq!(recipe, bundle.recipe);
+    let stored_result: ForgeBundleHistoryResult =
+        serde_json::from_str(&events[0].result_json).unwrap();
+    assert_eq!(stored_result.mapping, bundle.result);
+    assert_eq!(
+        stored_result.primary_snapshot,
+        StoredEntity::LocationCandidate(bundle.primary.clone())
+    );
+    assert_eq!(
+        store
+            .load_history_event_snapshot(receipt.forge_event_id)
+            .unwrap(),
+        Some(StoredEntity::LocationCandidate(bundle.primary.clone()))
+    );
+    drop(store);
+    let reopened = ProjectStore::open(db.path()).unwrap();
+    assert_eq!(
+        reopened.get_entity(source_id).unwrap().unwrap(),
+        original_source
+    );
+    assert_eq!(
+        reopened
+            .get_entity(location_id)
+            .unwrap()
+            .unwrap()
+            .write_version,
+        1
+    );
+    assert_eq!(
+        reopened
+            .get_relationship(relationship_id)
+            .unwrap()
+            .unwrap()
+            .relationship,
+        bundle.relationship
+    );
+    assert_eq!(reopened.list_history(Some(location_id)).unwrap().len(), 1);
+    let reopened_recipe: forge_app_core::ForgeFurtherRecipeRecord =
+        serde_json::from_str(&reopened.list_history(Some(location_id)).unwrap()[0].recipe_json)
+            .unwrap();
+    assert_eq!(
+        reopened_recipe.context_snapshot,
+        bundle.recipe.context_snapshot
+    );
+}
+
+#[test]
+fn reviewed_hometown_lock_and_reroll_all_save_final_dna_with_frozen_context() {
+    let db = TestDb::new("hometown-reviewed-lock");
+    let mut store = create_store(&db);
+    let (source_id, source_version, original) = saved_hometown_bundle(&mut store, 7002);
+    let source_before = store.get_entity(source_id).unwrap().unwrap();
+    let initial_context = original.recipe.context_snapshot.clone();
+    let location_id = original.primary.location.envelope.id;
+    let relationship_id = original.relationship.id;
+    let mut working = original.primary.clone();
+    LocationForge::lock(&mut working, LocationField::Name).unwrap();
+    let locked_name = working.location.envelope.name.clone();
+    let name_key = LocationField::Name.key().unwrap();
+    let locked_nonce = working.dna.recipe.field_controls[&name_key].nonce;
+    LocationForge::reroll_all_unlocked(&mut working).unwrap();
+    assert_eq!(working.location.envelope.name, locked_name);
+    assert_eq!(
+        working.dna.recipe.field_controls[&name_key].nonce,
+        locked_nonce
+    );
+    let finalized = finalize_hometown_review(&original, working).unwrap();
+    assert_eq!(finalized.recipe.location_dna, finalized.primary.dna);
+    assert_eq!(finalized.recipe.context_snapshot, initial_context);
+    assert_eq!(finalized.result.primary_output_id, location_id);
+    assert_eq!(finalized.relationship.id, relationship_id);
+    assert_eq!(finalized.relationship.target_id, location_id);
+    store
+        .save_forge_bundle(source_id, source_version, &finalized)
+        .unwrap();
+    let event = store.list_history(Some(location_id)).unwrap().remove(0);
+    let recipe: forge_app_core::ForgeFurtherRecipeRecord =
+        serde_json::from_str(&event.recipe_json).unwrap();
+    assert_eq!(recipe.location_dna, finalized.primary.dna);
+    assert_eq!(recipe.context_snapshot, initial_context);
+    assert_eq!(
+        store.get_entity(location_id).unwrap().unwrap().entity,
+        StoredEntity::LocationCandidate(finalized.primary.clone())
+    );
+    assert_eq!(store.get_entity(source_id).unwrap().unwrap(), source_before);
+}
+
+#[test]
+fn reviewed_hometown_field_reroll_saves_exact_candidate_and_reopens_provenance() {
+    let db = TestDb::new("hometown-reviewed-reroll");
+    let mut store = create_store(&db);
+    let (source_id, source_version, original) = saved_hometown_bundle(&mut store, 7003);
+    let source_before = store.get_entity(source_id).unwrap().unwrap();
+    let original_context = original.recipe.context_snapshot.clone();
+    let mut working = original.primary.clone();
+    let old_dna = working.dna.clone();
+    LocationForge::reroll_field(&mut working, LocationField::Purpose).unwrap();
+    assert_ne!(working.dna, old_dna);
+    let finalized = finalize_hometown_review(&original, working).unwrap();
+    assert_eq!(finalized.recipe.location_dna, finalized.primary.dna);
+    assert_eq!(finalized.recipe.context_snapshot, original_context);
+    let location_id = finalized.primary.location.envelope.id;
+    store
+        .save_forge_bundle(source_id, source_version, &finalized)
+        .unwrap();
+    assert_eq!(store.get_entity(source_id).unwrap().unwrap(), source_before);
+    assert_eq!(
+        store.get_entity(location_id).unwrap().unwrap().entity,
+        StoredEntity::LocationCandidate(finalized.primary.clone())
+    );
+    drop(store);
+    let reopened = ProjectStore::open(db.path()).unwrap();
+    assert_eq!(
+        reopened.get_entity(location_id).unwrap().unwrap().entity,
+        StoredEntity::LocationCandidate(finalized.primary.clone())
+    );
+    let event = reopened.list_history(Some(location_id)).unwrap().remove(0);
+    let recipe: forge_app_core::ForgeFurtherRecipeRecord =
+        serde_json::from_str(&event.recipe_json).unwrap();
+    assert_eq!(recipe.location_dna, finalized.primary.dna);
+    assert_eq!(recipe.context_snapshot, original_context);
+    let result: ForgeBundleHistoryResult = serde_json::from_str(&event.result_json).unwrap();
+    assert_eq!(
+        result.primary_snapshot,
+        StoredEntity::LocationCandidate(finalized.primary)
+    );
+}
+
+#[test]
+fn hometown_bundle_failures_and_stale_sources_leave_no_partial_writes() {
+    for failpoint in [
+        ForgeBundleFailpoint::AfterLocation,
+        ForgeBundleFailpoint::AfterRelationship,
+    ] {
+        let db = TestDb::new("hometown-rollback");
+        let mut store = create_store(&db);
+        let (source_id, source_version, bundle) =
+            saved_hometown_bundle(&mut store, 7100 + (failpoint as u64));
+        let before_entities = store.list_entities().unwrap().len();
+        let before_relationships = store.list_relationships().unwrap().len();
+        let before_runs = store.list_history(None).unwrap().len();
+        assert!(
+            store
+                .save_forge_bundle_inner(source_id, source_version, &bundle, Some(failpoint))
+                .is_err()
+        );
+        assert_eq!(store.list_entities().unwrap().len(), before_entities);
+        assert_eq!(
+            store.list_relationships().unwrap().len(),
+            before_relationships
+        );
+        assert_eq!(store.list_history(None).unwrap().len(), before_runs);
+    }
+
+    let db = TestDb::new("hometown-stale");
+    let mut store = create_store(&db);
+    let (source_id, source_version, bundle) = saved_hometown_bundle(&mut store, 7201);
+    let mut changed = store.get_entity(source_id).unwrap().unwrap().entity;
+    if let StoredEntity::CharacterCandidate(candidate) = &mut changed {
+        candidate.character.title.push_str(" changed");
+    }
+    store.save_candidate(changed, source_version).unwrap();
+    let before_entities = store.list_entities().unwrap().len();
+    let before_relationships = store.list_relationships().unwrap().len();
+    let before_runs = store.list_history(None).unwrap().len();
+    assert!(matches!(
+        store.save_forge_bundle(source_id, source_version, &bundle),
+        Err(StoreError::Conflict { .. })
+    ));
+    assert_eq!(store.list_entities().unwrap().len(), before_entities);
+    assert_eq!(
+        store.list_relationships().unwrap().len(),
+        before_relationships
+    );
+    assert_eq!(store.list_history(None).unwrap().len(), before_runs);
+}
+
+#[test]
+fn duplicate_hometown_bundle_save_cannot_create_another_relationship_or_run() {
+    let db = TestDb::new("hometown-duplicate");
+    let mut store = create_store(&db);
+    let (source_id, source_version, bundle) = saved_hometown_bundle(&mut store, 7301);
+    store
+        .save_forge_bundle(source_id, source_version, &bundle)
+        .unwrap();
+    let before_entities = store.list_entities().unwrap().len();
+    let before_relationships = store.list_relationships().unwrap().len();
+    let before_runs = store.list_history(None).unwrap().len();
+    assert!(
+        store
+            .save_forge_bundle(source_id, source_version, &bundle)
+            .is_err()
+    );
+    assert_eq!(store.list_entities().unwrap().len(), before_entities);
+    assert_eq!(
+        store.list_relationships().unwrap().len(),
+        before_relationships
+    );
+    assert_eq!(store.list_history(None).unwrap().len(), before_runs);
 }
 impl Drop for TestDb {
     fn drop(&mut self) {

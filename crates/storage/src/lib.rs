@@ -3,7 +3,8 @@
 //! This crate depends on domain contracts and candidate types, never on Tauri or UI code.
 
 use forge_app_core::{
-    CharacterCandidate, LocationCandidate, QuestCandidate, validate_relationship_endpoints,
+    CharacterCandidate, ForgeResultBundle, HometownSource, LocationCandidate, QuestCandidate,
+    compile_hometown_context, validate_relationship_endpoints,
 };
 use forge_contracts::{
     CanonState, Character, EntityEnvelope, EntityId, EntityOrigin, EntityType, GenerationAction,
@@ -14,6 +15,7 @@ use forge_contracts::{
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     error::Error,
     fmt, fs,
     path::{Path, PathBuf},
@@ -147,6 +149,27 @@ pub struct ForgeRunRecord {
     pub recipe_json: String,
     pub result_json: String,
     pub created_at_unix_ms: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ForgeBundleSaveReceipt {
+    pub location_write_version: i64,
+    pub relationship_write_version: i64,
+    pub forge_event_id: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ForgeBundleFailpoint {
+    AfterLocation,
+    AfterRelationship,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ForgeBundleHistoryResult {
+    pub format_version: u16,
+    pub mapping: forge_app_core::ForgeResultMapping,
+    pub primary_snapshot: StoredEntity,
 }
 
 /// Rust application-facing interface for a single local project database.
@@ -331,12 +354,7 @@ impl ProjectStore {
             ));
         }
         let tx = self.connection.transaction()?;
-        validate_relationship_entities(&tx, &relationship)?;
-        let source = entity_type_from_db(entity_type_for_id(&tx, relationship.source_id)?)?;
-        let target = entity_type_from_db(entity_type_for_id(&tx, relationship.target_id)?)?;
-        validate_relationship_endpoints(&relationship, source, target)?;
-        let body = encode_json(&relationship)?;
-        tx.execute("INSERT INTO relationships(id,project_id,relationship_type,source_id,target_id,state,origin,body_json,write_version,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,'candidate',?6,?7,1,?8,?9)", params![id_text(relationship.id.uuid()), id_text(relationship.project_id.uuid()), relationship.relationship_type.key(), id_text(relationship.source_id.uuid()), id_text(relationship.target_id.uuid()), origin(relationship.origin), body, relationship.created_at_unix_ms, relationship.updated_at_unix_ms])?;
+        insert_candidate_relationship(&tx, &relationship)?;
         tx.commit()?;
         Ok(1)
     }
@@ -630,6 +648,105 @@ impl ProjectStore {
         Ok(1)
     }
 
+    /// Atomically saves a reviewed Forge Further bundle after revalidating its exact source version.
+    pub fn save_forge_bundle(
+        &mut self,
+        source_id: EntityId,
+        expected_source_version: i64,
+        bundle: &ForgeResultBundle,
+    ) -> StoreResult<ForgeBundleSaveReceipt> {
+        self.save_forge_bundle_inner(source_id, expected_source_version, bundle, None)
+    }
+
+    fn save_forge_bundle_inner(
+        &mut self,
+        source_id: EntityId,
+        expected_source_version: i64,
+        bundle: &ForgeResultBundle,
+        fail_at: Option<ForgeBundleFailpoint>,
+    ) -> StoreResult<ForgeBundleSaveReceipt> {
+        bundle.primary.validate()?;
+        bundle.relationship.validate()?;
+        let location = StoredEntity::LocationCandidate(bundle.primary.clone());
+        if !bundle.supporting.is_empty()
+            || bundle.relationship.state != RelationshipState::Candidate
+            || bundle.relationship.origin != EntityOrigin::Generated
+            || bundle.relationship.source_id != source_id
+            || bundle.relationship.target_id != location.envelope().id
+            || bundle.result.source_entity_id != source_id
+            || bundle.result.primary_output_id != location.envelope().id
+            || bundle.result.relationship_ids != [bundle.relationship.id]
+            || bundle.result.relationship_type != bundle.relationship.relationship_type
+            || bundle.recipe.context_snapshot.source_entity_id != source_id
+            || bundle.recipe.context_snapshot.source_write_version != expected_source_version
+            || bundle.recipe.location_dna != bundle.primary.dna
+        {
+            return Err(StoreError::InvalidOperation(
+                "Forge Hometown bundle does not match its frozen source and output mapping".into(),
+            ));
+        }
+        let tx = self.connection.transaction()?;
+        let source = get_entity_tx(&tx, source_id)?
+            .ok_or_else(|| StoreError::NotFound(id_text(source_id.uuid())))?;
+        check_version(expected_source_version, Some(source.write_version))?;
+        let source_snapshot = hometown_source(&source)?;
+        let compiled =
+            compile_hometown_context(&source_snapshot).map_err(StoreError::Validation)?;
+        if compiled != bundle.recipe.context_snapshot {
+            return Err(StoreError::InvalidOperation(
+                "Forge Hometown context no longer matches the persisted source".into(),
+            ));
+        }
+        if source.entity.envelope().project_id != location.envelope().project_id
+            || source.entity.envelope().project_id != bundle.relationship.project_id
+        {
+            return Err(StoreError::InvalidOperation(
+                "Forge Hometown bundle endpoints must belong to the active project".into(),
+            ));
+        }
+        insert_entity(&tx, &location)?;
+        if fail_at == Some(ForgeBundleFailpoint::AfterLocation) {
+            return Err(StoreError::InvalidOperation(
+                "injected Forge Bundle failure after Location insert".into(),
+            ));
+        }
+        insert_candidate_relationship(&tx, &bundle.relationship)?;
+        if fail_at == Some(ForgeBundleFailpoint::AfterRelationship) {
+            return Err(StoreError::InvalidOperation(
+                "injected Forge Bundle failure after Relationship insert".into(),
+            ));
+        }
+        let generation = location.generation().ok_or_else(|| {
+            StoreError::InvalidOperation(
+                "Hometown Location must retain generation provenance".into(),
+            )
+        })?;
+        let recipe_json = encode_json(&bundle.recipe)?;
+        let result_json = encode_json(&ForgeBundleHistoryResult {
+            format_version: 1,
+            mapping: bundle.result.clone(),
+            primary_snapshot: location.clone(),
+        })?;
+        tx.execute(
+            "INSERT INTO forge_runs(run_id,project_id,entity_id,action,parent_run_id,recipe_json,result_json,created_at) VALUES (?1,?2,?3,'forge_hometown',NULL,?4,?5,?6)",
+            params![
+                id_text(generation.generation_id.uuid()),
+                id_text(location.envelope().project_id.uuid()),
+                id_text(location.envelope().id.uuid()),
+                recipe_json,
+                result_json,
+                generation.generated_at_unix_ms,
+            ],
+        )?;
+        let forge_event_id = tx.last_insert_rowid();
+        tx.commit()?;
+        Ok(ForgeBundleSaveReceipt {
+            location_write_version: 1,
+            relationship_write_version: 1,
+            forge_event_id,
+        })
+    }
+
     /// Applies an explicit candidate/manual edit. An entity must be saved with its current version.
     pub fn save_candidate(
         &mut self,
@@ -793,7 +910,9 @@ impl ProjectStore {
                 |row| row.get::<_, String>(0),
             )
             .optional()?;
-        result.map(|json| decode_stored_entity(&json)).transpose()
+        result
+            .map(|json| decode_history_snapshot(&json))
+            .transpose()
     }
 
     /// Loads the exact immutable snapshot represented by a history row.
@@ -806,7 +925,9 @@ impl ProjectStore {
                 |row| row.get::<_, String>(0),
             )
             .optional()?;
-        result.map(|json| decode_stored_entity(&json)).transpose()
+        result
+            .map(|json| decode_history_snapshot(&json))
+            .transpose()
     }
 
     pub fn list_revisions(&self, id: EntityId) -> StoreResult<Vec<EntityRevision>> {
@@ -1527,6 +1648,50 @@ fn validate_relationship_entities(
     Ok(())
 }
 
+fn insert_candidate_relationship(
+    tx: &Transaction<'_>,
+    relationship: &Relationship,
+) -> StoreResult<()> {
+    validate_relationship_entities(tx, relationship)?;
+    let source = entity_type_from_db(entity_type_for_id(tx, relationship.source_id)?)?;
+    let target = entity_type_from_db(entity_type_for_id(tx, relationship.target_id)?)?;
+    validate_relationship_endpoints(relationship, source, target)?;
+    let body = encode_json(relationship)?;
+    tx.execute(
+        "INSERT INTO relationships(id,project_id,relationship_type,source_id,target_id,state,origin,body_json,write_version,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,'candidate',?6,?7,1,?8,?9)",
+        params![
+            id_text(relationship.id.uuid()),
+            id_text(relationship.project_id.uuid()),
+            relationship.relationship_type.key(),
+            id_text(relationship.source_id.uuid()),
+            id_text(relationship.target_id.uuid()),
+            origin(relationship.origin),
+            body,
+            relationship.created_at_unix_ms,
+            relationship.updated_at_unix_ms,
+        ],
+    )?;
+    Ok(())
+}
+
+fn hometown_source(record: &EntityRecord) -> StoreResult<HometownSource> {
+    match &record.entity {
+        StoredEntity::CharacterCandidate(candidate) => Ok(HometownSource {
+            character: candidate.character.clone(),
+            field_origins: candidate.field_origins.clone(),
+            write_version: record.write_version,
+        }),
+        StoredEntity::Character(character) => Ok(HometownSource {
+            character: character.clone(),
+            field_origins: BTreeMap::new(),
+            write_version: record.write_version,
+        }),
+        _ => Err(StoreError::InvalidOperation(
+            "Forge Hometown requires a persisted Character source".into(),
+        )),
+    }
+}
+
 fn entity_type_for_id(tx: &Transaction<'_>, endpoint: EntityId) -> StoreResult<String> {
     tx.query_row(
         "SELECT entity_type FROM entities WHERE id=?1",
@@ -1637,6 +1802,19 @@ fn decode_stored_entity(value: &str) -> StoreResult<StoredEntity> {
         .validate()
         .map_err(|error| StoreError::Corrupt(error.to_string()))?;
     Ok(entity)
+}
+
+fn decode_history_snapshot(value: &str) -> StoreResult<StoredEntity> {
+    if let Ok(entity) = decode_stored_entity(value) {
+        return Ok(entity);
+    }
+    let result: ForgeBundleHistoryResult = decode_json(value)?;
+    if result.format_version != 1 {
+        return Err(StoreError::Serialization(
+            "unsupported Forge Bundle history result version".into(),
+        ));
+    }
+    Ok(result.primary_snapshot)
 }
 fn parse_id(value: String) -> StoreResult<EntityId> {
     value

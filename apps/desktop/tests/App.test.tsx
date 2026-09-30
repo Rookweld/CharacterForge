@@ -1,4 +1,5 @@
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -9,9 +10,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
 import {
   api,
+  type Character,
   type CharacterCandidate,
   type EntityRecord,
   type ForgePayload,
+  type ForgeResultBundle,
   type LocationCandidate,
   type Project,
   type Revision,
@@ -42,6 +45,7 @@ const project: Project = {
 };
 const dna = {
   recipe: {
+    kind: 'character' as const,
     root_seed: '000000000000002a',
     universe_preset: 'dark-fantasy',
     creative_axes: {
@@ -133,6 +137,17 @@ const character: ForgePayload = {
     },
   },
 };
+const manualCharacter: ForgePayload = {
+  kind: 'character',
+  value: {
+    ...((character.value as CharacterCandidate).character as Character),
+    envelope: {
+      ...envelope('character-manual'),
+      origin: 'manual',
+      generation_provenance: null,
+    },
+  },
+};
 const quest: ForgePayload = {
   kind: 'quest_candidate',
   value: {
@@ -210,6 +225,65 @@ const locationPayload: ForgePayload = {
   kind: 'location_candidate',
   value: locationCandidate,
 };
+const hometownBundle: ForgeResultBundle = {
+  primary: locationCandidate,
+  supporting: [],
+  relationship: {
+    id: 'relationship-hometown',
+    project_id: project.id,
+    relationship_type: 'born_in',
+    source_id: 'character-1',
+    target_id: 'location-1',
+    state: 'candidate',
+    origin: 'generated',
+    created_at_unix_ms: 1,
+    updated_at_unix_ms: 1,
+  },
+  recipe: {
+    format_version: 1,
+    action_id: 'character.forge-hometown',
+    action_version: 1,
+    context_recipe_id: 'character-hometown-v1',
+    context_recipe_version: 1,
+    context_snapshot: {
+      format_version: 1,
+      context_recipe_id: 'character-hometown-v1',
+      context_recipe_version: 1,
+      source_entity_id: 'character-1',
+      source_write_version: 1,
+      source_canon_state: 'candidate',
+      source_type: 'character',
+      source_generation_kind: 'character',
+      source_generator_version: 1,
+      source_content_version: 1,
+      facts: {
+        name: 'Mara Vale',
+        title: 'Mara Vale',
+        archetype: 'Lantern keeper',
+        role: 'Guide',
+        faction_hint: 'The Night Registry',
+        backstory_hook: 'She filed her own disappearance',
+        desire: 'Find the missing district',
+        secret: 'She has already been there',
+      },
+      inherited_preset: 'dark-fantasy',
+      inherited_creative_axes: dna.recipe.creative_axes,
+      source_body_hash: 'source-hash',
+      context_hash: 'context-hash',
+    },
+    action_seed: 42,
+    location_dna: locationDna,
+  },
+  result: {
+    format_version: 1,
+    primary_output_id: 'location-1',
+    primary_output_type: 'location',
+    relationship_ids: ['relationship-hometown'],
+    relationship_type: 'born_in',
+    source_entity_id: 'character-1',
+    warnings: [],
+  },
+};
 const record = (entity: ForgePayload, writeVersion = 1): EntityRecord => ({
   entity,
   writeVersion,
@@ -232,6 +306,14 @@ beforeEach(() => {
   vi.mocked(api.importProject).mockResolvedValue(project);
   vi.mocked(api.restoreBackup).mockResolvedValue(undefined);
   vi.mocked(api.exportEntity).mockResolvedValue(undefined);
+  vi.mocked(api.forgeHometown).mockResolvedValue(hometownBundle);
+  vi.mocked(api.saveForgeBundle).mockResolvedValue({
+    location: record(locationPayload),
+    relationship: hometownBundle.relationship,
+    eventId: 1,
+  });
+  vi.mocked(api.discardForgeBundle).mockResolvedValue(undefined);
+  vi.mocked(api.relationshipsForEntity).mockResolvedValue([]);
   vi.mocked(api.listEntities).mockResolvedValue([]);
   vi.mocked(api.getEntity).mockImplementation(async (id) =>
     id === 'character-1' ? record(character) : record(quest),
@@ -865,6 +947,77 @@ describe('desktop creative workflows', () => {
       expect(api.getEntity).toHaveBeenCalledWith('character-1'),
     );
     expect(await screen.findByText('Withholds the truth')).toBeInTheDocument();
+  });
+
+  it('forges and atomically saves a Hometown bundle from the selected Character', async () => {
+    const reviewedLocation: ForgePayload = {
+      kind: 'location_candidate',
+      value: {
+        ...locationCandidate,
+        dna: {
+          ...locationCandidate.dna,
+          recipe: {
+            ...locationCandidate.dna.recipe,
+            field_controls: {
+              ...locationCandidate.dna.recipe.field_controls,
+              '02-name': { nonce: 0, locked: true },
+            },
+          },
+        },
+      },
+    };
+    vi.mocked(api.setLock).mockResolvedValue(reviewedLocation);
+    await openWorkspace([record(character)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Forge Hometown' }),
+    );
+    await waitFor(() =>
+      expect(api.forgeHometown).toHaveBeenCalledWith('character-1', 42),
+    );
+    expect(
+      await screen.findByText(
+        /Proposed relationship: Born in North Bell Lodge/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Context hash: context-hash/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Name' }));
+    await waitFor(() => expect(api.setLock).toHaveBeenCalledWith('name', true));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Bundle' }));
+    await waitFor(() => expect(api.saveForgeBundle).toHaveBeenCalledTimes(1));
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+    expect(await screen.findByText(/saved together/)).toBeInTheDocument();
+  });
+
+  it('explains unsupported manual provenance and discards an unsaved Hometown', async () => {
+    await openWorkspace([record(manualCharacter)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      screen.getByRole('button', { name: 'Forge Hometown' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/no supported generated ForgeDNA/),
+    ).toBeInTheDocument();
+
+    cleanup();
+    await openWorkspace([record(character)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Forge Hometown' }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('button', { name: 'Discard Bundle' }),
+      ).toHaveLength(2),
+    );
+    clickNamedButton('Discard Bundle', 0);
+    await waitFor(() =>
+      expect(api.discardForgeBundle).toHaveBeenCalledTimes(1),
+    );
+    expect(api.saveForgeBundle).not.toHaveBeenCalled();
   });
 
   it('exports a saved entity in structured JSON format', async () => {

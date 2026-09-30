@@ -89,6 +89,7 @@ export type Envelope = {
   id: string;
   project_id: string;
   entity_type: 'character' | 'quest' | 'location';
+  origin?: string;
   name: string;
   canon_state: 'draft' | 'candidate' | 'canon' | 'archived';
   favorite: boolean;
@@ -99,6 +100,7 @@ export type Envelope = {
 };
 export type ForgeDNA = {
   recipe: {
+    kind?: 'character' | 'quest' | 'location';
     root_seed: string;
     universe_preset: string;
     creative_axes: { levels: Record<Axis, number> };
@@ -129,6 +131,72 @@ export type RecentProject = {
   exists: boolean;
 };
 export type EntityRecord = { entity: ForgePayload; writeVersion: number };
+export type ForgeRelationship = {
+  id: string;
+  project_id: string;
+  relationship_type: 'born_in' | 'member_of' | 'owns' | 'opposed_by';
+  source_id: string;
+  target_id: string;
+  state: 'candidate' | 'canon' | 'archived';
+  origin: 'manual' | 'generated' | 'imported';
+  created_at_unix_ms: number;
+  updated_at_unix_ms: number;
+};
+export type HometownContextSnapshot = {
+  format_version: number;
+  context_recipe_id: string;
+  context_recipe_version: number;
+  source_entity_id: string;
+  source_write_version: number;
+  source_canon_state: string;
+  source_type: 'character';
+  source_generation_kind: string;
+  source_generator_version: number;
+  source_content_version: number;
+  facts: {
+    name: string;
+    title: string;
+    archetype: string;
+    role: string;
+    faction_hint: string;
+    backstory_hook: string;
+    desire: string;
+    secret: string;
+  };
+  inherited_preset: string;
+  inherited_creative_axes: { levels: Record<Axis, number> };
+  source_body_hash: string;
+  context_hash: string;
+};
+export type ForgeResultBundle = {
+  primary: LocationCandidate;
+  supporting: never[];
+  relationship: ForgeRelationship;
+  recipe: {
+    format_version: number;
+    action_id: string;
+    action_version: number;
+    context_recipe_id: string;
+    context_recipe_version: number;
+    context_snapshot: HometownContextSnapshot;
+    action_seed: number;
+    location_dna: ForgeDNA;
+  };
+  result: {
+    format_version: number;
+    primary_output_id: string;
+    primary_output_type: 'location';
+    relationship_ids: string[];
+    relationship_type: 'born_in';
+    source_entity_id: string;
+    warnings: string[];
+  };
+};
+export type ForgeBundleSaveResponse = {
+  location: EntityRecord;
+  relationship: ForgeRelationship;
+  eventId: number;
+};
 export type HistoryRecord = {
   runId: string;
   entityId: string | null;
@@ -273,6 +341,12 @@ export const api = {
   ) => invoke<ForgePayload>('forge_quest', { preset, seed, axes, constraints }),
   forgeLocation: (preset: string, seed: number, axes: Record<Axis, number>) =>
     invoke<ForgePayload>('forge_location', { preset, seed, axes }),
+  forgeHometown: (sourceId: string, seed: number) =>
+    invoke<ForgeResultBundle>('forge_hometown', { sourceId, seed }),
+  saveForgeBundle: () => invoke<ForgeBundleSaveResponse>('save_forge_bundle'),
+  discardForgeBundle: () => invoke<void>('discard_forge_bundle'),
+  relationshipsForEntity: (id: string) =>
+    invoke<ForgeRelationship[]>('list_relationships_for_entity', { id }),
   setLock: (field: string, locked: boolean) =>
     invoke<ForgePayload>('set_field_lock', { field, locked }),
   reroll: (field: string) => invoke<ForgePayload>('reroll_field', { field }),
