@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B4_ITEM_CORE — closed at exit gate
+THE_FORGE_B5_CREATURE_CORE — prepared for execution
 
 ## Status
 
-**B4 PASS — standalone Item Core automated exit gates satisfied**
+**B4 PASS — B5 CREATURE CORE AUTHORIZED**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -20,7 +20,7 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `983398e5c407156ab18f394b1c1ab22efcdbda2a` (B4 starting/current HEAD)
+- HEAD: `8527d51` (`feat: add Item Forge core`)
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -29,7 +29,7 @@ The operator has authorized continued non-destructive development through bounde
 - first-class Relationships: implemented
 - Forge Hometown: implemented and verified
 - standalone deterministic Faction Forge: implemented and verified
-- standalone deterministic Item Forge: implemented and verified; B4 closed
+- standalone deterministic Item Forge: implemented and verified; B4 closed`r`n- next bounded mission: standalone Creature Forge
 
 Unrelated files to preserve and never absorb:
 
@@ -175,7 +175,7 @@ Final verification: **166 Rust tests PASS, 1 existing fixture writer ignored; 48
 
 Quality: 2,816 preset-sweep Candidates and 1,024 Chaos seeds validate/replay without exact clones; all 11 profiles; 635 Chaos source patterns; no source group/preset above 11.52%. The 52-sample generated/content-author review rates 22 usable as-is, 30 minor edit, 0 weak; it is not independent human acceptance. Existing P3 UI-001 remains open; no P0/P1/P2 defect remains known in B4. Database schema 2, archive v1, app 1.0.0, and existing entity deterministic versions are unchanged. Mission 08's accepted transitive-advisory verification limitation remains documented.
 
-Branch `master`, starting/final HEAD `983398e5c407156ab18f394b1c1ab22efcdbda2a`; B4 changes remain unstaged/uncommitted. The four unrelated operator/export/log files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B4. No Creature Forge or Item Forge Further action has begun.** See `docs/missions/THE_FORGE_B4_ITEM_CORE_REPORT.md` and `docs/quality/THE_FORGE_B4_ITEM_SAMPLES.md`.
+Branch `master`; accepted B4 implementation commit `8527d51` (`feat: add Item Forge core`). The four unrelated operator/export/log files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B4. No Creature Forge or Item Forge Further action has begun.** See `docs/missions/THE_FORGE_B4_ITEM_CORE_REPORT.md` and `docs/quality/THE_FORGE_B4_ITEM_SAMPLES.md`.
 
 ## B4 Exit Gate
 
