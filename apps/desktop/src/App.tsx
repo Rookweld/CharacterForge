@@ -4,6 +4,8 @@ import {
   api,
   axisMeta,
   type Character,
+  type Creature,
+  type CreatureProfile,
   type EntityRecord,
   errorMessage,
   type Faction,
@@ -32,10 +34,17 @@ type Section =
   | 'locations'
   | 'factions'
   | 'items'
+  | 'creatures'
   | 'canon'
   | 'history'
   | 'project';
-type Mode = 'character' | 'quest' | 'location' | 'faction' | 'item';
+type Mode =
+  | 'character'
+  | 'quest'
+  | 'location'
+  | 'faction'
+  | 'item'
+  | 'creature';
 type ProjectStartMode = 'create' | 'open' | 'import';
 type Field = {
   key: string;
@@ -124,12 +133,34 @@ function payloadEntity(payload: ForgePayload) {
       briefing: undefined,
     };
   }
+  if (payload.kind === 'creature_candidate') {
+    const wrapper = raw as unknown as import('./api').CreatureCandidate;
+    return {
+      envelope: wrapper.creature.envelope,
+      creature: wrapper.creature,
+      dna: wrapper.dna,
+      field_origins: wrapper.field_origins,
+      clue: undefined,
+      briefing: undefined,
+    };
+  }
   if (payload.kind === 'item') {
     const item = raw as unknown as Item;
     return {
       envelope: item.envelope,
       item,
       dna: item.envelope.generation_provenance?.dna,
+      field_origins: {},
+      clue: undefined,
+      briefing: undefined,
+    };
+  }
+  if (payload.kind === 'creature') {
+    const creature = raw as unknown as Creature;
+    return {
+      envelope: creature.envelope,
+      creature,
+      dna: creature.envelope.generation_provenance?.dna,
       field_origins: {},
       clue: undefined,
       briefing: undefined,
@@ -182,6 +213,9 @@ function isFaction(payload: ForgePayload) {
 function isItem(payload: ForgePayload) {
   return payload.kind === 'item_candidate' || payload.kind === 'item';
 }
+function isCreature(payload: ForgePayload) {
+  return payload.kind === 'creature_candidate' || payload.kind === 'creature';
+}
 function payloadTitle(payload: ForgePayload) {
   const value = payloadEntity(payload);
   if (isCharacter(payload))
@@ -192,6 +226,8 @@ function payloadTitle(payload: ForgePayload) {
     return required(value.faction, 'Faction payload').envelope.name;
   if (isItem(payload))
     return required(value.item, 'Item payload').envelope.name;
+  if (isCreature(payload))
+    return required(value.creature, 'Creature payload').envelope.name;
   return required(value.quest, 'Quest payload').envelope.name;
 }
 function payloadFields(payload: ForgePayload): Field[] {
@@ -362,6 +398,64 @@ function payloadFields(payload: ForgePayload): Field[] {
       },
       { key: 'rarity', label: 'Rarity', value: f.rarity },
       { key: 'condition', label: 'Condition', value: f.condition },
+      { key: 'secret', label: 'Secret', value: f.secret },
+      {
+        key: 'story_hooks',
+        label: 'Story Hooks',
+        value: f.story_hooks,
+        list: true,
+      },
+    ];
+  }
+  if (isCreature(payload)) {
+    const f = required(value.creature, 'Creature payload');
+    const profiles: { id: CreatureProfile; label: string }[] = [
+      { id: 'beast', label: 'Beast' },
+      { id: 'monster', label: 'Monster' },
+      { id: 'undead', label: 'Undead' },
+      { id: 'construct', label: 'Construct' },
+      { id: 'aberration', label: 'Aberration' },
+      { id: 'spirit', label: 'Spirit' },
+      { id: 'elemental', label: 'Elemental' },
+      { id: 'humanoid-creature', label: 'Humanoid Creature' },
+      { id: 'swarm', label: 'Swarm' },
+      { id: 'boss', label: 'Boss' },
+      { id: 'other', label: 'Other' },
+    ];
+    return [
+      { key: 'name', label: 'Name', value: f.envelope.name },
+      {
+        key: 'creature_profile',
+        label: 'Creature Profile',
+        value: f.creature_profile,
+        options: profiles,
+      },
+      { key: 'appearance', label: 'Appearance', value: f.appearance },
+      { key: 'habitat', label: 'Habitat', value: f.habitat },
+      { key: 'behavior', label: 'Behavior', value: f.behavior },
+      { key: 'ecology', label: 'Ecology', value: f.ecology },
+      { key: 'threat', label: 'Threat', value: f.threat },
+      {
+        key: 'abilities_summary',
+        label: 'Abilities Summary',
+        value: f.abilities_summary,
+      },
+      {
+        key: 'weakness',
+        label: 'Weakness',
+        value: f.weakness,
+      },
+      { key: 'origin', label: 'Origin', value: f.origin },
+      {
+        key: 'signs_of_presence',
+        label: 'Signs of Presence',
+        value: f.signs_of_presence,
+      },
+      {
+        key: 'loot_or_resource',
+        label: 'Loot or Resource',
+        value: f.loot_or_resource,
+      },
       { key: 'secret', label: 'Secret', value: f.secret },
       {
         key: 'story_hooks',
@@ -617,6 +711,7 @@ export function App() {
         'locations',
         'factions',
         'items',
+        'creatures',
         'canon',
       ].includes(section)
     )
@@ -779,7 +874,9 @@ export function App() {
               ? api.forgeLocation(preset, numericSeed, axes)
               : mode === 'faction'
                 ? api.forgeFaction(preset, numericSeed, axes)
-                : api.forgeItem(preset, numericSeed, axes),
+                : mode === 'item'
+                  ? api.forgeItem(preset, numericSeed, axes)
+                  : api.forgeCreature(preset, numericSeed, axes),
       (value) => {
         setHometownReview(null);
         setHometownPending(false);
@@ -1413,6 +1510,7 @@ export function App() {
               ['locations', '⌂', 'Locations'],
               ['factions', '♜', 'Factions'],
               ['items', '◇', 'Items'],
+              ['creatures', '♞', 'Creatures'],
               ['canon', '◆', 'Canon'],
               ['history', '◷', 'History'],
               ['project', '▤', 'Project'],
@@ -1485,6 +1583,7 @@ export function App() {
                     'location',
                     'faction',
                     'item',
+                    'creature',
                   ] as Mode[]
                 ).map((item) => (
                   <button
@@ -2044,6 +2143,10 @@ export function App() {
                   {records.filter((row) => isItem(row.entity)).length}{' '}
                   <span className="library-count-label">Items</span>
                 </p>
+                <p className="library-count">
+                  {records.filter((row) => isCreature(row.entity)).length}{' '}
+                  <span className="library-count-label">Creatures</span>
+                </p>
                 <button
                   type="button"
                   className="quiet full"
@@ -2057,7 +2160,9 @@ export function App() {
                             ? 'locations'
                             : mode === 'faction'
                               ? 'factions'
-                              : 'items',
+                              : mode === 'item'
+                                ? 'items'
+                                : 'creatures',
                     )
                   }
                 >
@@ -2070,7 +2175,9 @@ export function App() {
                         ? 'Locations'
                         : mode === 'faction'
                           ? 'Factions'
-                          : 'Items'}{' '}
+                          : mode === 'item'
+                            ? 'Items'
+                            : 'Creatures'}{' '}
                   →
                 </button>
               </section>
@@ -2157,6 +2264,23 @@ export function App() {
             emptyActionLabel="Forge an Item"
             onEmptyAction={() => {
               setMode('item');
+              navigateToSection('forge');
+            }}
+            onSelect={selectRecord}
+            onFavorite={favorite}
+            onPromote={promote}
+            onExport={exportEntity}
+          />
+        )}
+        {section === 'creatures' && (
+          <LibraryView
+            title="Creatures"
+            records={records.filter((row) => isCreature(row.entity))}
+            loading={loading}
+            empty="No Creatures yet. Forge your first Creature."
+            emptyActionLabel="Forge a Creature"
+            onEmptyAction={() => {
+              setMode('creature');
               navigateToSection('forge');
             }}
             onSelect={selectRecord}
@@ -2321,6 +2445,8 @@ export function App() {
               <dd>{records.filter((r) => isCharacter(r.entity)).length}</dd>
               <dt>Quests</dt>
               <dd>{records.filter((r) => isQuest(r.entity)).length}</dd>
+              <dt>Creatures</dt>
+              <dd>{records.filter((r) => isCreature(r.entity)).length}</dd>
               <dt>Items</dt>
               <dd>{records.filter((r) => isItem(r.entity)).length}</dd>
               <dt>Factions</dt>
@@ -2460,6 +2586,7 @@ function sectionTitle(section: Section) {
       locations: 'Locations',
       factions: 'Factions',
       items: 'Items',
+      creatures: 'Creatures',
       canon: 'Canon',
       history: 'History',
       project: 'Project',
@@ -2473,6 +2600,7 @@ function modeLabel(mode: Mode) {
     location: 'Location',
     faction: 'Faction',
     item: 'Item',
+    creature: 'Creature',
   }[mode];
 }
 function friendlyAction(action: string) {
@@ -2635,7 +2763,9 @@ function RecordRow({
         ? required(entity.faction, 'Faction payload').identity
         : isItem(record.entity)
           ? required(entity.item, 'Item payload').purpose
-          : required(entity.quest, 'Quest payload').objective;
+          : isCreature(record.entity)
+            ? required(entity.creature, 'Creature payload').threat
+            : required(entity.quest, 'Quest payload').objective;
   return (
     <article className="record-row">
       <button
@@ -2653,7 +2783,9 @@ function RecordRow({
                 ? '♜'
                 : isItem(record.entity)
                   ? '◇'
-                  : '⚑'}
+                  : isCreature(record.entity)
+                    ? '♞'
+                    : '⚑'}
         </span>
         <span>
           <strong>{payloadTitle(record.entity)}</strong>

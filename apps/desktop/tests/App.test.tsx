@@ -12,6 +12,7 @@ import {
   api,
   type Character,
   type CharacterCandidate,
+  type CreatureCandidate,
   type EntityRecord,
   type FactionCandidate,
   type ForgePayload,
@@ -88,7 +89,13 @@ const dna = {
 };
 const envelope = (
   id: string,
-  type: 'character' | 'quest' | 'location' | 'faction' | 'item' = 'character',
+  type:
+    | 'character'
+    | 'quest'
+    | 'location'
+    | 'faction'
+    | 'item'
+    | 'creature' = 'character',
 ) => ({
   id,
   project_id: project.id,
@@ -339,6 +346,68 @@ const itemCandidate: ItemCandidate = {
 const itemPayload: ForgePayload = {
   kind: 'item_candidate',
   value: itemCandidate,
+};
+const creatureDna = {
+  recipe: {
+    ...dna.recipe,
+    kind: 'creature' as const,
+    field_controls: {
+      '01-creature-profile': { nonce: 0, locked: false },
+      '02-name': { nonce: 0, locked: false },
+      '03-appearance': { nonce: 0, locked: false },
+      '04-habitat': { nonce: 0, locked: false },
+      '05-behavior': { nonce: 0, locked: false },
+      '06-ecology': { nonce: 0, locked: false },
+      '07-threat': { nonce: 0, locked: false },
+      '08-abilities-summary': { nonce: 0, locked: false },
+      '09-weakness': { nonce: 0, locked: false },
+      '10-origin': { nonce: 0, locked: false },
+      '11-signs-of-presence': { nonce: 0, locked: false },
+      '12-loot-or-resource': { nonce: 0, locked: false },
+      '13-secret': { nonce: 0, locked: false },
+      '14-story-hooks': { nonce: 0, locked: false },
+    },
+  },
+};
+const creatureCandidate: CreatureCandidate = {
+  dna: creatureDna,
+  field_origins: Object.fromEntries(
+    Object.keys(creatureDna.recipe.field_controls).map((key) => [
+      key,
+      'generated',
+    ]),
+  ),
+  creature: {
+    envelope: {
+      ...envelope('creature-1', 'creature'),
+      name: 'The Reed Listener',
+      generation_provenance: { dna: creatureDna, action: 'forge' },
+    },
+    creature_profile: 'beast',
+    appearance: 'A broad-backed animal with pale bands along its hide.',
+    habitat: 'A sheltered reed-fringed passage with an open retreat.',
+    behavior:
+      'It follows scent trails and withdraws when strangers keep their distance.',
+    ecology:
+      'It feeds on small scavengers and shelters its young away from traffic.',
+    threat: 'Cornering it provokes territorial pursuit.',
+    abilities_summary:
+      'It distinguishes familiar footsteps through the ground.',
+    weakness: 'Leaving an open retreat lets it disengage.',
+    origin: 'Its lineage predates the surrounding settlement.',
+    signs_of_presence: 'Paired prints and rubbed bark mark its route.',
+    loot_or_resource: 'Naturally shed fibers can be collected.',
+    secret: 'A caretaker concealed the safe approach to protect its refuge.',
+    story_hooks: [
+      'Recover a survey book before an eviction crew destroys the refuge.',
+      'Escort the caretaker to restore warning markers.',
+      'Open the blocked retreat before travelers force a crossing.',
+    ],
+  },
+};
+const creaturePayload: ForgePayload = {
+  kind: 'creature_candidate',
+  value: creatureCandidate,
 };
 const hometownBundle: ForgeResultBundle = {
   primary: locationCandidate,
@@ -1255,6 +1324,168 @@ describe('desktop creative workflows', () => {
     );
     expect(
       await screen.findByRole('heading', { name: 'Item Profile' }),
+    ).toBeInTheDocument();
+  });
+
+  it('locks Creature Name and reflects the actual 02-name control', async () => {
+    const lockedDna = {
+      ...creatureDna,
+      recipe: {
+        ...creatureDna.recipe,
+        field_controls: {
+          ...creatureDna.recipe.field_controls,
+          '02-name': { nonce: 0, locked: true },
+        },
+      },
+    };
+    const locked: ForgePayload = {
+      kind: 'creature_candidate',
+      value: {
+        ...creatureCandidate,
+        dna: lockedDna,
+        creature: {
+          ...creatureCandidate.creature,
+          envelope: {
+            ...creatureCandidate.creature.envelope,
+            generation_provenance: { dna: lockedDna, action: 'manual_edit' },
+          },
+        },
+      },
+    };
+    vi.mocked(api.forgeCreature).mockResolvedValue(creaturePayload);
+    vi.mocked(api.setLock)
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(creaturePayload);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Creature' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Creature' }));
+    await screen.findByText('The Reed Listener', { selector: 'h2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Name' }));
+
+    await waitFor(() => expect(api.setLock).toHaveBeenCalledWith('name', true));
+    const nameField = screen
+      .getByRole('heading', { name: 'Name' })
+      .closest('article');
+    expect(nameField).not.toBeNull();
+    expect(
+      within(nameField as HTMLElement).getByText('Locked'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock Name' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('locks and rerolls the typed Creature Profile action key', async () => {
+    const lockedDna = {
+      ...creatureDna,
+      recipe: {
+        ...creatureDna.recipe,
+        field_controls: {
+          ...creatureDna.recipe.field_controls,
+          '01-creature-profile': { nonce: 0, locked: true },
+        },
+      },
+    };
+    const locked: ForgePayload = {
+      kind: 'creature_candidate',
+      value: {
+        ...creatureCandidate,
+        dna: lockedDna,
+        creature: {
+          ...creatureCandidate.creature,
+          envelope: {
+            ...creatureCandidate.creature.envelope,
+            generation_provenance: { dna: lockedDna, action: 'manual_edit' },
+          },
+        },
+      },
+    };
+    vi.mocked(api.forgeCreature).mockResolvedValue(creaturePayload);
+    vi.mocked(api.setLock)
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(creaturePayload);
+    vi.mocked(api.reroll).mockResolvedValue(creaturePayload);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Creature' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Creature' }));
+    await screen.findByText('The Reed Listener', { selector: 'h2' });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Lock Creature Profile' }),
+    );
+
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenCalledWith('creature_profile', true),
+    );
+    const profileField = screen
+      .getByRole('heading', { name: 'Creature Profile' })
+      .closest('article');
+    expect(profileField).not.toBeNull();
+    expect(
+      within(profileField as HTMLElement).getByText('Locked'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Unlock Creature Profile' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Unlock Creature Profile' }),
+    );
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenLastCalledWith('creature_profile', false),
+    );
+    const rerollProfile = screen.getByRole('button', {
+      name: 'Reroll Creature Profile',
+    });
+    await waitFor(() => expect(rerollProfile).toBeEnabled());
+    fireEvent.click(rerollProfile);
+    await waitFor(() =>
+      expect(api.reroll).toHaveBeenCalledWith('creature_profile'),
+    );
+  });
+
+  it('edits Creature Profile through only supported select values', async () => {
+    vi.mocked(api.forgeCreature).mockResolvedValue(creaturePayload);
+    vi.mocked(api.editField).mockResolvedValue(creaturePayload);
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Creature' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Creature' }));
+    await screen.findByText('The Reed Listener', { selector: 'h2' });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit Creature Profile' }),
+    );
+    const select = screen.getByRole('combobox', {
+      name: 'Edit Creature Profile',
+    });
+    expect(within(select).getAllByRole('option')).toHaveLength(11);
+    expect(
+      screen.queryByRole('textbox', { name: 'Edit Creature Profile' }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(select, { target: { value: 'invalid-profile' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    expect(api.editField).not.toHaveBeenCalled();
+    fireEvent.change(select, { target: { value: 'spirit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    await waitFor(() =>
+      expect(api.editField).toHaveBeenCalledWith('creature_profile', 'spirit'),
+    );
+  });
+
+  it('opens the Creature library and typed saved detail', async () => {
+    await openWorkspace([record(creaturePayload)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Creatures/ }));
+    expect(
+      screen.getByRole('heading', { name: 'Creatures', level: 1 }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: /The Reed Listener.*candidate/i,
+      }),
+    );
+    expect(
+      await screen.findByRole('heading', { name: 'Creature Profile' }),
     ).toBeInTheDocument();
   });
 

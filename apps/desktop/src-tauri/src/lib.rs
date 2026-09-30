@@ -1,13 +1,14 @@
 use forge_app_core::{
-    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, FactionCandidate,
-    FactionField, FactionFieldValue, FactionForge, ForgeResultBundle, HometownSource,
-    ItemCandidate, ItemField, ItemFieldValue, ItemForge, LocationField, LocationFieldValue,
-    LocationForge, QuestField, QuestFieldValue, QuestForge, finalize_hometown_review,
-    forge_hometown as forge_hometown_core,
+    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, CreatureCandidate,
+    CreatureField, CreatureFieldValue, CreatureForge, FactionCandidate, FactionField,
+    FactionFieldValue, FactionForge, ForgeResultBundle, HometownSource, ItemCandidate, ItemField,
+    ItemFieldValue, ItemForge, LocationField, LocationFieldValue, LocationForge, QuestField,
+    QuestFieldValue, QuestForge, finalize_hometown_review, forge_hometown as forge_hometown_core,
 };
 use forge_contracts::{
-    CanonState, CreativeAxes, CreativeAxis, EntityId, FactionProfile, INITIAL_CONTENT_VERSION,
-    INITIAL_GENERATOR_VERSION, ItemProfile, LocationProfile, ProjectEnvelope, ProjectId, RootSeed,
+    CanonState, CreativeAxes, CreativeAxis, CreatureProfile, EntityId, FactionProfile,
+    INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION, ItemProfile, LocationProfile,
+    ProjectEnvelope, ProjectId, RootSeed,
 };
 use forge_export::{
     ExportError, create_backup, export_project, import_project_to_directory, project_database_path,
@@ -775,6 +776,19 @@ fn set_entity_field_lock(
                 ItemForge::unlock(candidate, target)?
             }
         }
+        StoredEntity::CreatureCandidate(candidate) => {
+            let target = CreatureField::from_action_key(field).ok_or_else(|| UiError {
+                kind: "validation",
+                message: format!("Unknown Creature field: {field}"),
+                expected: None,
+                actual: None,
+            })?;
+            if locked {
+                CreatureForge::lock(candidate, target)?
+            } else {
+                CreatureForge::unlock(candidate, target)?
+            }
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon records cannot be edited as candidates.",
@@ -817,6 +831,17 @@ fn reroll_entity_field(entity: &mut StoredEntity, field: &str) -> Result<(), UiE
                 })?,
             )?;
         }
+        StoredEntity::CreatureCandidate(candidate) => {
+            CreatureForge::reroll_field(
+                candidate,
+                CreatureField::from_action_key(field).ok_or_else(|| UiError {
+                    kind: "validation",
+                    message: format!("Unknown Creature field: {field}"),
+                    expected: None,
+                    actual: None,
+                })?,
+            )?;
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon records cannot be rerolled.",
@@ -842,6 +867,9 @@ fn reroll_entity_unlocked(entity: &mut StoredEntity) -> Result<(), UiError> {
         }
         StoredEntity::ItemCandidate(candidate) => {
             ItemForge::reroll_all_unlocked(candidate)?;
+        }
+        StoredEntity::CreatureCandidate(candidate) => {
+            CreatureForge::reroll_all_unlocked(candidate)?;
         }
         _ => {
             return Err(invalid_candidate_operation(
@@ -911,6 +939,29 @@ fn edit_entity_field(entity: &mut StoredEntity, field: &str, value: Value) -> Re
                 ItemFieldValue::Text(scalar_value(value)?)
             };
             ItemForge::manual_edit(candidate, target, typed)?;
+        }
+        StoredEntity::CreatureCandidate(candidate) => {
+            let target = CreatureField::from_action_key(field).ok_or_else(|| UiError {
+                kind: "validation",
+                message: format!("Unknown Creature field: {field}"),
+                expected: None,
+                actual: None,
+            })?;
+            let typed = if target == CreatureField::Profile {
+                serde_json::from_value::<CreatureProfile>(value)
+                    .map(CreatureFieldValue::Profile)
+                    .map_err(|_| UiError {
+                        kind: "validation",
+                        message: "Choose a supported Creature profile.".into(),
+                        expected: None,
+                        actual: None,
+                    })?
+            } else if target == CreatureField::StoryHooks {
+                CreatureFieldValue::Texts(string_values(value)?)
+            } else {
+                CreatureFieldValue::Text(scalar_value(value)?)
+            };
+            CreatureForge::manual_edit(candidate, target, typed)?;
         }
         _ => {
             return Err(invalid_candidate_operation(
@@ -1097,6 +1148,47 @@ fn forge_item(
             actual: None,
         })?;
     let entity = StoredEntity::ItemCandidate(generate_item_candidate(
+        project.envelope.id,
+        &preset,
+        seed,
+        axes,
+    )?);
+    session.working = Some(entity.clone());
+    session.write_version = None;
+    session.history = Some(SessionHistory::new(entity.clone()));
+    session.hometown = None;
+    Ok(entity)
+}
+
+fn generate_creature_candidate(
+    project_id: ProjectId,
+    preset: &str,
+    seed: u64,
+    axes: BTreeMap<CreativeAxis, u8>,
+) -> Result<CreatureCandidate, UiError> {
+    let mut creative_axes = CreativeAxes { levels: axes };
+    creative_axes.normalize()?;
+    let dna = CreatureForge::new_dna(RootSeed::new(seed), preset, creative_axes)?;
+    Ok(CreatureForge::generate_in_project(&dna, project_id)?)
+}
+
+#[tauri::command]
+fn forge_creature(
+    state: State<'_, AppState>,
+    preset: String,
+    seed: u64,
+    axes: BTreeMap<CreativeAxis, u8>,
+) -> Result<StoredEntity, UiError> {
+    let mut session = lock_state(&state)?;
+    let project = active_store(&mut session)?
+        .load_project()?
+        .ok_or_else(|| UiError {
+            kind: "no_project",
+            message: "Open or create a project first.".into(),
+            expected: None,
+            actual: None,
+        })?;
+    let entity = StoredEntity::CreatureCandidate(generate_creature_candidate(
         project.envelope.id,
         &preset,
         seed,
@@ -1557,6 +1649,9 @@ fn as_canon_candidate(mut entity: StoredEntity) -> Result<StoredEntity, UiError>
         StoredEntity::ItemCandidate(candidate) => {
             candidate.item.envelope.canon_state = CanonState::Canon
         }
+        StoredEntity::CreatureCandidate(candidate) => {
+            candidate.creature.envelope.canon_state = CanonState::Canon
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon revisions require the structured working candidate.",
@@ -1583,6 +1678,9 @@ fn as_working_candidate(mut entity: StoredEntity) -> Result<StoredEntity, UiErro
         }
         StoredEntity::ItemCandidate(candidate) => {
             candidate.item.envelope.canon_state = CanonState::Candidate;
+        }
+        StoredEntity::CreatureCandidate(candidate) => {
+            candidate.creature.envelope.canon_state = CanonState::Candidate;
         }
         _ => {
             return Err(UiError {
@@ -1815,6 +1913,7 @@ pub fn run() {
             forge_location,
             forge_faction,
             forge_item,
+            forge_creature,
             forge_hometown,
             discard_forge_bundle,
             save_forge_bundle,
@@ -2190,6 +2289,51 @@ mod tests {
         reroll_entity_field(&mut entity, "item_profile").unwrap();
         assert_eq!(entity.envelope().name, before.envelope().name);
     }
+    #[test]
+    fn creature_command_actions_use_typed_profile_and_preserve_name_lock() {
+        let candidate = generate_creature_candidate(
+            ProjectId::from_bytes([1; 16]),
+            "pirate",
+            447,
+            CreativeAxes::neutral().levels,
+        )
+        .unwrap();
+        let mut entity = StoredEntity::CreatureCandidate(candidate);
+        set_entity_field_lock(&mut entity, "name", true).unwrap();
+        set_entity_field_lock(&mut entity, "creature_profile", true).unwrap();
+        let before = entity.clone();
+        reroll_entity_unlocked(&mut entity).unwrap();
+        let (StoredEntity::CreatureCandidate(before), StoredEntity::CreatureCandidate(after)) =
+            (&before, &entity)
+        else {
+            panic!("lost wrapper")
+        };
+        assert_eq!(before.creature.envelope.name, after.creature.envelope.name);
+        assert_eq!(
+            before.creature.creature_profile,
+            after.creature.creature_profile
+        );
+        for field in [CreatureField::Name, CreatureField::Profile] {
+            assert_eq!(
+                before.dna.recipe.field_controls[&field.key().unwrap()],
+                after.dna.recipe.field_controls[&field.key().unwrap()]
+            );
+        }
+        let before = entity.clone();
+        assert!(
+            edit_entity_field(
+                &mut entity,
+                "creature_profile",
+                serde_json::json!("invalid")
+            )
+            .is_err()
+        );
+        assert_eq!(before, entity);
+        edit_entity_field(&mut entity, "creature_profile", serde_json::json!("spirit")).unwrap();
+        set_entity_field_lock(&mut entity, "creature_profile", false).unwrap();
+        reroll_entity_field(&mut entity, "creature_profile").unwrap();
+        assert_eq!(entity.envelope().name, before.envelope().name);
+    }
 
     #[test]
     fn item_and_faction_history_and_canon_adapters_preserve_complete_snapshots() {
@@ -2275,6 +2419,82 @@ mod tests {
         history.undo();
         history.push(original);
         assert!(!history.can_redo());
+    }
+    #[test]
+    fn creature_canon_and_historical_working_copy_preserve_complete_snapshot() {
+        let mut original = StoredEntity::CreatureCandidate(
+            generate_creature_candidate(
+                ProjectId::from_bytes([1; 16]),
+                "occult",
+                511,
+                CreativeAxes::neutral().levels,
+            )
+            .unwrap(),
+        );
+        set_entity_field_lock(&mut original, "name", true).unwrap();
+        let canon = as_canon_candidate(original.clone()).unwrap();
+        assert_eq!(canon.envelope().canon_state, CanonState::Canon);
+        let working = as_working_candidate(canon.clone()).unwrap();
+        assert_eq!(working, original);
+        let mut edited = working;
+        edit_entity_field(
+            &mut edited,
+            "secret",
+            serde_json::json!("A revised secret — Åland 🜁"),
+        )
+        .unwrap();
+        let revised = as_canon_candidate(edited).unwrap();
+        assert_eq!(revised.envelope().id, canon.envelope().id);
+        assert_ne!(revised, canon);
+        assert_eq!(
+            as_canon_candidate(as_working_candidate(revised.clone()).unwrap()).unwrap(),
+            revised
+        );
+    }
+
+    #[test]
+    fn creature_session_history_restores_complete_candidate_snapshot_and_discards_redo_branch() {
+        let original = StoredEntity::CreatureCandidate(
+            generate_creature_candidate(
+                ProjectId::from_bytes([1; 16]),
+                "occult",
+                91,
+                CreativeAxes::neutral().levels,
+            )
+            .unwrap(),
+        );
+        let original_name = original.envelope().name.clone();
+        let mut changed = original.clone();
+        edit_entity_field(
+            &mut changed,
+            "name",
+            Value::String("Manual sentinel".into()),
+        )
+        .unwrap();
+        set_entity_field_lock(&mut changed, "name", true).unwrap();
+        let mut threat = SessionHistory::new(original.clone());
+        threat.push(changed.clone());
+        assert!(threat.can_undo());
+        assert_eq!(threat.undo(), Some(&original));
+        assert_eq!(threat.redo(), Some(&changed));
+        let Some(StoredEntity::CreatureCandidate(restored)) = threat.undo() else {
+            panic!("undo lost the Creature candidate wrapper");
+        };
+        assert_eq!(restored.creature.envelope.name, original_name);
+        let restored = threat.redo().unwrap();
+        let StoredEntity::CreatureCandidate(restored) = restored else {
+            panic!("redo lost the Creature candidate wrapper");
+        };
+        assert_eq!(restored.creature.envelope.name, "Manual sentinel");
+        let name_key = CreatureField::Name.key().unwrap();
+        assert!(restored.dna.recipe.field_controls[&name_key].locked);
+        assert_eq!(
+            restored.field_origins[&name_key],
+            forge_app_core::CreatureOrigin::UserModified
+        );
+        threat.undo();
+        threat.push(original);
+        assert!(!threat.can_redo());
     }
 
     #[test]

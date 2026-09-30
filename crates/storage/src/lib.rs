@@ -3,11 +3,12 @@
 //! This crate depends on domain contracts and candidate types, never on Tauri or UI code.
 
 use forge_app_core::{
-    CharacterCandidate, FactionCandidate, ForgeResultBundle, HometownSource, ItemCandidate,
-    LocationCandidate, QuestCandidate, compile_hometown_context, validate_relationship_endpoints,
+    CharacterCandidate, CreatureCandidate, FactionCandidate, ForgeResultBundle, HometownSource,
+    ItemCandidate, LocationCandidate, QuestCandidate, compile_hometown_context,
+    validate_relationship_endpoints,
 };
 use forge_contracts::{
-    CanonState, Character, EntityEnvelope, EntityId, EntityOrigin, EntityType, Faction,
+    CanonState, Character, Creature, EntityEnvelope, EntityId, EntityOrigin, EntityType, Faction,
     GenerationAction, GenerationMetadata, Item, Location, ProjectEnvelope, ProjectId, Quest,
     Relationship, RelationshipId, RelationshipState, SchemaVersion, Uuid128, ValidationCode,
     ValidationError, ValidationErrors, ValidationResult,
@@ -65,11 +66,13 @@ pub enum StoredEntity {
     LocationCandidate(LocationCandidate),
     FactionCandidate(FactionCandidate),
     ItemCandidate(ItemCandidate),
+    CreatureCandidate(CreatureCandidate),
     Character(Character),
     Quest(Quest),
     Location(Location),
     Faction(Faction),
     Item(Item),
+    Creature(Creature),
 }
 
 impl StoredEntity {
@@ -80,11 +83,13 @@ impl StoredEntity {
             Self::LocationCandidate(value) => &value.location.envelope,
             Self::FactionCandidate(value) => &value.faction.envelope,
             Self::ItemCandidate(value) => &value.item.envelope,
+            Self::CreatureCandidate(value) => &value.creature.envelope,
             Self::Character(value) => &value.envelope,
             Self::Quest(value) => &value.envelope,
             Self::Location(value) => &value.envelope,
             Self::Faction(value) => &value.envelope,
             Self::Item(value) => &value.envelope,
+            Self::Creature(value) => &value.envelope,
         }
     }
 
@@ -95,11 +100,13 @@ impl StoredEntity {
             Self::LocationCandidate(value) => value.validate(),
             Self::FactionCandidate(value) => value.validate(),
             Self::ItemCandidate(value) => value.validate(),
+            Self::CreatureCandidate(value) => value.validate(),
             Self::Character(value) => value.validate(),
             Self::Quest(value) => value.validate(),
             Self::Location(value) => value.validate(),
             Self::Faction(value) => value.validate(),
             Self::Item(value) => value.validate(),
+            Self::Creature(value) => value.validate(),
         }
     }
 
@@ -110,11 +117,13 @@ impl StoredEntity {
             Self::LocationCandidate(value) => value.location.envelope.canon_state = state,
             Self::FactionCandidate(value) => value.faction.envelope.canon_state = state,
             Self::ItemCandidate(value) => value.item.envelope.canon_state = state,
+            Self::CreatureCandidate(value) => value.creature.envelope.canon_state = state,
             Self::Character(value) => value.envelope.canon_state = state,
             Self::Quest(value) => value.envelope.canon_state = state,
             Self::Location(value) => value.envelope.canon_state = state,
             Self::Faction(value) => value.envelope.canon_state = state,
             Self::Item(value) => value.envelope.canon_state = state,
+            Self::Creature(value) => value.envelope.canon_state = state,
         }
     }
 
@@ -125,11 +134,13 @@ impl StoredEntity {
             Self::LocationCandidate(value) => value.location.envelope.favorite = favorite,
             Self::FactionCandidate(value) => value.faction.envelope.favorite = favorite,
             Self::ItemCandidate(value) => value.item.envelope.favorite = favorite,
+            Self::CreatureCandidate(value) => value.creature.envelope.favorite = favorite,
             Self::Character(value) => value.envelope.favorite = favorite,
             Self::Quest(value) => value.envelope.favorite = favorite,
             Self::Location(value) => value.envelope.favorite = favorite,
             Self::Faction(value) => value.envelope.favorite = favorite,
             Self::Item(value) => value.envelope.favorite = favorite,
+            Self::Creature(value) => value.envelope.favorite = favorite,
         }
     }
 
@@ -144,11 +155,15 @@ impl StoredEntity {
             }
             Self::FactionCandidate(value) => value.faction.envelope.updated_at_unix_ms = updated_at,
             Self::ItemCandidate(value) => value.item.envelope.updated_at_unix_ms = updated_at,
+            Self::CreatureCandidate(value) => {
+                value.creature.envelope.updated_at_unix_ms = updated_at
+            }
             Self::Character(value) => value.envelope.updated_at_unix_ms = updated_at,
             Self::Quest(value) => value.envelope.updated_at_unix_ms = updated_at,
             Self::Location(value) => value.envelope.updated_at_unix_ms = updated_at,
             Self::Faction(value) => value.envelope.updated_at_unix_ms = updated_at,
             Self::Item(value) => value.envelope.updated_at_unix_ms = updated_at,
+            Self::Creature(value) => value.envelope.updated_at_unix_ms = updated_at,
         }
     }
 

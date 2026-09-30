@@ -4,27 +4,27 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_B4_ITEM_CORE — standalone Item Forge
-**Current status:** PASS — B4 automated exit gates satisfied
+**Current mission:** THE_FORGE_B5_CREATURE_CORE — standalone Creature Forge
+**Current status:** PASS — B5 automated exit gates satisfied
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `983398e5c407156ab18f394b1c1ab22efcdbda2a` (B4 starting/current HEAD; unchanged)
-**Worktree:** B4 implementation/tests and closeout documentation are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `ccef11a8eae698bdc004e1bf3e4c678a3ba8db5b` (B5 starting/current HEAD; unchanged)
+**Worktree:** B5 implementation/tests/docs are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
 ## Current The Forge handoff
 
-B4 Item Core is **PASS — automated exit gates satisfied**. Item has 13 required fields, 11 stable profiles, independent generator/content versions 1/1, all 11 presets, deterministic DNA/field streams, lock/reroll/edit/origins, shared undo/redo, Candidate/favorite/Canon/revision/history persistence, Item Workbench/library/detail, and JSON/Markdown/project/Vault support. Standalone Item creates no Relationships. Name/Profile actual-control and invalid typed-edit regressions pass. Final adapter review also repaired the omitted Item/Faction historical-working-copy and Canon-revision eligibility cases, with a complete-snapshot parity regression.
+B5 Creature Core is **PASS — automated exit gates satisfied**. The sixth authoring mode has fourteen required fields, eleven stable profiles, independent generator/content versions 1/1, all eleven presets, deterministic DNA/field streams, locks/rerolls/manual origins, shared undo/redo, Candidate/favorite/Canon/revision/history persistence, Workbench/library/detail and JSON/Markdown/project/Vault support. Standalone Creature creates no Relationships. Both historical working-copy and Canon transition adapters include Creature; actual Name/Profile controls and invalid typed-edit guards are tested.
 
-Final verification: **166 Rust tests PASS, 1 existing fixture writer ignored; 48 frontend tests PASS**; format/lint/typecheck/frontend build, Rust format, strict Clippy, Cargo metadata, `scripts/verify.ps1`, explicit `cargo test --workspace --no-fail-fast`, 1,000-sequence state gauntlet, optimized Tauri no-bundle build, and `git diff --check` PASS. The exact executable is `C:\dev\CharacterForge\target\mission-b4-verify\release\character-forge-desktop.exe`. The npm launcher remains unavailable (missing npm-cli.js); configured pnpm checks pass. An earlier Relationship lifecycle test showed the known 1 ms timestamp fluctuation; isolated and subsequent full reruns passed without changing Relationship code/tests.
+Final evidence: **182 Rust tests PASS, 1 existing fixture writer ignored; 52 frontend tests PASS**. Format/lint/typecheck/frontend build, Rust format, strict Clippy, full offline Cargo metadata, `scripts/verify.ps1`, explicit `cargo test --workspace --no-fail-fast`, 1,000-sequence gauntlet, optimized Tauri no-bundle build and `git diff --check` PASS. Final Rust suites use `RUST_TEST_THREADS=1`; prior parallel timestamp-test failures remain recorded and are not claimed fixed. Exact executable: `C:\dev\CharacterForge\target\mission-b5-verify\release\character-forge-desktop.exe`, ProductVersion/FileVersion 1.0.0. The npm launcher is unavailable; configured pnpm checks pass.
 
-Quality: 2,816 preset-sweep Candidates and 1,024 Chaos seeds validate/replay without exact clones; all 11 profiles; 635 Chaos source patterns; no source group/preset above 11.52%. The 52-sample generated/content-author review rates 22 usable as-is, 30 minor edit, 0 weak; it is not independent human acceptance. Existing P3 UI-001 remains open; no P0/P1/P2 defect remains known in B4. Database schema 2, archive v1, app 1.0.0, and existing entity deterministic versions are unchanged. Mission 08's accepted transitive-advisory verification limitation remains documented.
+Quality: 2,816 preset Candidates and 1,024 Chaos seeds validate/replay with zero full-content clones; all eleven profiles, 640 source patterns, 1,013 mixed-source Candidates, maximum source share 11.82%. The 52-sample generated/content-author review rates 17 usable as-is, 35 minor edit, 0 weak; repeated local-encounter motifs and minor authoring needs are documented. This is not independent human acceptance. Existing P3 UI-001 remains open; no B5 P0/P1/P2 remains known. Schema 2, archive v1, app 1.0.0 and old deterministic contracts are unchanged. Mission 08's dependency-advisory verification limitation remains residual maintenance/release risk.
 
-Branch `master`, starting/final HEAD `983398e5c407156ab18f394b1c1ab22efcdbda2a`; B4 changes remain unstaged/uncommitted. The four unrelated operator/export/log files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B4. No Creature Forge or Item Forge Further action has begun.** See `docs/missions/THE_FORGE_B4_ITEM_CORE_REPORT.md` and `docs/quality/THE_FORGE_B4_ITEM_SAMPLES.md`.
+Branch `master`, starting/final HEAD `ccef11a8eae698bdc004e1bf3e4c678a3ba8db5b`; B5 changes remain unstaged/uncommitted. Four unrelated files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B5. Creature Forge Further, World Forge and later missions remain unstarted.** See `docs/missions/THE_FORGE_B5_CREATURE_CORE_REPORT.md` and `docs/quality/THE_FORGE_B5_CREATURE_SAMPLES.md`.
 
 ## Architecture decisions currently locked
 

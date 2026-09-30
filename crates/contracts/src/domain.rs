@@ -510,6 +510,87 @@ impl Item {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CreatureProfile {
+    Beast,
+    Monster,
+    Undead,
+    Construct,
+    Aberration,
+    Spirit,
+    Elemental,
+    HumanoidCreature,
+    Swarm,
+    Boss,
+    Other,
+}
+
+impl CreatureProfile {
+    pub const ALL: [Self; 11] = [
+        Self::Beast,
+        Self::Monster,
+        Self::Undead,
+        Self::Construct,
+        Self::Aberration,
+        Self::Spirit,
+        Self::Elemental,
+        Self::HumanoidCreature,
+        Self::Swarm,
+        Self::Boss,
+        Self::Other,
+    ];
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Creature {
+    pub envelope: EntityEnvelope,
+    pub creature_profile: CreatureProfile,
+    pub appearance: String,
+    pub habitat: String,
+    pub behavior: String,
+    pub ecology: String,
+    pub threat: String,
+    pub abilities_summary: String,
+    pub weakness: String,
+    pub origin: String,
+    pub signs_of_presence: String,
+    pub loot_or_resource: String,
+    pub secret: String,
+    pub story_hooks: Vec<String>,
+}
+
+impl Creature {
+    pub fn validate(&self) -> ValidationResult<()> {
+        self.envelope.validate(EntityType::Creature)?;
+        for (path, value) in [
+            ("creature.appearance", &self.appearance),
+            ("creature.habitat", &self.habitat),
+            ("creature.behavior", &self.behavior),
+            ("creature.ecology", &self.ecology),
+            ("creature.threat", &self.threat),
+            ("creature.abilities_summary", &self.abilities_summary),
+            ("creature.weakness", &self.weakness),
+            ("creature.origin", &self.origin),
+            ("creature.signs_of_presence", &self.signs_of_presence),
+            ("creature.loot_or_resource", &self.loot_or_resource),
+            ("creature.secret", &self.secret),
+        ] {
+            validate_text(path, value)?;
+        }
+        validate_text_list("creature.story_hooks", &self.story_hooks)?;
+        if self.story_hooks.is_empty() {
+            return Err(ValidationErrors::one(ValidationError::new(
+                ValidationCode::MissingField,
+                "creature.story_hooks",
+                "must contain at least one value",
+            )));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Location {
@@ -864,6 +945,96 @@ mod tests {
         invalid.appearance.clear();
         assert!(invalid.validate().is_err());
         assert!(serde_json::from_str::<Item>("{\"unknown\": true}").is_err());
+    }
+
+    #[test]
+    fn creature_contract_is_typed_validated_and_profiles_have_stable_keys() {
+        let creature = Creature {
+            envelope: envelope(EntityType::Creature),
+            creature_profile: CreatureProfile::HumanoidCreature,
+            appearance: "A Unicode-safe appearance — with habitat.".into(),
+            habitat: "Belief".into(),
+            behavior: "Goal".into(),
+            ecology: "Ecology".into(),
+            threat: "Threat".into(),
+            abilities_summary: "AbilitiesSummary".into(),
+            weakness: "Public face".into(),
+            origin: "Hidden truth".into(),
+            signs_of_presence: "SignsOfPresence".into(),
+            loot_or_resource: "Shed fibers — Åland 東京".into(),
+            secret: "Secret".into(),
+            story_hooks: vec!["Hook one".into(), "Hook two".into(), "Hook three".into()],
+        };
+        creature.validate().unwrap();
+        for (profile, key) in CreatureProfile::ALL.into_iter().zip([
+            "beast",
+            "monster",
+            "undead",
+            "construct",
+            "aberration",
+            "spirit",
+            "elemental",
+            "humanoid-creature",
+            "swarm",
+            "boss",
+            "other",
+        ]) {
+            assert_eq!(serde_json::to_value(profile).unwrap(), key);
+            assert_eq!(
+                serde_json::from_value::<CreatureProfile>(serde_json::json!(key)).unwrap(),
+                profile
+            );
+        }
+        let encoded = serde_json::to_value(&creature).unwrap();
+        for field in [
+            "appearance",
+            "habitat",
+            "behavior",
+            "ecology",
+            "threat",
+            "abilities_summary",
+            "weakness",
+            "origin",
+            "signs_of_presence",
+            "loot_or_resource",
+            "secret",
+        ] {
+            let mut invalid = encoded.clone();
+            invalid[field] = serde_json::json!("  ");
+            assert!(
+                serde_json::from_value::<Creature>(invalid)
+                    .unwrap()
+                    .validate()
+                    .is_err(),
+                "{field}"
+            );
+        }
+        let mut invalid = creature.clone();
+        invalid.envelope.entity_type = EntityType::Faction;
+        assert!(invalid.validate().is_err());
+        invalid = creature.clone();
+        invalid.story_hooks.clear();
+        assert!(invalid.validate().is_err());
+        let mut invalid = encoded.clone();
+        invalid["owner_id"] = serde_json::json!("not-authorized");
+        assert!(serde_json::from_value::<Creature>(invalid).is_err());
+        let mut invalid = encoded;
+        invalid["creature_profile"] = serde_json::json!("inventory-stat-pack");
+        assert!(serde_json::from_value::<Creature>(invalid).is_err());
+
+        assert_eq!(CreatureProfile::ALL.len(), 11);
+        assert_eq!(
+            serde_json::to_string(&CreatureProfile::HumanoidCreature).unwrap(),
+            "\"humanoid-creature\""
+        );
+        assert_eq!(
+            serde_json::from_str::<CreatureProfile>("\"boss\"").unwrap(),
+            CreatureProfile::Boss
+        );
+        let mut invalid = creature.clone();
+        invalid.appearance.clear();
+        assert!(invalid.validate().is_err());
+        assert!(serde_json::from_str::<Creature>("{\"unknown\": true}").is_err());
     }
 
     #[test]

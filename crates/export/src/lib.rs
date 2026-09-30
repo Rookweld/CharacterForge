@@ -281,6 +281,9 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
             ("Faction", &value.faction.envelope, Some(&value.dna))
         }
         StoredEntity::ItemCandidate(value) => ("Item", &value.item.envelope, Some(&value.dna)),
+        StoredEntity::CreatureCandidate(value) => {
+            ("Creature", &value.creature.envelope, Some(&value.dna))
+        }
         StoredEntity::Character(value) => (
             "Character",
             &value.envelope,
@@ -319,6 +322,15 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
         ),
         StoredEntity::Item(value) => (
             "Item",
+            &value.envelope,
+            value
+                .envelope
+                .generation_provenance
+                .as_ref()
+                .map(|p| &p.dna),
+        ),
+        StoredEntity::Creature(value) => (
+            "Creature",
             &value.envelope,
             value
                 .envelope
@@ -437,6 +449,41 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
             escape_markdown(&item.rarity),
             escape_markdown(&item.condition),
             escape_markdown(&item.secret),
+            hooks,
+        ));
+    }
+    let creature = match entity {
+        StoredEntity::CreatureCandidate(value) => Some(&value.creature),
+        StoredEntity::Creature(value) => Some(value),
+        _ => None,
+    };
+    if let Some(creature) = creature {
+        let hooks = creature
+            .story_hooks
+            .iter()
+            .map(|hook| format!("- {}", escape_markdown(hook)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Ok(format!(
+            "# Creature: {}\n\n- Project ID: `{}`\n- Entity ID: `{}`\n- State: {:?}\n- Profile: {:?}\n- Preset: `{}`\n- Seed: `{}`\n\n## Appearance\n\n{}\n\n## Habitat\n\n{}\n\n## Behavior\n\n{}\n\n## Ecology\n\n{}\n\n## Threat\n\n{}\n\n## Abilities summary\n\n{}\n\n## Weakness\n\n{}\n\n## Origin\n\n{}\n\n## Signs of presence\n\n{}\n\n## Loot or resource\n\n{}\n\n## Secret\n\n{}\n\n## Story hooks\n\n{}\n\n## Complete canonical data\n\n{ticks}json\n{encoded}\n{ticks}\n",
+            escape_markdown(&creature.envelope.name),
+            creature.envelope.project_id.uuid(),
+            creature.envelope.id.uuid(),
+            creature.envelope.canon_state,
+            creature.creature_profile,
+            preset,
+            seed,
+            escape_markdown(&creature.appearance),
+            escape_markdown(&creature.habitat),
+            escape_markdown(&creature.behavior),
+            escape_markdown(&creature.ecology),
+            escape_markdown(&creature.threat),
+            escape_markdown(&creature.abilities_summary),
+            escape_markdown(&creature.weakness),
+            escape_markdown(&creature.origin),
+            escape_markdown(&creature.signs_of_presence),
+            escape_markdown(&creature.loot_or_resource),
+            escape_markdown(&creature.secret),
             hooks,
         ));
     }
@@ -973,8 +1020,8 @@ fn storage(error: StoreError) -> ExportError {
 mod tests {
     use super::*;
     use forge_app_core::{
-        CharacterField, CharacterFieldValue, CharacterForge, FactionForge, ItemForge,
-        LocationForge, QuestField, QuestFieldValue, QuestForge,
+        CharacterField, CharacterFieldValue, CharacterForge, CreatureForge, FactionForge,
+        ItemForge, LocationForge, QuestField, QuestFieldValue, QuestForge,
     };
     use forge_contracts::{
         ContentVersion, CreativeAxes, FieldKey, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -1210,6 +1257,69 @@ mod tests {
         let backup = dir.path("item-backup.forgeproject");
         create_backup(&imported, &backup).unwrap();
         let restore_target = dir.path("item-restore.sqlite3");
+        ProjectStore::open(&restore_target)
+            .unwrap()
+            .create_project(&project)
+            .unwrap();
+        restore_backup(&backup, &restore_target).unwrap();
+        let restored = ProjectStore::open(&restore_target).unwrap();
+        assert_eq!(
+            restored.get_entity(entity_id).unwrap().unwrap().entity,
+            entity
+        );
+        assert!(restored.list_relationships().unwrap().is_empty());
+    }
+    #[test]
+    fn creature_json_markdown_and_forgeproject_v1_roundtrip_are_supported() {
+        let dir = Dir::new();
+        let source = dir.path("creature-source.sqlite3");
+        let mut store = ProjectStore::open(&source).unwrap();
+        let project = project();
+        store.create_project(&project).unwrap();
+        let dna =
+            CreatureForge::new_dna(RootSeed::new(980), "occult", CreativeAxes::neutral()).unwrap();
+        let candidate = CreatureForge::generate_in_project(&dna, project.envelope.id).unwrap();
+        let entity = StoredEntity::CreatureCandidate(candidate);
+        let entity_id = entity.envelope().id;
+        let json = entity_json(&entity).unwrap();
+        let decoded: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        assert_eq!(
+            serde_json::from_value::<StoredEntity>(decoded["entity"].clone()).unwrap(),
+            entity
+        );
+        let markdown = entity_markdown(&entity).unwrap();
+        assert!(markdown.contains("# Creature:"));
+        for field in [
+            "Profile",
+            "Appearance",
+            "Habitat",
+            "Behavior",
+            "Ecology",
+            "Threat",
+            "Abilities summary",
+            "Weakness",
+            "Origin",
+            "Signs of presence",
+            "Loot or resource",
+            "Secret",
+            "Story hooks",
+        ] {
+            assert!(markdown.to_lowercase().contains(&field.to_lowercase()));
+        }
+        store.persist_candidate(entity.clone()).unwrap();
+        let package = dir.path("creature.forgeproject");
+        export_project(&store, &package).unwrap();
+        drop(store);
+        let imported_path = dir.path("creature-import.sqlite3");
+        import_project(&package, &imported_path).unwrap();
+        let imported = ProjectStore::open(&imported_path).unwrap();
+        assert_eq!(
+            imported.get_entity(entity_id).unwrap().unwrap().entity,
+            entity
+        );
+        let backup = dir.path("creature-backup.forgeproject");
+        create_backup(&imported, &backup).unwrap();
+        let restore_target = dir.path("creature-restore.sqlite3");
         ProjectStore::open(&restore_target)
             .unwrap()
             .create_project(&project)

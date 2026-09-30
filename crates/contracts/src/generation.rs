@@ -223,6 +223,7 @@ pub enum GenerationKind {
     Location,
     Faction,
     Item,
+    Creature,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

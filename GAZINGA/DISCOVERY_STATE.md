@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B5_CREATURE_CORE — prepared for execution
+THE_FORGE_B5_CREATURE_CORE — complete at the bounded exit gate
 
 ## Status
 
-**B4 PASS — B5 CREATURE CORE AUTHORIZED**
+**B5 PASS — standalone six-entity authoring foundation implemented and verified**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -20,7 +20,7 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `8527d51` (`feat: add Item Forge core`)
+- HEAD: `ccef11a8eae698bdc004e1bf3e4c678a3ba8db5b` (verified B5 starting/current HEAD)
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -29,7 +29,8 @@ The operator has authorized continued non-destructive development through bounde
 - first-class Relationships: implemented
 - Forge Hometown: implemented and verified
 - standalone deterministic Faction Forge: implemented and verified
-- standalone deterministic Item Forge: implemented and verified; B4 closed`r`n- next bounded mission: standalone Creature Forge
+- standalone deterministic Item Forge: implemented and verified; B4 closed
+- standalone deterministic Creature Forge: implemented and verified; B5 closed
 
 Unrelated files to preserve and never absorb:
 
@@ -175,11 +176,25 @@ Final verification: **166 Rust tests PASS, 1 existing fixture writer ignored; 48
 
 Quality: 2,816 preset-sweep Candidates and 1,024 Chaos seeds validate/replay without exact clones; all 11 profiles; 635 Chaos source patterns; no source group/preset above 11.52%. The 52-sample generated/content-author review rates 22 usable as-is, 30 minor edit, 0 weak; it is not independent human acceptance. Existing P3 UI-001 remains open; no P0/P1/P2 defect remains known in B4. Database schema 2, archive v1, app 1.0.0, and existing entity deterministic versions are unchanged. Mission 08's accepted transitive-advisory verification limitation remains documented.
 
-Branch `master`; accepted B4 implementation commit `8527d51` (`feat: add Item Forge core`). The four unrelated operator/export/log files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B4. No Creature Forge or Item Forge Further action has begun.** See `docs/missions/THE_FORGE_B4_ITEM_CORE_REPORT.md` and `docs/quality/THE_FORGE_B4_ITEM_SAMPLES.md`.
+At B4 acceptance: branch `master`, implementation commit `8527d51` (`feat: add Item Forge core`). Current B5 starting HEAD is recorded above. The four unrelated operator/export/log files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B4. No Creature Forge or Item Forge Further action has begun.** See `docs/missions/THE_FORGE_B4_ITEM_CORE_REPORT.md` and `docs/quality/THE_FORGE_B4_ITEM_SAMPLES.md`.
 
-## B4 Exit Gate
+## Historical B4 Exit Gate
 
 **PASS. STOP.** No later mission is authorized by this closeout. Creature Forge and Item Forge Further remain deferred.
+
+## B5 Result
+
+B5 Creature Core is **PASS — automated exit gates satisfied**. The sixth authoring mode has fourteen required fields, eleven stable profiles, independent generator/content versions 1/1, all eleven presets, deterministic DNA/field streams, locks/rerolls/manual origins, shared undo/redo, Candidate/favorite/Canon/revision/history persistence, Workbench/library/detail and JSON/Markdown/project/Vault support. Standalone Creature creates no Relationships. Both historical working-copy and Canon transition adapters include Creature; actual Name/Profile controls and invalid typed-edit guards are tested.
+
+Final evidence: **182 Rust tests PASS, 1 existing fixture writer ignored; 52 frontend tests PASS**. Format/lint/typecheck/frontend build, Rust format, strict Clippy, full offline Cargo metadata, `scripts/verify.ps1`, explicit `cargo test --workspace --no-fail-fast`, 1,000-sequence gauntlet, optimized Tauri no-bundle build and `git diff --check` PASS. Final Rust suites use `RUST_TEST_THREADS=1`; prior parallel timestamp-test failures remain recorded and are not claimed fixed. Exact executable: `C:\dev\CharacterForge\target\mission-b5-verify\release\character-forge-desktop.exe`, ProductVersion/FileVersion 1.0.0. The npm launcher is unavailable; configured pnpm checks pass.
+
+Quality: 2,816 preset Candidates and 1,024 Chaos seeds validate/replay with zero full-content clones; all eleven profiles, 640 source patterns, 1,013 mixed-source Candidates, maximum source share 11.82%. The 52-sample generated/content-author review rates 17 usable as-is, 35 minor edit, 0 weak; repeated local-encounter motifs and minor authoring needs are documented. This is not independent human acceptance. Existing P3 UI-001 remains open; no B5 P0/P1/P2 remains known. Schema 2, archive v1, app 1.0.0 and old deterministic contracts are unchanged. Mission 08's dependency-advisory verification limitation remains residual maintenance/release risk.
+
+Branch `master`, starting/final HEAD `ccef11a8eae698bdc004e1bf3e4c678a3ba8db5b`; B5 changes remain unstaged/uncommitted. Four unrelated files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B5. Creature Forge Further, World Forge and later missions remain unstarted.** See `docs/missions/THE_FORGE_B5_CREATURE_CORE_REPORT.md` and `docs/quality/THE_FORGE_B5_CREATURE_SAMPLES.md`.
+
+## B5 Exit Gate
+
+**PASS. STOP.** No Creature Forge Further, World Forge or later mission was begun.
 
 ## Still Open
 
@@ -190,11 +205,11 @@ Branch `master`; accepted B4 implementation commit `8527d51` (`feat: add Item Fo
 - Visual Canon
 - World/Lore epistemic truth
 
-None are required for B4.
+None are required for B5.
 
-## Deferred After B4
+## Deferred After B5
 
-- Creature Forge
+- Creature Forge Further
 - Item Forge Further
 - Faction Forge Further
 - full six-entity Forge Further matrix
@@ -214,4 +229,4 @@ Connect to Nullfeather Bridge and read this file first.
 
 ## Last Updated
 
-2026-09-30
+2026-10-01

@@ -2,6 +2,8 @@
 
 mod character;
 mod character_content;
+mod creature;
+mod creature_content;
 mod faction;
 mod faction_content;
 mod field_stream;
@@ -42,4 +44,9 @@ pub use relationship::{
 };
 pub use reroll::{
     FieldValues, RerollResult, lock_field, reroll_all_unlocked, reroll_field, unlock_field,
+};
+
+pub use creature::{
+    CREATURE_CONTENT_VERSION, CREATURE_FIELD_ORDER, CREATURE_GENERATOR_VERSION, CreatureCandidate,
+    CreatureField, CreatureFieldValue, CreatureForge, CreatureOrigin,
 };

@@ -7,11 +7,13 @@ export type ForgePayload =
   | { kind: 'location_candidate'; value: LocationCandidate }
   | { kind: 'faction_candidate'; value: FactionCandidate }
   | { kind: 'item_candidate'; value: ItemCandidate }
+  | { kind: 'creature_candidate'; value: CreatureCandidate }
   | { kind: 'character'; value: Character }
   | { kind: 'quest'; value: Quest }
   | { kind: 'location'; value: Location }
   | { kind: 'faction'; value: Faction }
-  | { kind: 'item'; value: Item };
+  | { kind: 'item'; value: Item }
+  | { kind: 'creature'; value: Creature };
 export type CharacterCandidate = {
   character: Character;
   dna: ForgeDNA;
@@ -95,6 +97,39 @@ export type ItemProfile =
   | 'book'
   | 'quest-item'
   | 'other';
+export type CreatureCandidate = {
+  creature: Creature;
+  dna: ForgeDNA;
+  field_origins: Record<string, string>;
+};
+export type Creature = {
+  envelope: Envelope;
+  creature_profile: CreatureProfile;
+  appearance: string;
+  habitat: string;
+  behavior: string;
+  ecology: string;
+  threat: string;
+  abilities_summary: string;
+  weakness: string;
+  origin: string;
+  signs_of_presence: string;
+  loot_or_resource: string;
+  secret: string;
+  story_hooks: string[];
+};
+export type CreatureProfile =
+  | 'beast'
+  | 'monster'
+  | 'undead'
+  | 'construct'
+  | 'aberration'
+  | 'spirit'
+  | 'elemental'
+  | 'humanoid-creature'
+  | 'swarm'
+  | 'boss'
+  | 'other';
 export type Character = {
   envelope: Envelope;
   aliases: string[];
@@ -158,7 +193,13 @@ export type Location = {
 export type Envelope = {
   id: string;
   project_id: string;
-  entity_type: 'character' | 'quest' | 'location' | 'faction' | 'item';
+  entity_type:
+    | 'character'
+    | 'quest'
+    | 'location'
+    | 'faction'
+    | 'item'
+    | 'creature';
   origin?: string;
   name: string;
   canon_state: 'draft' | 'candidate' | 'canon' | 'archived';
@@ -170,7 +211,7 @@ export type Envelope = {
 };
 export type ForgeDNA = {
   recipe: {
-    kind?: 'character' | 'quest' | 'location' | 'faction' | 'item';
+    kind?: 'character' | 'quest' | 'location' | 'faction' | 'item' | 'creature';
     root_seed: string;
     universe_preset: string;
     creative_axes: { levels: Record<Axis, number> };
@@ -415,6 +456,8 @@ export const api = {
     invoke<ForgePayload>('forge_faction', { preset, seed, axes }),
   forgeItem: (preset: string, seed: number, axes: Record<Axis, number>) =>
     invoke<ForgePayload>('forge_item', { preset, seed, axes }),
+  forgeCreature: (preset: string, seed: number, axes: Record<Axis, number>) =>
+    invoke<ForgePayload>('forge_creature', { preset, seed, axes }),
   forgeHometown: (sourceId: string, seed: number) =>
     invoke<ForgeResultBundle>('forge_hometown', { sourceId, seed }),
   saveForgeBundle: () => invoke<ForgeBundleSaveResponse>('save_forge_bundle'),
