@@ -2,6 +2,8 @@
 
 mod character;
 mod character_content;
+mod faction;
+mod faction_content;
 mod field_stream;
 mod forge_further;
 mod location;
@@ -12,6 +14,10 @@ mod reroll;
 
 pub use character::{
     CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, FieldValueOrigin,
+};
+pub use faction::{
+    FACTION_CONTENT_VERSION, FACTION_FIELD_ORDER, FACTION_GENERATOR_VERSION, FactionCandidate,
+    FactionField, FactionFieldValue, FactionForge, FactionOrigin,
 };
 pub use field_stream::FieldStream;
 pub use forge_further::{

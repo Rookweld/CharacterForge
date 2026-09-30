@@ -1,10 +1,11 @@
 use forge_app_core::{
-    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, ForgeResultBundle,
-    HometownSource, LocationField, LocationFieldValue, LocationForge, QuestField, QuestFieldValue,
-    QuestForge, finalize_hometown_review, forge_hometown as forge_hometown_core,
+    CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, FactionCandidate,
+    FactionField, FactionFieldValue, FactionForge, ForgeResultBundle, HometownSource,
+    LocationField, LocationFieldValue, LocationForge, QuestField, QuestFieldValue, QuestForge,
+    finalize_hometown_review, forge_hometown as forge_hometown_core,
 };
 use forge_contracts::{
-    CanonState, CreativeAxes, CreativeAxis, EntityId, INITIAL_CONTENT_VERSION,
+    CanonState, CreativeAxes, CreativeAxis, EntityId, FactionProfile, INITIAL_CONTENT_VERSION,
     INITIAL_GENERATOR_VERSION, LocationProfile, ProjectEnvelope, ProjectId, RootSeed,
 };
 use forge_export::{
@@ -747,6 +748,19 @@ fn set_entity_field_lock(
                 LocationForge::unlock(candidate, target)?
             }
         }
+        StoredEntity::FactionCandidate(candidate) => {
+            let target = FactionField::from_action_key(field).ok_or_else(|| UiError {
+                kind: "validation",
+                message: format!("Unknown Faction field: {field}"),
+                expected: None,
+                actual: None,
+            })?;
+            if locked {
+                FactionForge::lock(candidate, target)?
+            } else {
+                FactionForge::unlock(candidate, target)?
+            }
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon records cannot be edited as candidates.",
@@ -767,6 +781,17 @@ fn reroll_entity_field(entity: &mut StoredEntity, field: &str) -> Result<(), UiE
         StoredEntity::LocationCandidate(candidate) => {
             LocationForge::reroll_field(candidate, location_field(field)?)?;
         }
+        StoredEntity::FactionCandidate(candidate) => {
+            FactionForge::reroll_field(
+                candidate,
+                FactionField::from_action_key(field).ok_or_else(|| UiError {
+                    kind: "validation",
+                    message: format!("Unknown Faction field: {field}"),
+                    expected: None,
+                    actual: None,
+                })?,
+            )?;
+        }
         _ => {
             return Err(invalid_candidate_operation(
                 "Canon records cannot be rerolled.",
@@ -786,6 +811,9 @@ fn reroll_entity_unlocked(entity: &mut StoredEntity) -> Result<(), UiError> {
         }
         StoredEntity::LocationCandidate(candidate) => {
             LocationForge::reroll_all_unlocked(candidate)?;
+        }
+        StoredEntity::FactionCandidate(candidate) => {
+            FactionForge::reroll_all_unlocked(candidate)?;
         }
         _ => {
             return Err(invalid_candidate_operation(
@@ -809,6 +837,29 @@ fn edit_entity_field(entity: &mut StoredEntity, field: &str, value: Value) -> Re
         StoredEntity::LocationCandidate(candidate) => {
             let target = location_field(field)?;
             candidate.manual_edit(target, location_value(target, value)?)?;
+        }
+        StoredEntity::FactionCandidate(candidate) => {
+            let target = FactionField::from_action_key(field).ok_or_else(|| UiError {
+                kind: "validation",
+                message: format!("Unknown Faction field: {field}"),
+                expected: None,
+                actual: None,
+            })?;
+            let typed = if target == FactionField::Profile {
+                serde_json::from_value::<FactionProfile>(value)
+                    .map(FactionFieldValue::Profile)
+                    .map_err(|_| UiError {
+                        kind: "validation",
+                        message: "Choose a supported Faction profile.".into(),
+                        expected: None,
+                        actual: None,
+                    })?
+            } else if target == FactionField::StoryHooks {
+                FactionFieldValue::Texts(string_values(value)?)
+            } else {
+                FactionFieldValue::Text(scalar_value(value)?)
+            };
+            FactionForge::manual_edit(candidate, target, typed)?;
         }
         _ => {
             return Err(invalid_candidate_operation(
@@ -918,6 +969,47 @@ fn forge_location(
     let dna = LocationForge::new_dna(RootSeed::new(seed), &preset, creative_axes)?;
     let candidate = LocationForge::generate_in_project(&dna, project.envelope.id)?;
     let entity = StoredEntity::LocationCandidate(candidate);
+    session.working = Some(entity.clone());
+    session.write_version = None;
+    session.history = Some(SessionHistory::new(entity.clone()));
+    session.hometown = None;
+    Ok(entity)
+}
+
+fn generate_faction_candidate(
+    project_id: ProjectId,
+    preset: &str,
+    seed: u64,
+    axes: BTreeMap<CreativeAxis, u8>,
+) -> Result<FactionCandidate, UiError> {
+    let mut creative_axes = CreativeAxes { levels: axes };
+    creative_axes.normalize()?;
+    let dna = FactionForge::new_dna(RootSeed::new(seed), preset, creative_axes)?;
+    Ok(FactionForge::generate_in_project(&dna, project_id)?)
+}
+
+#[tauri::command]
+fn forge_faction(
+    state: State<'_, AppState>,
+    preset: String,
+    seed: u64,
+    axes: BTreeMap<CreativeAxis, u8>,
+) -> Result<StoredEntity, UiError> {
+    let mut session = lock_state(&state)?;
+    let project = active_store(&mut session)?
+        .load_project()?
+        .ok_or_else(|| UiError {
+            kind: "no_project",
+            message: "Open or create a project first.".into(),
+            expected: None,
+            actual: None,
+        })?;
+    let entity = StoredEntity::FactionCandidate(generate_faction_candidate(
+        project.envelope.id,
+        &preset,
+        seed,
+        axes,
+    )?);
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
@@ -1611,6 +1703,7 @@ pub fn run() {
             forge_character,
             forge_quest,
             forge_location,
+            forge_faction,
             forge_hometown,
             discard_forge_bundle,
             save_forge_bundle,

@@ -2,13 +2,13 @@
 
 ## Current Phase
 
-THE_FORGE_B3_FACTION_CORE — prepared for execution
+THE_FORGE_B3_FACTION_CORE — closed
 
 ## Status
 
-**B2 PASS — B3 FACTION CORE AUTHORIZED**
+**B3 PASS — Faction Core automated exit gates satisfied**
 
-B2 Hometown and B2.R1 reviewed-bundle provenance are closed as PASS.
+B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
 Independent review confirmed the B2.R1 fix:
 - reviewed Location DNA is finalized from the exact current Candidate before atomic Save Bundle
@@ -27,13 +27,14 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `fe10c6c`
+- HEAD: `654a15ff1080f5d4c7bb9c70cca802bba72282d4`
 - database schema: 2
 - Character / Quest compatibility: green
 - standalone Location Forge: implemented
 - first-class Relationships: implemented
 - Forge Hometown: implemented and verified
-- next bounded mission: Faction Forge core
+- standalone deterministic Faction Forge: implemented and verified
+- worktree: B3 implementation, tests, and closeout documentation remain unstaged/uncommitted
 
 Unrelated files to preserve and never absorb:
 
@@ -151,21 +152,13 @@ Independent review reran the focused B2.R1 tests successfully.
 - exact source state used by generation is frozen in provenance.
 - review-time Location DNA may change; frozen source context must not.
 
-## Next Mission
+## B3 Result
 
-`GAZINGA/missions/THE_FORGE_B3_FACTION_CORE.md`
+Faction is a typed schema-v2 entity with 13 fields and 13 profiles, its own generation kind and version tuple, deterministic content for all 11 presets, and the shared candidate/lock/reroll/edit/session/save/favorite/Canon/revision/history/export lifecycle. No Relationships are created by standalone Faction generation. `.forgeproject` stays v1 and the database stays schema 2.
 
-Scope:
+Verification: 152 Rust tests PASS, 1 existing fixture-writer ignored; 44 frontend tests PASS; `scripts/verify.ps1`, frontend format/lint/typecheck/build, Rust format, strict Clippy, Cargo metadata, `cargo test --workspace --no-fail-fast`, optimized Tauri `build --no-bundle`, and `git diff --check` PASS. The 256 × 11 preset sweep and 1,024-seed Chaos sweep found no exact full-content clones. Chaos uses three stable source groups and all ten eligible preset sources appeared in every group. The 52-sample packet records 40 usable as-is, 12 suitable with minor editing, and 0 weak; it is generated/content-author review, not independent human playtesting.
 
-**Standalone deterministic Faction Forge only.**
-
-B3 must not implement:
-- Faction Forge Further actions
-- Item Forge
-- Creature Forge
-- Link Existing
-- Visual generation
-- engine adapters
+Existing P3 UI-001 remains open; no P0/P1/P2 defect was identified. No later mission has started. Do not begin Item Forge or Faction Forge Further in this closeout.
 
 ## Still Open
 

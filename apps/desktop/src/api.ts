@@ -5,9 +5,11 @@ export type ForgePayload =
   | { kind: 'character_candidate'; value: CharacterCandidate }
   | { kind: 'quest_candidate'; value: QuestCandidate }
   | { kind: 'location_candidate'; value: LocationCandidate }
+  | { kind: 'faction_candidate'; value: FactionCandidate }
   | { kind: 'character'; value: Character }
   | { kind: 'quest'; value: Quest }
-  | { kind: 'location'; value: Location };
+  | { kind: 'location'; value: Location }
+  | { kind: 'faction'; value: Faction };
 export type CharacterCandidate = {
   character: Character;
   dna: ForgeDNA;
@@ -25,6 +27,40 @@ export type LocationCandidate = {
   dna: ForgeDNA;
   field_origins: Record<string, string>;
 };
+export type FactionCandidate = {
+  faction: Faction;
+  dna: ForgeDNA;
+  field_origins: Record<string, string>;
+};
+export type Faction = {
+  envelope: Envelope;
+  faction_profile: FactionProfile;
+  identity: string;
+  ideology: string;
+  primary_goal: string;
+  methods: string;
+  culture: string;
+  resources: string;
+  public_face: string;
+  hidden_truth: string;
+  symbols: string;
+  reputation: string;
+  story_hooks: string[];
+};
+export type FactionProfile =
+  | 'guild'
+  | 'order'
+  | 'cult'
+  | 'government'
+  | 'kingdom'
+  | 'military'
+  | 'corporation'
+  | 'gang'
+  | 'rebellion'
+  | 'religious-order'
+  | 'tribe'
+  | 'secret-society'
+  | 'other';
 export type Character = {
   envelope: Envelope;
   aliases: string[];
@@ -88,7 +124,7 @@ export type Location = {
 export type Envelope = {
   id: string;
   project_id: string;
-  entity_type: 'character' | 'quest' | 'location';
+  entity_type: 'character' | 'quest' | 'location' | 'faction';
   origin?: string;
   name: string;
   canon_state: 'draft' | 'candidate' | 'canon' | 'archived';
@@ -100,7 +136,7 @@ export type Envelope = {
 };
 export type ForgeDNA = {
   recipe: {
-    kind?: 'character' | 'quest' | 'location';
+    kind?: 'character' | 'quest' | 'location' | 'faction';
     root_seed: string;
     universe_preset: string;
     creative_axes: { levels: Record<Axis, number> };
@@ -341,6 +377,8 @@ export const api = {
   ) => invoke<ForgePayload>('forge_quest', { preset, seed, axes, constraints }),
   forgeLocation: (preset: string, seed: number, axes: Record<Axis, number>) =>
     invoke<ForgePayload>('forge_location', { preset, seed, axes }),
+  forgeFaction: (preset: string, seed: number, axes: Record<Axis, number>) =>
+    invoke<ForgePayload>('forge_faction', { preset, seed, axes }),
   forgeHometown: (sourceId: string, seed: number) =>
     invoke<ForgeResultBundle>('forge_hometown', { sourceId, seed }),
   saveForgeBundle: () => invoke<ForgeBundleSaveResponse>('save_forge_bundle'),

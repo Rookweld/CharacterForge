@@ -277,6 +277,9 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
         StoredEntity::LocationCandidate(value) => {
             ("Location", &value.location.envelope, Some(&value.dna))
         }
+        StoredEntity::FactionCandidate(value) => {
+            ("Faction", &value.faction.envelope, Some(&value.dna))
+        }
         StoredEntity::Character(value) => (
             "Character",
             &value.envelope,
@@ -297,6 +300,15 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
         ),
         StoredEntity::Location(value) => (
             "Location",
+            &value.envelope,
+            value
+                .envelope
+                .generation_provenance
+                .as_ref()
+                .map(|p| &p.dna),
+        ),
+        StoredEntity::Faction(value) => (
+            "Faction",
             &value.envelope,
             value
                 .envelope
@@ -347,6 +359,40 @@ pub fn entity_markdown(entity: &StoredEntity) -> Result<String, ExportError> {
             features,
             escape_markdown(&location.danger),
             escape_markdown(&location.secret),
+            hooks,
+        ));
+    }
+    let faction = match entity {
+        StoredEntity::FactionCandidate(value) => Some(&value.faction),
+        StoredEntity::Faction(value) => Some(value),
+        _ => None,
+    };
+    if let Some(faction) = faction {
+        let hooks = faction
+            .story_hooks
+            .iter()
+            .map(|hook| format!("- {}", escape_markdown(hook)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Ok(format!(
+            "# Faction: {}\n\n- Project ID: `{}`\n- Entity ID: `{}`\n- State: {:?}\n- Profile: {:?}\n- Preset: `{}`\n- Seed: `{}`\n\n## Identity\n\n{}\n\n## Ideology\n\n{}\n\n## Primary goal\n\n{}\n\n## Methods\n\n{}\n\n## Culture\n\n{}\n\n## Resources\n\n{}\n\n## Public face\n\n{}\n\n## Hidden truth\n\n{}\n\n## Symbols\n\n{}\n\n## Reputation\n\n{}\n\n## Story hooks\n\n{}\n\n## Complete canonical data\n\n{ticks}json\n{encoded}\n{ticks}\n",
+            escape_markdown(&faction.envelope.name),
+            faction.envelope.project_id.uuid(),
+            faction.envelope.id.uuid(),
+            faction.envelope.canon_state,
+            faction.faction_profile,
+            preset,
+            seed,
+            escape_markdown(&faction.identity),
+            escape_markdown(&faction.ideology),
+            escape_markdown(&faction.primary_goal),
+            escape_markdown(&faction.methods),
+            escape_markdown(&faction.culture),
+            escape_markdown(&faction.resources),
+            escape_markdown(&faction.public_face),
+            escape_markdown(&faction.hidden_truth),
+            escape_markdown(&faction.symbols),
+            escape_markdown(&faction.reputation),
             hooks,
         ));
     }
@@ -883,8 +929,8 @@ fn storage(error: StoreError) -> ExportError {
 mod tests {
     use super::*;
     use forge_app_core::{
-        CharacterField, CharacterFieldValue, CharacterForge, LocationForge, QuestField,
-        QuestFieldValue, QuestForge,
+        CharacterField, CharacterFieldValue, CharacterForge, FactionForge, LocationForge,
+        QuestField, QuestFieldValue, QuestForge,
     };
     use forge_contracts::{
         ContentVersion, CreativeAxes, FieldKey, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -1031,6 +1077,48 @@ mod tests {
         let restored = ProjectStore::open(&restore_target).unwrap();
         assert_eq!(
             restored.get_entity(entity_id).unwrap().unwrap().entity,
+            entity
+        );
+    }
+
+    #[test]
+    fn faction_json_markdown_and_forgeproject_v1_roundtrip_are_supported() {
+        let dir = Dir::new();
+        let source = dir.path("faction-source.sqlite3");
+        let mut store = ProjectStore::open(&source).unwrap();
+        let project = project();
+        store.create_project(&project).unwrap();
+        let dna =
+            FactionForge::new_dna(RootSeed::new(980), "occult", CreativeAxes::neutral()).unwrap();
+        let candidate = FactionForge::generate_in_project(&dna, project.envelope.id).unwrap();
+        let entity = StoredEntity::FactionCandidate(candidate);
+        let entity_id = entity.envelope().id;
+        let json = entity_json(&entity).unwrap();
+        let decoded: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        assert_eq!(
+            serde_json::from_value::<StoredEntity>(decoded["entity"].clone()).unwrap(),
+            entity
+        );
+        let markdown = entity_markdown(&entity).unwrap();
+        assert!(markdown.contains("# Faction:"));
+        for field in [
+            "Profile",
+            "Identity",
+            "Ideology",
+            "Primary goal",
+            "Story hooks",
+        ] {
+            assert!(markdown.to_lowercase().contains(&field.to_lowercase()));
+        }
+        store.persist_candidate(entity.clone()).unwrap();
+        let package = dir.path("faction.forgeproject");
+        export_project(&store, &package).unwrap();
+        drop(store);
+        let imported_path = dir.path("faction-import.sqlite3");
+        import_project(&package, &imported_path).unwrap();
+        let imported = ProjectStore::open(&imported_path).unwrap();
+        assert_eq!(
+            imported.get_entity(entity_id).unwrap().unwrap().entity,
             entity
         );
     }

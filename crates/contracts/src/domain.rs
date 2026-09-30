@@ -4,7 +4,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EntityType {
     Character,
@@ -348,6 +348,89 @@ pub enum LocationProfile {
     Other,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FactionProfile {
+    Guild,
+    Order,
+    Cult,
+    Government,
+    Kingdom,
+    Military,
+    Corporation,
+    Gang,
+    Rebellion,
+    ReligiousOrder,
+    Tribe,
+    SecretSociety,
+    Other,
+}
+
+impl FactionProfile {
+    pub const ALL: [Self; 13] = [
+        Self::Guild,
+        Self::Order,
+        Self::Cult,
+        Self::Government,
+        Self::Kingdom,
+        Self::Military,
+        Self::Corporation,
+        Self::Gang,
+        Self::Rebellion,
+        Self::ReligiousOrder,
+        Self::Tribe,
+        Self::SecretSociety,
+        Self::Other,
+    ];
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Faction {
+    pub envelope: EntityEnvelope,
+    pub faction_profile: FactionProfile,
+    pub identity: String,
+    pub ideology: String,
+    pub primary_goal: String,
+    pub methods: String,
+    pub culture: String,
+    pub resources: String,
+    pub public_face: String,
+    pub hidden_truth: String,
+    pub symbols: String,
+    pub reputation: String,
+    pub story_hooks: Vec<String>,
+}
+
+impl Faction {
+    pub fn validate(&self) -> ValidationResult<()> {
+        self.envelope.validate(EntityType::Faction)?;
+        for (path, value) in [
+            ("faction.identity", &self.identity),
+            ("faction.ideology", &self.ideology),
+            ("faction.primary_goal", &self.primary_goal),
+            ("faction.methods", &self.methods),
+            ("faction.culture", &self.culture),
+            ("faction.resources", &self.resources),
+            ("faction.public_face", &self.public_face),
+            ("faction.hidden_truth", &self.hidden_truth),
+            ("faction.symbols", &self.symbols),
+            ("faction.reputation", &self.reputation),
+        ] {
+            validate_text(path, value)?;
+        }
+        validate_text_list("faction.story_hooks", &self.story_hooks)?;
+        if self.story_hooks.is_empty() {
+            return Err(ValidationErrors::one(ValidationError::new(
+                ValidationCode::MissingField,
+                "faction.story_hooks",
+                "must contain at least one value",
+            )));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Location {
@@ -581,6 +664,39 @@ mod tests {
             serde_json::to_string(&LocationProfile::Other).unwrap(),
             "\"other\""
         );
+    }
+
+    #[test]
+    fn faction_contract_is_typed_validated_and_profiles_have_stable_keys() {
+        let faction = Faction {
+            envelope: envelope(EntityType::Faction),
+            faction_profile: FactionProfile::ReligiousOrder,
+            identity: "A Unicode-safe identity — with purpose.".into(),
+            ideology: "Belief".into(),
+            primary_goal: "Goal".into(),
+            methods: "Methods".into(),
+            culture: "Culture".into(),
+            resources: "Resources".into(),
+            public_face: "Public face".into(),
+            hidden_truth: "Hidden truth".into(),
+            symbols: "Symbols".into(),
+            reputation: "Reputation".into(),
+            story_hooks: vec!["Hook one".into(), "Hook two".into(), "Hook three".into()],
+        };
+        faction.validate().unwrap();
+        assert_eq!(FactionProfile::ALL.len(), 13);
+        assert_eq!(
+            serde_json::to_string(&FactionProfile::ReligiousOrder).unwrap(),
+            "\"religious-order\""
+        );
+        assert_eq!(
+            serde_json::from_str::<FactionProfile>("\"secret-society\"").unwrap(),
+            FactionProfile::SecretSociety
+        );
+        let mut invalid = faction.clone();
+        invalid.identity.clear();
+        assert!(invalid.validate().is_err());
+        assert!(serde_json::from_str::<Faction>("{\"unknown\": true}").is_err());
     }
 
     #[test]

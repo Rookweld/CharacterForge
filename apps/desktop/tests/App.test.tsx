@@ -13,6 +13,7 @@ import {
   type Character,
   type CharacterCandidate,
   type EntityRecord,
+  type FactionCandidate,
   type ForgePayload,
   type ForgeResultBundle,
   type LocationCandidate,
@@ -86,7 +87,7 @@ const dna = {
 };
 const envelope = (
   id: string,
-  type: 'character' | 'quest' | 'location' = 'character',
+  type: 'character' | 'quest' | 'location' | 'faction' = 'character',
 ) => ({
   id,
   project_id: project.id,
@@ -96,7 +97,9 @@ const envelope = (
       ? 'Mara Vale'
       : type === 'location'
         ? 'North Bell Lodge'
-        : 'The Bell Below',
+        : type === 'faction'
+          ? 'The Ashen Concord'
+          : 'The Bell Below',
   schema_version: 1,
   canon_state: 'candidate' as const,
   origin: 'generated',
@@ -224,6 +227,63 @@ const locationCandidate: LocationCandidate = {
 const locationPayload: ForgePayload = {
   kind: 'location_candidate',
   value: locationCandidate,
+};
+const factionDna = {
+  recipe: {
+    ...dna.recipe,
+    kind: 'faction' as const,
+    field_controls: {
+      '01-faction-profile': { nonce: 0, locked: false },
+      '02-name': { nonce: 0, locked: false },
+      '03-identity': { nonce: 0, locked: false },
+      '04-ideology': { nonce: 0, locked: false },
+      '05-primary-goal': { nonce: 0, locked: false },
+      '06-methods': { nonce: 0, locked: false },
+      '07-culture': { nonce: 0, locked: false },
+      '08-resources': { nonce: 0, locked: false },
+      '09-public-face': { nonce: 0, locked: false },
+      '10-hidden-truth': { nonce: 0, locked: false },
+      '11-symbols': { nonce: 0, locked: false },
+      '12-reputation': { nonce: 0, locked: false },
+      '13-story-hooks': { nonce: 0, locked: false },
+    },
+  },
+};
+const factionCandidate: FactionCandidate = {
+  dna: factionDna,
+  field_origins: Object.fromEntries(
+    Object.keys(factionDna.recipe.field_controls).map((key) => [
+      key,
+      'generated',
+    ]),
+  ),
+  faction: {
+    envelope: {
+      ...envelope('faction-1', 'faction'),
+      name: 'The Ashen Concord',
+      generation_provenance: { dna: factionDna, action: 'forge' },
+    },
+    faction_profile: 'guild',
+    identity: 'A guild tending the old border beacons.',
+    ideology: 'Every road deserves a witness.',
+    primary_goal: 'Keep the winter passage open.',
+    methods: 'They maintain beacons and escort supply wagons.',
+    culture: 'Members mark each journey on a shared map.',
+    resources: 'They control the beacon stations and local stores.',
+    public_face: 'A practical guild of guides and repairers.',
+    hidden_truth: 'Its oldest route records omit one vanished village.',
+    symbols: 'A black lantern over a white road.',
+    reputation: 'Reliable in storms, secretive about old maps.',
+    story_hooks: [
+      'A beacon is lit from inside.',
+      'A route vanishes.',
+      'A courier brings a blank map.',
+    ],
+  },
+};
+const factionPayload: ForgePayload = {
+  kind: 'faction_candidate',
+  value: factionCandidate,
 };
 const hometownBundle: ForgeResultBundle = {
   primary: locationCandidate,
@@ -897,6 +957,109 @@ describe('desktop creative workflows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
     await waitFor(() =>
       expect(api.editField).toHaveBeenCalledWith('profile', 'ruins'),
+    );
+  });
+
+  it('locks Faction Name and reflects the actual 02-name control', async () => {
+    const locked: ForgePayload = {
+      kind: 'faction_candidate',
+      value: {
+        ...factionCandidate,
+        dna: {
+          ...factionCandidate.dna,
+          recipe: {
+            ...factionCandidate.dna.recipe,
+            field_controls: {
+              ...factionCandidate.dna.recipe.field_controls,
+              '02-name': { nonce: 0, locked: true },
+            },
+          },
+        },
+      },
+    };
+    vi.mocked(api.forgeFaction).mockResolvedValue(factionPayload);
+    vi.mocked(api.setLock)
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(factionPayload);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Faction' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Faction' }));
+    await screen.findByText('The Ashen Concord', { selector: 'h2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Name' }));
+
+    await waitFor(() => expect(api.setLock).toHaveBeenCalledWith('name', true));
+    const nameField = screen
+      .getByRole('heading', { name: 'Name' })
+      .closest('article');
+    expect(nameField).not.toBeNull();
+    expect(
+      within(nameField as HTMLElement).getByText('Locked'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock Name' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('locks and rerolls the typed Faction Profile action key', async () => {
+    const locked: ForgePayload = {
+      kind: 'faction_candidate',
+      value: {
+        ...factionCandidate,
+        dna: {
+          ...factionCandidate.dna,
+          recipe: {
+            ...factionCandidate.dna.recipe,
+            field_controls: {
+              ...factionCandidate.dna.recipe.field_controls,
+              '01-faction-profile': { nonce: 0, locked: true },
+            },
+          },
+        },
+      },
+    };
+    vi.mocked(api.forgeFaction).mockResolvedValue(factionPayload);
+    vi.mocked(api.setLock)
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(factionPayload);
+    vi.mocked(api.reroll).mockResolvedValue(factionPayload);
+
+    await openWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Faction' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forge Faction' }));
+    await screen.findByText('The Ashen Concord', { selector: 'h2' });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Lock Faction Profile' }),
+    );
+
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenCalledWith('faction_profile', true),
+    );
+    const profileField = screen
+      .getByRole('heading', { name: 'Faction Profile' })
+      .closest('article');
+    expect(profileField).not.toBeNull();
+    expect(
+      within(profileField as HTMLElement).getByText('Locked'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Unlock Faction Profile' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Unlock Faction Profile' }),
+    );
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenLastCalledWith('faction_profile', false),
+    );
+    const rerollProfile = screen.getByRole('button', {
+      name: 'Reroll Faction Profile',
+    });
+    await waitFor(() => expect(rerollProfile).toBeEnabled());
+    fireEvent.click(rerollProfile);
+    await waitFor(() =>
+      expect(api.reroll).toHaveBeenCalledWith('faction_profile'),
     );
   });
 

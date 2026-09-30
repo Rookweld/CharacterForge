@@ -7,8 +7,9 @@ mod validation;
 mod version;
 
 pub use domain::{
-    CanonState, Character, EntityEnvelope, EntityOrigin, EntityType, Location, LocationProfile,
-    ProjectEnvelope, Quest, Relationship, RelationshipState, RelationshipType,
+    CanonState, Character, EntityEnvelope, EntityOrigin, EntityType, Faction, FactionProfile,
+    Location, LocationProfile, ProjectEnvelope, Quest, Relationship, RelationshipState,
+    RelationshipType,
 };
 pub use generation::{
     ConstraintKey, Constraints, CreativeAxes, CreativeAxis, FieldControl, FieldDependencies,

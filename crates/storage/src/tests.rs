@@ -1,8 +1,8 @@
 use super::*;
 use forge_app_core::{
-    CharacterField, CharacterFieldValue, CharacterForge, FieldValueOrigin, LocationField,
-    LocationFieldValue, LocationForge, QuestField, QuestFieldValue, QuestForge,
-    finalize_hometown_review, forge_hometown,
+    CharacterField, CharacterFieldValue, CharacterForge, FactionField, FactionFieldValue,
+    FactionForge, FieldValueOrigin, LocationField, LocationFieldValue, LocationForge, QuestField,
+    QuestFieldValue, QuestForge, finalize_hometown_review, forge_hometown,
 };
 use forge_contracts::{
     ContentVersion, CreativeAxes, INITIAL_CONTENT_VERSION, INITIAL_GENERATOR_VERSION,
@@ -83,6 +83,95 @@ fn location_candidate_persists_favorites_promotes_revises_and_reopens() {
     assert_eq!(history.len(), 2);
     assert_eq!(history[0].action, "forge");
     assert_eq!(history[1].action, "manual_edit");
+}
+
+#[test]
+fn faction_candidate_persists_favorites_promotes_revises_and_reopens() {
+    let db = TestDb::new("faction-lifecycle");
+    let mut store = create_store(&db);
+    let dna =
+        FactionForge::new_dna(RootSeed::new(607), "nordic-myth", CreativeAxes::neutral()).unwrap();
+    let mut candidate = FactionForge::generate_in_project(&dna, project_id()).unwrap();
+    candidate.faction.envelope.tags.push("operator-tag".into());
+    candidate.faction.envelope.notes = Some("reviewed locally".into());
+    let id = candidate.faction.envelope.id;
+    store
+        .persist_candidate(StoredEntity::FactionCandidate(candidate.clone()))
+        .unwrap();
+    assert!(store.list_relationships().unwrap().is_empty());
+    assert_eq!(store.toggle_favorite(id, true, 1).unwrap(), 2);
+    assert_eq!(store.promote_candidate(id, 2).unwrap(), 3);
+    let mut canon = match store.get_entity(id).unwrap().unwrap().entity {
+        StoredEntity::FactionCandidate(value) => value,
+        _ => panic!("Faction candidate wrapper was not retained"),
+    };
+    FactionForge::manual_edit(
+        &mut canon,
+        FactionField::Culture,
+        FactionFieldValue::Text("Members gather beneath the northern lights.".into()),
+    )
+    .unwrap();
+    assert_eq!(
+        store
+            .revise_canon(
+                StoredEntity::FactionCandidate(canon),
+                3,
+                "clarified seasonal practice"
+            )
+            .unwrap(),
+        4
+    );
+    assert!(
+        store
+            .save_candidate(StoredEntity::FactionCandidate(candidate), 1)
+            .is_err()
+    );
+    assert!(store.list_relationships().unwrap().is_empty());
+    let history = store.list_history(Some(id)).unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|entry| entry.action.as_str())
+            .collect::<Vec<_>>(),
+        ["forge", "manual_edit"]
+    );
+    let schema: i64 = store
+        .connection
+        .query_row("SELECT schema_version FROM projects LIMIT 1", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(schema, 2);
+    let entity_type: String = store
+        .connection
+        .query_row(
+            "SELECT entity_type FROM entities WHERE id=?1",
+            [id.uuid().to_string()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(entity_type, "faction");
+    drop(store);
+    let reopened = ProjectStore::open(db.path()).unwrap();
+    let current = reopened.get_entity(id).unwrap().unwrap();
+    assert_eq!(current.entity.envelope().entity_type, EntityType::Faction);
+    assert!(current.entity.envelope().favorite);
+    assert_eq!(current.write_version, 4);
+    assert_eq!(reopened.list_revisions(id).unwrap().len(), 2);
+    let StoredEntity::FactionCandidate(saved) = current.entity else {
+        panic!("Faction typed payload was not retained")
+    };
+    assert!(saved.faction.envelope.tags.contains(&"operator-tag".into()));
+    assert_eq!(
+        saved.faction.envelope.notes.as_deref(),
+        Some("reviewed locally")
+    );
+    assert_eq!(
+        saved.dna.recipe.kind,
+        forge_contracts::GenerationKind::Faction
+    );
+    assert_eq!(saved.field_origins.len(), 13);
+    assert!(reopened.list_relationships().unwrap().is_empty());
 }
 
 fn saved_hometown_bundle(
