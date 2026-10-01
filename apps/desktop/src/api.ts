@@ -537,6 +537,27 @@ export type VisualRecipeDefinition = {
 };
 export type VisualGenerationBrief = {
   format_version: number;
+  subject_classification: {
+    subject_kind:
+      | 'human'
+      | 'humanoid'
+      | 'creature'
+      | 'beast'
+      | 'object'
+      | 'location'
+      | 'faction_symbolic'
+      | 'unknown';
+    species_mode: 'explicit' | 'inferred-default';
+    literalization_risk: 'low' | 'medium' | 'high';
+    humanoid_guardrail: boolean;
+  };
+  prompt_semantics: {
+    identity: string[];
+    flavor_symbolism: string[];
+    negative_guardrails: string[];
+  };
+  safeguards_applied: string[];
+  negative_prompt_text: string;
   context: {
     format_version: number;
     visual_recipe_id: string;

@@ -40,7 +40,29 @@ const direction: ArtDirection = {
   avoid: '',
 };
 const brief: VisualGenerationBrief = {
-  format_version: 1,
+  format_version: 2,
+  subject_classification: {
+    subject_kind: 'human',
+    species_mode: 'inferred-default',
+    literalization_risk: 'high',
+    humanoid_guardrail: true,
+  },
+  prompt_semantics: {
+    identity: ['human dark fantasy physician', 'Silver hair'],
+    flavor_symbolism: ['subtle rat symbolism'],
+    negative_guardrails: [
+      'literal rat',
+      'anthropomorphic rodent',
+      'animal head',
+      'mascot',
+      'parody',
+    ],
+  },
+  safeguards_applied: [
+    'Human anatomy retained; animal/epithet terms are symbolic by default.',
+  ],
+  negative_prompt_text:
+    'literal rat, anthropomorphic rodent, animal head, mascot, parody',
   context: {
     format_version: 1,
     visual_recipe_id: 'visual-character-portrait-v1',
@@ -127,6 +149,28 @@ describe('Visual Forge foundation', () => {
       ).toBeDisabled();
     },
   );
+  it('shows compiled positive/negative prompts, classification and applied safeguards', async () => {
+    await open();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Compile Visual Brief' }),
+    );
+    const negative = await screen.findByRole('textbox', {
+      name: 'Compiled negative prompt',
+    });
+    expect(negative).toHaveValue(brief.negative_prompt_text);
+    expect(screen.getByRole('textbox', { name: 'Visual prompt' })).toHaveValue(
+      brief.prompt_text,
+    );
+    expect(
+      screen.getByRole('region', { name: 'Subject classification' }),
+    ).toHaveTextContent('Subject: human');
+    expect(
+      screen.getByText(
+        'Human anatomy retained; animal/epithet terms are symbolic by default.',
+      ),
+    ).toBeInTheDocument();
+    expect(api.comfyGenerate).not.toHaveBeenCalled();
+  });
   it('previews exact visible facts and explicit direction without fake image success', async () => {
     vi.mocked(api.compileVisualBrief).mockImplementation(
       async (_id, _role, input) => ({

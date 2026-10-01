@@ -1,8 +1,11 @@
-//! B9 pure provider-neutral planning. No provider, persistence or I/O.
+//! B9/B10.R1 pure provider-neutral planning. No provider, persistence or I/O.
+#[path = "visual_prompt.rs"]
+mod prompt;
 use forge_contracts::{
     CanonState, Character, CreativeAxes, Creature, EntityEnvelope, EntityId, EntityType, Faction,
     Item, Location, ProjectId, ValidationCode, ValidationError, ValidationErrors, ValidationResult,
 };
+use prompt::{compile_semantics, style_line};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -265,9 +268,51 @@ pub struct VisualContextSnapshot {
     pub art_direction: ArtDirection,
     pub context_hash: String,
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubjectKind {
+    Human,
+    Humanoid,
+    Creature,
+    Beast,
+    Object,
+    Location,
+    FactionSymbolic,
+    Unknown,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SpeciesMode {
+    Explicit,
+    InferredDefault,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiteralizationRisk {
+    Low,
+    Medium,
+    High,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SubjectClassification {
+    pub subject_kind: SubjectKind,
+    pub species_mode: SpeciesMode,
+    pub literalization_risk: LiteralizationRisk,
+    pub humanoid_guardrail: bool,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PromptSemantics {
+    pub identity: Vec<String>,
+    pub flavor_symbolism: Vec<String>,
+    pub negative_guardrails: Vec<String>,
+}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VisualGenerationBrief {
     pub format_version: u16,
+    pub subject_classification: SubjectClassification,
+    pub prompt_semantics: PromptSemantics,
+    pub safeguards_applied: Vec<String>,
+    pub negative_prompt_text: String,
     pub context: VisualContextSnapshot,
     pub subject_description: String,
     pub must_include: Vec<VisualFact>,
@@ -512,7 +557,38 @@ pub fn compile_visual_brief(
         art_direction: direction,
         context_hash,
     };
-    let mut brief=VisualGenerationBrief{format_version:1,subject_description:format!("{} — {}",scrub_identifiers(&e.name),role_key(role).replace('_'," ")),context,must_include,supporting_details,composition_intent:recipe.composition_intent,aspect_intent:recipe.aspect_intent,background_intent:if recipe.environment_present {"Include the described environment."}else{"Isolate the subject against a neutral background; habitat is context, not a required scene."}.into(),transparent_background_meaningful:recipe.transparent_background_meaningful,avoid:vec!["Do not add undisclosed secrets or hidden truths.".into(),"Do not invent authoritative emblems, anatomy, equipment or game statistics.".into()],consistency_notes:vec!["Source facts take precedence over optional art direction when they conflict.".into(),"Faction hints are design language, not authoritative membership, clothing or emblems.".into(),"Abilities describe the source; depict only observable cues without inventing anatomy.".into()],prompt_text:String::new(),brief_hash:String::new()};
+    let (subject_classification, prompt_semantics, safeguards_applied) =
+        compile_semantics(&context, &recipe.composition_intent);
+    let negative_prompt_text = prompt_semantics.negative_guardrails.join(", ");
+    let subject_description = prompt_semantics.identity[0].clone();
+    let avoid = prompt_semantics.negative_guardrails.clone();
+    let mut brief = VisualGenerationBrief {
+        format_version: 2,
+        subject_classification,
+        prompt_semantics,
+        safeguards_applied,
+        negative_prompt_text,
+        subject_description,
+        context,
+        must_include,
+        supporting_details,
+        composition_intent: recipe.composition_intent,
+        aspect_intent: recipe.aspect_intent,
+        background_intent: if recipe.environment_present {
+            "Include the described environment."
+        } else {
+            "Isolate the subject against a neutral background; habitat is context, not a required scene."
+        }.into(),
+        transparent_background_meaningful: recipe.transparent_background_meaningful,
+        avoid,
+        consistency_notes: vec![
+            "Source facts take precedence over optional art direction when they conflict.".into(),
+            "Faction hints are design language, not authoritative membership, clothing or emblems.".into(),
+            "Abilities describe the source; depict only observable cues without inventing anatomy.".into(),
+        ],
+        prompt_text: String::new(),
+        brief_hash: String::new(),
+    };
     brief.prompt_text = render_prompt(&brief);
     brief.brief_hash = visual_digest(&brief)?;
     Ok(brief)
@@ -541,30 +617,16 @@ fn scrub_identifiers(s: &str) -> String {
     out
 }
 fn render_prompt(b: &VisualGenerationBrief) -> String {
-    let mut lines = vec![
-        b.subject_description.clone(),
-        b.composition_intent.clone(),
-        b.background_intent.clone(),
-    ];
-    for fact in &b.context.facts {
-        lines.push(format!(
-            "{}: {}",
-            serde_json::to_value(fact.field)
-                .expect("enum")
-                .as_str()
-                .expect("field")
-                .replace('_', " "),
-            scrub_identifiers(&fact.values.join(" / "))
-        ));
-    }
-    for (key, value) in direction_values(&b.context.art_direction) {
-        if !value.trim().is_empty() {
-            lines.push(format!("{key}: {}", scrub_identifiers(value)));
-        }
-    }
-    lines.extend(b.consistency_notes.clone());
-    lines.extend(b.avoid.clone());
-    lines.join("\n")
+    let mut lines = b.prompt_semantics.identity.clone();
+    lines.extend(b.prompt_semantics.flavor_symbolism.clone());
+    // Style/composition are last. Negative terms never enter the positive channel.
+    lines.push(style_line(&b.context));
+    lines.push(format!("Composition: {}", b.composition_intent));
+    lines
+        .into_iter()
+        .map(|s| scrub_identifiers(&s))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 /// Metadata only: no paths, image bytes, database rows or Canon selection.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -669,7 +731,18 @@ pub fn validate_visual_brief(brief: &VisualGenerationBrief) -> ValidationResult<
     {
         return Err(invalid());
     }
-    if brief.format_version != 1
+    let (classification, semantics, safeguards) =
+        compile_semantics(&brief.context, &brief.composition_intent);
+    if brief.subject_classification != classification
+        || brief.prompt_semantics != semantics
+        || brief.safeguards_applied != safeguards
+        || brief.avoid != semantics.negative_guardrails
+        || brief.negative_prompt_text != semantics.negative_guardrails.join(", ")
+        || brief.subject_description != semantics.identity[0]
+    {
+        return Err(invalid());
+    }
+    if brief.format_version != 2
         || brief.context.format_version != 1
         || brief.brief_hash != visual_digest(&unsigned)?
         || brief.prompt_text != render_prompt(brief)
@@ -916,6 +989,258 @@ mod tests {
             compile_visual_brief(&entity, 1, None, ArtDirection::default(), R::Portrait).is_err()
         );
     }
+    fn physician(appearance: &str) -> VisualEntity {
+        let mut c = CharacterForge::generate(
+            &CharacterForge::new_dna(
+                RootSeed::new(42),
+                "dark-fantasy",
+                CreativeAxes::neutral(),
+                BTreeMap::new(),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+        .character;
+        c.envelope.name = "Keeper of the Unlit Mile".into();
+        c.title = "Keeper of the Unlit Mile".into();
+        c.archetype = "Chapel Rat Physician".into();
+        c.role = "physician".into();
+        c.appearance = appearance.into();
+        VisualEntity::Character(Box::new(c))
+    }
+    #[test]
+    fn physician_metaphor_is_human_with_separate_negative_guards_and_ordered_prompt() {
+        let source =
+            physician("A scarred human physician with silver hair and a patched dark coat");
+        let before = source.clone();
+        let brief =
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap();
+        assert_eq!(
+            brief.subject_classification.subject_kind,
+            SubjectKind::Human
+        );
+        assert!(brief.subject_classification.humanoid_guardrail);
+        assert_eq!(
+            brief.subject_classification.literalization_risk,
+            LiteralizationRisk::High
+        );
+        assert!(
+            brief
+                .prompt_text
+                .starts_with("human dark fantasy physician\nPhysical identity:")
+        );
+        assert!(brief.prompt_text.contains("subtle rat symbolism"));
+        for guard in [
+            "literal rat",
+            "anthropomorphic rodent",
+            "animal head",
+            "mascot",
+            "parody",
+        ] {
+            assert!(brief.negative_prompt_text.contains(guard));
+            assert!(!brief.prompt_text.contains(guard));
+        }
+        let mut last = 0;
+        for section in [
+            "Physical identity:",
+            "Role / profession:",
+            "Clothing / equipment:",
+            "Setting:",
+            "Symbolic motifs:",
+            "Style:",
+            "Composition:",
+        ] {
+            let at = brief.prompt_text.find(section).unwrap();
+            assert!(at > last);
+            last = at;
+        }
+        assert_eq!(source, before);
+        assert_eq!(
+            brief,
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap()
+        );
+        assert_eq!(brief.format_version, 2);
+        validate_visual_brief(&brief).unwrap();
+    }
+    #[test]
+    fn risky_character_epithets_and_animal_costumes_do_not_define_species() {
+        for word in [
+            "rat", "raven", "crow", "wolf", "serpent", "spider", "beast", "ghost", "bone",
+            "plague", "carrion", "ash", "butcher",
+        ] {
+            let mut source = physician(
+                "Silver hair, a raven-haired look and a rat-headed mask with a wolf emblem",
+            );
+            if let VisualEntity::Character(c) = &mut source {
+                c.archetype = format!("Chapel {word} Physician");
+            }
+            let brief = compile_visual_brief(
+                &source,
+                1,
+                None,
+                ArtDirection {
+                    medium_style: "anthropomorphic rat portrait".into(),
+                    ..Default::default()
+                },
+                R::Portrait,
+            )
+            .unwrap();
+            assert_eq!(
+                brief.subject_classification.subject_kind,
+                SubjectKind::Human
+            );
+            assert_eq!(
+                brief.subject_classification.species_mode,
+                SpeciesMode::InferredDefault
+            );
+            assert!(brief.subject_classification.humanoid_guardrail);
+            assert!(
+                brief
+                    .prompt_text
+                    .contains(&format!("subtle {word} symbolism"))
+            );
+        }
+        let mut source = physician("Silver hair and a patched coat");
+        if let VisualEntity::Character(c) = &mut source {
+            c.archetype = "Crown Physician".into();
+        }
+        let brief =
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap();
+        assert_eq!(
+            brief.subject_classification.literalization_risk,
+            LiteralizationRisk::Low
+        );
+        assert!(!brief.negative_prompt_text.contains("literal crow"));
+    }
+    #[test]
+    fn explicit_nonhuman_character_appearance_preserves_literal_form() {
+        for (appearance, kind) in [
+            (
+                "An elf with pointed ears and silver hair",
+                SubjectKind::Humanoid,
+            ),
+            ("Elven physician with long ears", SubjectKind::Humanoid),
+            (
+                "An anthropomorphic rat with fur and a rodent head",
+                SubjectKind::Humanoid,
+            ),
+            (
+                "A rat-headed physician with whiskers and fur",
+                SubjectKind::Humanoid,
+            ),
+            ("A rat with fur and whiskers", SubjectKind::Beast),
+            (
+                "Species: mothkin; compound eyes and four arms",
+                SubjectKind::Unknown,
+            ),
+            (
+                "A werewolf with fur and a lupine muzzle",
+                SubjectKind::Humanoid,
+            ),
+        ] {
+            let brief = compile_visual_brief(
+                &physician(appearance),
+                1,
+                None,
+                ArtDirection::default(),
+                R::Portrait,
+            )
+            .unwrap();
+            assert_eq!(
+                brief.subject_classification.subject_kind, kind,
+                "{appearance}"
+            );
+            assert_eq!(
+                brief.subject_classification.species_mode,
+                SpeciesMode::Explicit
+            );
+            assert!(!brief.subject_classification.humanoid_guardrail);
+            assert!(brief.prompt_text.contains(appearance));
+            assert!(!brief.negative_prompt_text.contains("literal rat"));
+            assert!(!brief.negative_prompt_text.contains("animal head"));
+            validate_visual_brief(&brief).unwrap();
+        }
+    }
+    #[test]
+    fn literal_creatures_and_all_family_prompt_structures_remain_distinct() {
+        let mut sources = entities();
+        if let VisualEntity::Creature(c) = &mut sources[4] {
+            c.appearance = "A literal giant rat with fur, whiskers and a long tail".into();
+        }
+        for (source, role, kind, section) in [
+            (
+                &sources[0],
+                R::Portrait,
+                SubjectKind::Human,
+                "Physical identity:",
+            ),
+            (
+                &sources[1],
+                R::EstablishingShot,
+                SubjectKind::Location,
+                "Environment / architecture:",
+            ),
+            (
+                &sources[2],
+                R::Emblem,
+                SubjectKind::FactionSymbolic,
+                "Symbols / emblem / representative design:",
+            ),
+            (
+                &sources[3],
+                R::ItemConcept,
+                SubjectKind::Object,
+                "Object physical form / material:",
+            ),
+            (
+                &sources[4],
+                R::CreatureConcept,
+                SubjectKind::Creature,
+                "Literal creature anatomy:",
+            ),
+        ] {
+            let brief =
+                compile_visual_brief(source, 1, None, ArtDirection::default(), role).unwrap();
+            assert_eq!(brief.subject_classification.subject_kind, kind);
+            assert!(brief.prompt_text.contains(section));
+            assert!(brief.prompt_text.contains("clear concept illustration"));
+            if kind != SubjectKind::Human {
+                assert!(!brief.subject_classification.humanoid_guardrail);
+                assert!(!brief.negative_prompt_text.contains("animal head"));
+            }
+            validate_visual_brief(&brief).unwrap();
+        }
+    }
+    #[test]
+    fn negative_direction_is_separate_redacted_and_hash_verified() {
+        let source = physician("Silver hair and patched coat");
+        let original =
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap();
+        let direction = ArtDirection {
+            avoid: format!(
+                "oversaturation {} {}",
+                "a".repeat(64),
+                source.envelope().id.uuid()
+            ),
+            ..Default::default()
+        };
+        let brief = compile_visual_brief(&source, 1, None, direction, R::Portrait).unwrap();
+        assert!(brief.negative_prompt_text.contains("oversaturation"));
+        assert!(!brief.prompt_text.contains("oversaturation"));
+        assert!(!brief.negative_prompt_text.contains(&"a".repeat(64)));
+        assert!(
+            !brief
+                .negative_prompt_text
+                .contains(&source.envelope().id.uuid().to_string())
+        );
+        assert_ne!(brief.brief_hash, original.brief_hash);
+        let mut forged = brief;
+        forged.subject_classification.subject_kind = SubjectKind::Beast;
+        forged.brief_hash.clear();
+        forged.brief_hash = visual_digest(&forged).unwrap();
+        assert!(validate_visual_brief(&forged).is_err());
+    }
+
     #[test]
     fn visual_prompt_redacts_identifiers_in_visible_prose_and_operator_direction() {
         let entity = entities().remove(0);

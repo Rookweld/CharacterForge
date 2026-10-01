@@ -9,7 +9,29 @@ const direction: ArtDirection = {
   avoid: '',
 };
 export const brief: VisualGenerationBrief = {
-  format_version: 1,
+  format_version: 2,
+  subject_classification: {
+    subject_kind: 'human',
+    species_mode: 'inferred-default',
+    literalization_risk: 'high',
+    humanoid_guardrail: true,
+  },
+  prompt_semantics: {
+    identity: ['human dark fantasy physician', 'Silver hair'],
+    flavor_symbolism: ['subtle rat symbolism'],
+    negative_guardrails: [
+      'literal rat',
+      'anthropomorphic rodent',
+      'animal head',
+      'mascot',
+      'parody',
+    ],
+  },
+  safeguards_applied: [
+    'Human anatomy retained; animal/epithet terms are symbolic by default.',
+  ],
+  negative_prompt_text:
+    'literal rat, anthropomorphic rodent, animal head, mascot, parody',
   context: {
     format_version: 1,
     visual_recipe_id: 'visual-character-portrait-v1',

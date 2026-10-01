@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER — closed at exit gate
+THE_FORGE_B10_R1_VISUAL_PROMPT_REMEDIATION — closed at remediation exit gate
 
 ## Status
 
-**B10 PASS — automated exit gates satisfied. STOP.**
+**B10.R1 PASS — automated remediation exit gates satisfied. STOP.**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,8 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `2ad9eb56957d29ca51aa3dc8ee45698127301d6d` (B10 starting/current HEAD)
-- worktree: seventeen B10 source/test/doc/lock files unstaged/uncommitted; index empty; four unrelated files byte-identical
+- HEAD: `88c07d6f80cc14680c71f5934cfdc8e792c78c89` (B10.R1 starting/current HEAD)
+- worktree: B10.R1 changes unstaged/uncommitted; accepted B10 architecture preserved; four unrelated files byte-identical
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -252,6 +252,12 @@ Branch `master`; accepted B8 implementation commit `7b22eb9` (`feat: add Charact
 Verification: **216 Rust tests PASS**, one existing fixture writer ignored; **107 frontend tests PASS**; full format/lint/typecheck/build, strict Clippy, Cargo metadata, explicit no-fail-fast workspace suite, 1,000-sequence / 32,000-operation gauntlet, `scripts/verify.ps1`, optimized isolated Tauri no-bundle build and `git diff --check` PASS. Native operator smoke is not claimed. The existing npm shim limitation remains; configured Corepack/pnpm suites pass. Existing UI-001 and accepted Mission 08 dependency-review limitation remain open.
 
 See `docs/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION_REPORT.md`. No next mission starts. Actual provider/persistence direction requires operator choice.
+
+## B10.R1 Prompt Remediation
+
+**PASS — automated remediation exit gates satisfied. STOP.** Character prompts classify canonical physical identity before symbolic titles/archetypes, with separate identity, symbolism and negative guards. Explicit non-human Characters and literal Creatures retain their form; Item, Location and Faction prompts remain family-specific. Visual Forge exposes both prompts, classification and safeguards. Brief format 2 records the changed compiled semantics; context/recipe/source identity and entity/schema/archive versions are preserved. Accepted B10 loopback provider architecture remains intact.
+
+Explicit workspace: **238 Rust tests PASS**, one existing fixture writer ignored; **123 frontend tests PASS**. Frontend format/lint/typecheck/build, Rust format/strict Clippy, Cargo metadata, `scripts/verify.ps1`, optimized isolated Tauri no-bundle build and final `git diff --check` PASS. Rebuilt executable: `target/mission-b10-r1-verify/release/character-forge-desktop.exe`, ProductVersion 1.0.0. Index empty; four unrelated files byte-identical; no commit/tag/push/publication. STOP at B10.R1. See `docs/missions/THE_FORGE_B10_R1_VISUAL_PROMPT_REMEDIATION_REPORT.md`. Actual checkpoint image quality requires operator retest; no independent native generation/GUI acceptance is claimed. Existing UI-001 and Mission 08 advisory verification limitation remain.
 
 ## B10 Result and Exit Gate
 

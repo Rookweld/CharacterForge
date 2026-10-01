@@ -4,21 +4,21 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER — local-only ComfyUI adapter
-**Current status:** PASS — B10 automated exit gates satisfied; STOP
+**Current mission:** THE_FORGE_B10_R1_VISUAL_PROMPT_REMEDIATION — focused prompt/brief repair
+**Current status:** PASS — B10.R1 automated remediation exit gates satisfied; STOP
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `2ad9eb56957d29ca51aa3dc8ee45698127301d6d` (B10 starting/current HEAD; unchanged)
-**Worktree:** Seventeen B10 source/test/doc/lock files are unstaged/uncommitted; index empty. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `88c07d6f80cc14680c71f5934cfdc8e792c78c89` (B10.R1 starting/current HEAD; unchanged)
+**Worktree:** B10.R1 changes are unstaged/uncommitted; accepted B10 implementation remains intact; index empty. Four unrelated operator/export/log files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
 ## Current The Forge handoff
 
-B10 is **PASS — automated exit gates satisfied. STOP.** Optional loopback-only Local ComfyUI discovery, bounded core-node workflow, exact owned prompt lifecycle, transient PNG preview/metadata and explicit atomic image export extend unchanged provider-neutral B9 briefs. Saved source changes block queueing and flag old results. No Entity/Canon/asset DB/schema/archive mutation, model download/custom node install, credentials, cloud/remote hosts or later work. Explicit workspace verification: **233 Rust tests PASS**, one existing fixture writer ignored; **122 frontend tests PASS**; frontend format/lint/typecheck/build, Rust format/strict Clippy, Cargo metadata, gauntlet, `scripts/verify.ps1`, optimized Tauri no-bundle build and `git diff --check` PASS. Exact executable: `target/mission-b10-verify/release/character-forge-desktop.exe`, version 1.0.0. Native health probe at 127.0.0.1:8000 was refused; no native image generation or independent GUI acceptance is claimed. Existing UI-001, npm launcher issue and accepted Mission 08 advisory limitation remain. See `docs/missions/THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER_REPORT.md`. Four unrelated files are preserved; no commit/tag/push/publication.
+B10.R1 is **PASS — automated remediation exit gates satisfied. STOP.** Physical Character identity now precedes figurative titles/archetypes; human defaults and separate negative guards address the Chapel Rat Physician case while preserving explicit non-human Characters and literal Creatures. Family-specific prompt structures, preset defaults and visible classification/safeguards/positive/negative prompts are verified. Visual brief format 2 records changed compiler semantics; source/context/recipe identities, entity replay, schema 2, archive v1 and app 1.0.0 are unchanged. Accepted B10 loopback ComfyUI architecture remains intact; only its existing negative node receives the compiled negative text. **238 Rust tests PASS**, one existing fixture writer ignored; **123 frontend tests PASS**; format/lint/typecheck/build, strict Clippy, Cargo metadata, explicit no-fail-fast workspace suite, storage gauntlet, `scripts/verify.ps1`, optimized Tauri no-bundle build and `git diff --check` PASS. Exact executable: `target/mission-b10-r1-verify/release/character-forge-desktop.exe`, version 1.0.0. Actual checkpoint image quality needs operator retest; no independent native image-generation/GUI acceptance is claimed. Existing UI-001, npm launcher issue and accepted Mission 08 advisory limitation remain. See `docs/missions/THE_FORGE_B10_R1_VISUAL_PROMPT_REMEDIATION_REPORT.md`. Four unrelated files remain byte-identical/untracked; all mission changes unstaged/uncommitted; no later work started.
 
 ## Architecture decisions currently locked
 

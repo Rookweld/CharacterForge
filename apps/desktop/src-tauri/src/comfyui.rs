@@ -192,7 +192,7 @@ pub fn workflow(
     let graph = json!({
         "1":{"class_type":"CheckpointLoaderSimple","inputs":{"ckpt_name":settings.checkpoint}},
         "2":{"class_type":"CLIPTextEncode","inputs":{"text":brief.prompt_text,"clip":["1",1]}},
-        "3":{"class_type":"CLIPTextEncode","inputs":{"text":brief.avoid.join(", "),"clip":["1",1]}},
+        "3":{"class_type":"CLIPTextEncode","inputs":{"text":brief.negative_prompt_text,"clip":["1",1]}},
         "4":{"class_type":"EmptyLatentImage","inputs":{"width":settings.width,"height":settings.height,"batch_size":1}},
         "5":{"class_type":"KSampler","inputs":{"model":["1",0],"seed":settings.seed,"steps":settings.steps,"cfg":settings.cfg,"sampler_name":settings.sampler,"scheduler":settings.scheduler,"positive":["2",0],"negative":["3",0],"latent_image":["4",0],"denoise":1.0}},
         "6":{"class_type":"VAEDecode","inputs":{"samples":["5",0],"vae":["1",2]}},
@@ -790,7 +790,7 @@ mod tests {
         assert_eq!(a.workflow, workflow(&b, &settings()).unwrap().workflow);
         assert_eq!(a.workflow.as_object().unwrap().len(), 7);
         assert_eq!(a.workflow["2"]["inputs"]["text"], b.prompt_text);
-        assert_eq!(a.workflow["3"]["inputs"]["text"], b.avoid.join(", "));
+        assert_eq!(a.workflow["3"]["inputs"]["text"], b.negative_prompt_text);
         assert_eq!(a.workflow["5"]["inputs"]["seed"], 42);
         assert_eq!(a.workflow["7"]["inputs"]["filename_prefix"], "TheForge");
         assert!(

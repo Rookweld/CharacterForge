@@ -226,8 +226,27 @@ export function VisualForge({
                   {JSON.stringify(brief.context.source.generation, null, 2)}
                 </pre>
               </details>
+              <section aria-label="Subject classification">
+                <h4>Subject classification</h4>
+                <p>
+                  Subject: {human(brief.subject_classification.subject_kind)} ·
+                  Species mode: {brief.subject_classification.species_mode} ·
+                  Literalization risk:{' '}
+                  {brief.subject_classification.literalization_risk} · Human
+                  anatomy safeguard:{' '}
+                  {brief.subject_classification.humanoid_guardrail
+                    ? 'applied'
+                    : 'not applied; canonical form retained'}
+                </p>
+                <h4>Safeguards applied</h4>
+                <ul>
+                  {brief.safeguards_applied.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ul>
+              </section>
               <label>
-                Human-readable prompt
+                Compiled positive prompt
                 <textarea
                   ref={prompt}
                   aria-label="Visual prompt"
@@ -236,6 +255,23 @@ export function VisualForge({
                   rows={16}
                 />
               </label>
+              <label>
+                Compiled negative prompt
+                <textarea
+                  aria-label="Compiled negative prompt"
+                  readOnly
+                  value={brief.negative_prompt_text}
+                  rows={5}
+                />
+              </label>
+              <details>
+                <summary>Identity and symbolism</summary>
+                <p>Identity: {brief.prompt_semantics.identity.join(' / ')}</p>
+                <p>
+                  Flavor / symbolism:{' '}
+                  {brief.prompt_semantics.flavor_symbolism.join(' / ')}
+                </p>
+              </details>
               <p>
                 Select the prompt to copy it with your usual keyboard shortcut.
                 Export JSON includes the complete structured brief and
