@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B5_CREATURE_CORE — complete at the bounded exit gate
+THE_FORGE_B6_RELATIONSHIP_LIFECYCLE — prepared for execution
 
 ## Status
 
-**B5 PASS — standalone six-entity authoring foundation implemented and verified**
+**B5 PASS — B6 RELATIONSHIP LIFECYCLE AUTHORIZED**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -14,13 +14,15 @@ Accepted implementation commits:
 
 - `fe10c6c` — `feat: add Forge Hometown flow`
 - `82440ff` — `feat: add Faction Forge core`
+- `8527d51` — `feat: add Item Forge core`
+- `821dbeb` — `feat: add Creature Forge core`
 
 The operator has authorized continued non-destructive development through bounded missions.
 
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `ccef11a8eae698bdc004e1bf3e4c678a3ba8db5b` (verified B5 starting/current HEAD)
+- HEAD: `821dbeb` (`feat: add Creature Forge core`)
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -190,7 +192,7 @@ Final evidence: **182 Rust tests PASS, 1 existing fixture writer ignored; 52 fro
 
 Quality: 2,816 preset Candidates and 1,024 Chaos seeds validate/replay with zero full-content clones; all eleven profiles, 640 source patterns, 1,013 mixed-source Candidates, maximum source share 11.82%. The 52-sample generated/content-author review rates 17 usable as-is, 35 minor edit, 0 weak; repeated local-encounter motifs and minor authoring needs are documented. This is not independent human acceptance. Existing P3 UI-001 remains open; no B5 P0/P1/P2 remains known. Schema 2, archive v1, app 1.0.0 and old deterministic contracts are unchanged. Mission 08's dependency-advisory verification limitation remains residual maintenance/release risk.
 
-Branch `master`, starting/final HEAD `ccef11a8eae698bdc004e1bf3e4c678a3ba8db5b`; B5 changes remain unstaged/uncommitted. Four unrelated files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B5. Creature Forge Further, World Forge and later missions remain unstarted.** See `docs/missions/THE_FORGE_B5_CREATURE_CORE_REPORT.md` and `docs/quality/THE_FORGE_B5_CREATURE_SAMPLES.md`.
+Branch `master`; accepted B5 implementation commit `821dbeb` (`feat: add Creature Forge core`). Four unrelated files remain untracked and preserved. See `docs/missions/THE_FORGE_B5_CREATURE_CORE_REPORT.md` and `docs/quality/THE_FORGE_B5_CREATURE_SAMPLES.md`.
 
 ## B5 Exit Gate
 
