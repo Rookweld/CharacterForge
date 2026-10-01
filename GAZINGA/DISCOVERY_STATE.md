@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B9_VISUAL_FORGE_FOUNDATION — prepared for execution
+THE_FORGE_B9_VISUAL_FORGE_FOUNDATION — closed at exit gate
 
 ## Status
 
-**B8 PASS — B9 VISUAL FORGE FOUNDATION AUTHORIZED**
+**B9 PASS — automated exit gates satisfied. STOP.**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,8 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `7b22eb9` (`feat: add Character signature item Forge Further`)
-- worktree: B8 changes unstaged/uncommitted; four unrelated files preserved
+- HEAD: `a925d7f6cf1a5048afc2fee49184da2b16c1c369` (B9 starting/current HEAD)
+- worktree: twelve B9 source/test/doc files unstaged/uncommitted; index empty; four unrelated files preserved
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -36,7 +36,7 @@ The operator has authorized continued non-destructive development through bounde
 - standalone deterministic Creature Forge: implemented and verified; B5 closed
 - universal Connections / independent Relationship lifecycle: implemented and verified; B6 closed
 - Character → Forge Their Faction: implemented and verified; B7 closed
-- Character → Forge Their Signature Item: implemented and verified; B8 closed, uncommitted
+- Character → Forge Their Signature Item: implemented and verified; B8 accepted at `7b22eb9`
 
 Unrelated files to preserve and never absorb:
 
@@ -244,11 +244,13 @@ Branch `master`; accepted B8 implementation commit `7b22eb9` (`feat: add Charact
 
 **PASS.** B8 is committed at `7b22eb9`.
 
-## Next Mission
+## B9 Result and Exit Gate
 
-`GAZINGA/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION.md`
+**PASS — automated exit gates satisfied. STOP at B9.** Five saved visual entity families have bounded deterministic provider-neutral recipes/context/briefs, exact current persisted source provenance, secret-safe visible projections, selectable prompt and safe JSON/Markdown export. Stale previews remain frozen and require explicit recompile; export rechecks current source. Quest is unsupported. No provider, credentials, binary asset persistence, Visual Canon, schema/archive/app-version changes or later work.
 
-Scope: provider-neutral Visual Forge context/recipe/brief compiler and desktop preview/export for Character, Location, Faction, Item, and Creature. No actual image provider, credentials, binary asset persistence, Visual Canon, schema bump, or forgeproject v2 until operator choice.
+Verification: **216 Rust tests PASS**, one existing fixture writer ignored; **107 frontend tests PASS**; full format/lint/typecheck/build, strict Clippy, Cargo metadata, explicit no-fail-fast workspace suite, 1,000-sequence / 32,000-operation gauntlet, `scripts/verify.ps1`, optimized isolated Tauri no-bundle build and `git diff --check` PASS. Native operator smoke is not claimed. The existing npm shim limitation remains; configured Corepack/pnpm suites pass. Existing UI-001 and accepted Mission 08 dependency-review limitation remain open.
+
+See `docs/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION_REPORT.md`. No next mission starts. Actual provider/persistence direction requires operator choice.
 
 ## Still Open
 
@@ -259,9 +261,9 @@ Scope: provider-neutral Visual Forge context/recipe/brief compiler and desktop p
 - Visual Canon
 - World/Lore epistemic truth
 
-None are required for B8.
+None are required for B9.
 
-## Deferred After B8
+## Deferred After B9
 
 - Creature Forge Further
 - Item Forge Further

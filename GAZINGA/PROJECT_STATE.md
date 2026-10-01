@@ -4,25 +4,21 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM — Character → Forge Their Signature Item
-**Current status:** PASS — B8 automated exit gates satisfied
+**Current mission:** THE_FORGE_B9_VISUAL_FORGE_FOUNDATION — provider-neutral visual briefs
+**Current status:** PASS — B9 automated exit gates satisfied; STOP
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `ecdd143061d2e66b4dbfb5667f1fe5b944328235` (B8 starting/current HEAD; unchanged)
-**Worktree:** B8 implementation/tests/docs are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `a925d7f6cf1a5048afc2fee49184da2b16c1c369` (B9 starting/current HEAD; unchanged)
+**Worktree:** B9 implementation/tests/docs are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
 ## Current The Forge handoff
 
-B8 is **PASS — automated exit gates satisfied**. Saved deterministic Character → Forge Their Signature Item compiles fifteen bounded immutable Character facts, reuses canonical ItemForge with gear-prioritized intent, proposes Generated Candidate Owns, preserves exact final reviewed DNA and saves Item/relationship/typed immutable operation atomically. B6 source/inverse Connections and independent promotion/archive/history remain intact. B2/B2.R1, B7 and all six standalone generators remain green.
-
-Final evidence: **208 Rust tests PASS, one existing fixture writer ignored; 90 frontend tests PASS**. Explicit workspace no-fail-fast and sequential `scripts/verify.ps1` pass, including the 1,000-sequence gauntlet. Frontend format/lint/typecheck/build, Rust format/strict all-target Clippy, full offline Cargo metadata, optimized no-bundle build and final `git diff --check` PASS. Exact binary: `C:\dev\CharacterForge\target\mission-b8-verify\release\character-forge-desktop.exe`, ProductVersion/FileVersion 1.0.0. Machine npm shim remains unavailable; configured Corepack/pnpm 11.25.0 tests pass.
-
-The 44-example generated/content-author quality packet individually classifies all examples as usable with minor editing; all complete creative bodies differ and no generated raw ID/hash/game-stat leakage was found. Independent executable replay reproduced all 44 exact snapshots. No independent human/native operator acceptance is claimed; B8 permits automated PASS without immediate smoke. No known B8 P0/P1/P2 remains. Existing P3 UI-001 and Mission 08's accepted incomplete automated dependency advisory scan remain open. Schema 2, archive v1, app 1.0.0 and existing generator/content versions unchanged. Sixteen B8 files unstaged/uncommitted; four unrelated files untracked and byte-identical by SHA-256. No reset/staging/commit/tag/push/publication. **STOP at B8.** No Visual Forge, Link Existing, multi-source Forge, reverse Forge Further or later work begun. See `docs/missions/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM_REPORT.md` and `docs/quality/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM_SAMPLES.md`.
+B9 is **PASS — automated exit gates satisfied. STOP.** Five saved visual entity families compile bounded provider-neutral context and deterministic briefs; Quest is deliberately unsupported. Desktop preview, selectable prompt, stale checks and atomic JSON/Markdown export are implemented. No real provider, credentials, binary asset persistence, Visual Canon, schema/archive/version bump or later work. Explicit workspace verification passed 216 Rust tests (one existing fixture writer ignored); 107 frontend tests passed. Final `scripts/verify.ps1`, format/lint/typecheck/build, strict Clippy, Cargo metadata, the 1,000-sequence gauntlet, optimized isolated Tauri no-bundle build and `git diff --check` PASS. Executable: `target/mission-b9-verify/release/character-forge-desktop.exe`, version 1.0.0. Native operator smoke is not claimed. Existing UI-001 and accepted Mission 08 dependency advisory limitation remain. See `docs/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION_REPORT.md`. Four unrelated files are preserved and no commit/tag/push is authorized.
 
 ## Architecture decisions currently locked
 

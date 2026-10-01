@@ -68,3 +68,5 @@ pub use character_signature_item::{
     finalize_signature_item_review, forge_character_signature_item, validate_signature_item_bundle,
 };
 pub use item_context::CharacterItemFacts;
+
+pub mod visual;

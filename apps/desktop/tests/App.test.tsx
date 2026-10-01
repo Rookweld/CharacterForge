@@ -2787,3 +2787,50 @@ describe('Signature Item Connections handoff', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe('Visual Forge saved-detail integration', () => {
+  it.each([
+    ['Characters', character, 'character-1'],
+    ['Locations', locationPayload, 'location-1'],
+    ['Factions', factionPayload, 'faction-1'],
+    ['Items', itemPayload, 'item-1'],
+    ['Creatures', creaturePayload, 'creature-1'],
+    ['Quests', quest, 'quest-1'],
+  ] as const)(
+    'exposes the foundation only on supported saved %s',
+    async (library, payload, id) => {
+      vi.mocked(api.getEntity).mockResolvedValue(record(payload));
+      await openWorkspace([record(payload)]);
+      fireEvent.click(
+        screen.getByRole('button', { name: new RegExp(`^${library}`) }),
+      );
+      const title = payload.kind.endsWith('candidate')
+        ? 'character' in payload.value
+          ? payload.value.character.envelope.name
+          : 'quest' in payload.value
+            ? payload.value.quest.envelope.name
+            : 'location' in payload.value
+              ? payload.value.location.envelope.name
+              : 'faction' in payload.value
+                ? payload.value.faction.envelope.name
+                : 'item' in payload.value
+                  ? payload.value.item.envelope.name
+                  : 'creature' in payload.value
+                    ? payload.value.creature.envelope.name
+                    : ''
+        : '';
+      fireEvent.click(
+        await screen.findByRole('button', { name: new RegExp(title) }),
+      );
+      expect(id).toBeTruthy();
+      if (library === 'Quests')
+        expect(
+          screen.queryByRole('button', { name: 'Visual Forge' }),
+        ).not.toBeInTheDocument();
+      else
+        expect(
+          screen.getByRole('button', { name: 'Visual Forge' }),
+        ).toBeInTheDocument();
+    },
+  );
+});

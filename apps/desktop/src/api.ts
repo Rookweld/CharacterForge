@@ -501,7 +501,95 @@ export const axisMeta: {
   },
 ];
 
+export type VisualRole =
+  | 'portrait'
+  | 'full_body'
+  | 'character_sheet'
+  | 'establishing_shot'
+  | 'environment_concept'
+  | 'interior_concept'
+  | 'emblem'
+  | 'banner'
+  | 'uniform_concept'
+  | 'item_concept'
+  | 'inventory_icon'
+  | 'prop_sheet'
+  | 'creature_concept'
+  | 'anatomy_detail';
+export type ArtDirection = {
+  medium_style: string;
+  palette: string;
+  materials: string;
+  camera_composition: string;
+  atmosphere: string;
+  avoid: string;
+};
+export type VisualFact = { field: string; values: string[] };
+export type VisualRecipeDefinition = {
+  recipe_id: string;
+  version: number;
+  source_type: string;
+  role: VisualRole;
+  composition_intent: string;
+  aspect_intent: 'portrait' | 'landscape' | 'square';
+  transparent_background_meaningful: boolean;
+  environment_present: boolean;
+};
+export type VisualGenerationBrief = {
+  format_version: number;
+  context: {
+    format_version: number;
+    visual_recipe_id: string;
+    visual_recipe_version: number;
+    role: VisualRole;
+    facts: VisualFact[];
+    art_direction: ArtDirection;
+    context_hash: string;
+    source: {
+      entity_id: string;
+      project_id: string;
+      entity_type: string;
+      write_version: number;
+      canon_state: string;
+      canon_revision: number | null;
+      source_body_hash: string;
+      generation: {
+        generation_kind: string;
+        generator_version: number;
+        content_version: number;
+        preset: string;
+        creative_axes: { levels: Record<Axis, number> };
+      } | null;
+    };
+  };
+  subject_description: string;
+  must_include: VisualFact[];
+  supporting_details: VisualFact[];
+  composition_intent: string;
+  aspect_intent: string;
+  background_intent: string;
+  transparent_background_meaningful: boolean;
+  avoid: string[];
+  consistency_notes: string[];
+  prompt_text: string;
+  brief_hash: string;
+};
 export const api = {
+  visualRecipes: (entityType: string) =>
+    invoke<VisualRecipeDefinition[]>('get_visual_recipes', { entityType }),
+  compileVisualBrief: (id: string, role: VisualRole, direction: ArtDirection) =>
+    invoke<VisualGenerationBrief>('compile_visual_brief_command', {
+      id,
+      role,
+      direction,
+    }),
+  visualBriefStale: (briefHash: string) =>
+    invoke<boolean>('visual_brief_stale', { briefHash }),
+  exportVisualBrief: (
+    briefHash: string,
+    path: string,
+    format: 'json' | 'markdown',
+  ) => invoke<void>('export_visual_brief_command', { briefHash, path, format }),
   project: () => invoke<Project | null>('get_project'),
   defaultProjectDirectory: () => invoke<string>('default_project_directory'),
   recentProjects: () => invoke<RecentProject[]>('recent_projects'),

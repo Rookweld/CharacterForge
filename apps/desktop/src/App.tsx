@@ -28,6 +28,7 @@ import {
   type WorkingState,
 } from './api';
 import { Connections } from './Connections';
+import { VisualForge } from './VisualForge';
 
 type FurtherReview =
   | { kind: 'hometown'; bundle: ForgeResultBundle }
@@ -3007,6 +3008,16 @@ function DetailView({
           </button>
         </div>
       )}
+      {record.writeVersion > 0 &&
+        entity.envelope.entity_type !== 'quest' &&
+        ['candidate', 'canon'].includes(entity.envelope.canon_state) && (
+          <VisualForge
+            key={entity.envelope.id}
+            id={entity.envelope.id}
+            entityType={entity.envelope.entity_type}
+            writeVersion={record.writeVersion}
+          />
+        )}
       <div className="detail-fields">
         {payloadFields(record.entity).map((field) => (
           <article key={field.key}>

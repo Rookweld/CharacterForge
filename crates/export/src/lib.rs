@@ -523,6 +523,27 @@ pub fn write_entity_markdown(
 ) -> Result<(), ExportError> {
     atomic_write(entity_markdown(entity)?.as_bytes(), destination.as_ref())
 }
+/// Standalone data-only brief export, using the existing no-clobber writer.
+/// The caller supplies its typed, validated brief; no asset or archive member is created.
+pub fn write_visual_brief<T: Serialize>(
+    brief: &T,
+    destination: impl AsRef<Path>,
+    prompt: Option<&str>,
+) -> Result<(), ExportError> {
+    let json = serde_json::to_string_pretty(brief)
+        .map_err(|_| ExportError::Invalid("Visual brief serialization failed".into()))?;
+    let bytes = if let Some(prompt) = prompt {
+        format!("# Visual Generation Brief\n\n{prompt}\n\n## Structured brief and provenance\n\n```json\n{json}\n```\n").into_bytes()
+    } else {
+        json.into_bytes()
+    };
+    if bytes.len() > 262144 {
+        return Err(ExportError::Invalid(
+            "Visual brief exceeds export size limit".into(),
+        ));
+    }
+    atomic_write(&bytes, destination.as_ref())
+}
 fn atomic_write(bytes: &[u8], destination: &Path) -> Result<(), ExportError> {
     if destination.exists() {
         return Err(ExportError::DestinationExists);

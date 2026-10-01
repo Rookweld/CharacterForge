@@ -1,3 +1,7 @@
+use forge_app_core::visual::{
+    ArtDirection, VisualEntity, VisualGenerationBrief, VisualRecipeDefinition, VisualRole,
+    compile_visual_brief, visual_digest, visual_recipes,
+};
 use forge_app_core::{
     CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, CreatureCandidate,
     CreatureField, CreatureFieldValue, CreatureForge, FactionCandidate, FactionField,
@@ -43,6 +47,7 @@ struct AppSession {
     write_version: Option<i64>,
     history: Option<SessionHistory<StoredEntity>>,
     further: Option<FurtherReview>,
+    visual_brief: Option<VisualGenerationBrief>,
 }
 
 #[derive(Clone)]
@@ -685,6 +690,132 @@ fn restore_backup_command(state: State<'_, AppState>, archive_path: String) -> R
     session.history = None;
     session.further = None;
     Ok(())
+}
+
+fn visual_entity(entity: &StoredEntity) -> Result<VisualEntity, UiError> {
+    Ok(match entity {
+        StoredEntity::CharacterCandidate(c) => {
+            VisualEntity::Character(Box::new(c.character.clone()))
+        }
+        StoredEntity::Character(c) => VisualEntity::Character(Box::new(c.clone())),
+        StoredEntity::LocationCandidate(c) => VisualEntity::Location(Box::new(c.location.clone())),
+        StoredEntity::Location(c) => VisualEntity::Location(Box::new(c.clone())),
+        StoredEntity::FactionCandidate(c) => VisualEntity::Faction(Box::new(c.faction.clone())),
+        StoredEntity::Faction(c) => VisualEntity::Faction(Box::new(c.clone())),
+        StoredEntity::ItemCandidate(c) => VisualEntity::Item(Box::new(c.item.clone())),
+        StoredEntity::Item(c) => VisualEntity::Item(Box::new(c.clone())),
+        StoredEntity::CreatureCandidate(c) => VisualEntity::Creature(Box::new(c.creature.clone())),
+        StoredEntity::Creature(c) => VisualEntity::Creature(Box::new(c.clone())),
+        _ => {
+            return Err(visual_error(
+                "Quest has no defined visual role in this foundation build.",
+            ));
+        }
+    })
+}
+fn visual_error(message: &str) -> UiError {
+    UiError {
+        kind: "visual_brief",
+        message: message.into(),
+        expected: None,
+        actual: None,
+    }
+}
+#[tauri::command]
+fn get_visual_recipes(entity_type: forge_contracts::EntityType) -> Vec<VisualRecipeDefinition> {
+    visual_recipes(entity_type)
+}
+fn compile_saved_visual(
+    session: &mut AppSession,
+    id: EntityId,
+    role: VisualRole,
+    direction: ArtDirection,
+) -> Result<VisualGenerationBrief, UiError> {
+    let record = active_store(session)?
+        .get_entity(id)?
+        .ok_or_else(|| visual_error("Saved source not found."))?;
+    let entity = visual_entity(&record.entity)?;
+    let mut brief = compile_visual_brief(&entity, record.write_version, None, direction, role)?;
+    // Hash the exact stored Candidate/Canon wrapper, including DNA and field origins.
+    brief.context.source.source_body_hash = visual_digest(&record.entity)?;
+    brief.brief_hash.clear();
+    brief.brief_hash = visual_digest(&brief)?;
+    session.visual_brief = Some(brief.clone());
+    Ok(brief)
+}
+#[tauri::command]
+fn compile_visual_brief_command(
+    state: State<'_, AppState>,
+    id: String,
+    role: VisualRole,
+    direction: ArtDirection,
+) -> Result<VisualGenerationBrief, UiError> {
+    let mut session = lock_state(&state)?;
+    compile_saved_visual(&mut session, parse_entity_id(&id)?, role, direction)
+}
+fn current_visual_status(session: &mut AppSession, brief_hash: &str) -> Result<bool, UiError> {
+    let brief = session
+        .visual_brief
+        .as_ref()
+        .filter(|b| b.brief_hash == brief_hash)
+        .ok_or_else(|| {
+            visual_error("This brief is no longer the active compiled preview. Recompile it.")
+        })?
+        .clone();
+    let store = active_store(session)?;
+    let record = store
+        .get_entity(brief.context.source.entity_id)?
+        .ok_or_else(|| visual_error("Saved source no longer exists."))?;
+    if record.entity.envelope().project_id != brief.context.source.project_id {
+        return Err(visual_error("This brief belongs to another project."));
+    }
+    Ok(record.write_version != brief.context.source.write_version
+        || visual_digest(&record.entity)? != brief.context.source.source_body_hash)
+}
+#[tauri::command]
+fn visual_brief_stale(state: State<'_, AppState>, brief_hash: String) -> Result<bool, UiError> {
+    let mut session = lock_state(&state)?;
+    current_visual_status(&mut session, &brief_hash)
+}
+fn export_compiled_visual(
+    session: &mut AppSession,
+    brief_hash: &str,
+    path: &Path,
+    format: &str,
+) -> Result<(), UiError> {
+    if current_visual_status(session, brief_hash)? {
+        return Err(visual_error(
+            "Source changed after compilation. Recompile before exporting; the old preview remains unchanged.",
+        ));
+    }
+    let brief = session
+        .visual_brief
+        .as_ref()
+        .ok_or_else(|| visual_error("Compile a brief first."))?;
+    if !matches!(format, "json" | "markdown") {
+        return Err(visual_error("Choose JSON or Markdown."));
+    }
+    forge_app_core::visual::validate_visual_brief(brief)?;
+    forge_export::write_visual_brief(
+        brief,
+        path,
+        if format == "markdown" {
+            Some(brief.prompt_text.as_str())
+        } else {
+            None
+        },
+    )?;
+    Ok(())
+}
+#[tauri::command]
+fn export_visual_brief_command(
+    state: State<'_, AppState>,
+    brief_hash: String,
+    path: String,
+    format: String,
+) -> Result<(), UiError> {
+    let mut session = lock_state(&state)?;
+    export_compiled_visual(&mut session, &brief_hash, Path::new(path.trim()), &format)
 }
 
 #[tauri::command]
@@ -2123,6 +2254,10 @@ pub fn run() {
             import_project_command,
             restore_backup_command,
             export_entity_command,
+            get_visual_recipes,
+            compile_visual_brief_command,
+            visual_brief_stale,
+            export_visual_brief_command,
             close_project,
             get_project,
             forge_character,
@@ -2258,6 +2393,208 @@ mod tests {
             BTreeMap::new(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn visual_brief_saved_commands_are_read_only_atomic_export_and_stale_safe() {
+        let root = std::env::temp_dir().join(format!(
+            "character-forge-b9-{}-{}",
+            std::process::id(),
+            PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut session = AppSession::default();
+        session.project.open(root.join("review.sqlite3")).unwrap();
+        let source = character_candidate(93);
+        let project_id = source.character.envelope.project_id;
+        let store = active_store(&mut session).unwrap();
+        store
+            .create_project(&StoredProject {
+                envelope: ProjectEnvelope {
+                    id: project_id,
+                    schema_version: forge_contracts::SchemaVersion(2),
+                    generator_version: INITIAL_GENERATOR_VERSION,
+                    content_version: INITIAL_CONTENT_VERSION,
+                },
+                name: "Review test".into(),
+                created_at_unix_ms: 0,
+                updated_at_unix_ms: 0,
+            })
+            .unwrap();
+        let source_id = source.character.envelope.id;
+        store
+            .persist_candidate(StoredEntity::CharacterCandidate(source.clone()))
+            .unwrap();
+
+        let before = active_store(&mut session)
+            .unwrap()
+            .get_entity(source_id)
+            .unwrap();
+        let history = active_store(&mut session)
+            .unwrap()
+            .list_history(None)
+            .unwrap();
+        let brief = compile_saved_visual(
+            &mut session,
+            source_id,
+            VisualRole::Portrait,
+            ArtDirection::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            brief.context.source.source_body_hash,
+            visual_digest(&before.as_ref().unwrap().entity).unwrap()
+        );
+        assert_eq!(
+            before,
+            active_store(&mut session)
+                .unwrap()
+                .get_entity(source_id)
+                .unwrap()
+        );
+        assert_eq!(
+            history,
+            active_store(&mut session)
+                .unwrap()
+                .list_history(None)
+                .unwrap()
+        );
+        assert!(!current_visual_status(&mut session, &brief.brief_hash).unwrap());
+        assert!(current_visual_status(&mut session, "wrong preview hash").is_err());
+        let file = root.join("brief.json");
+        export_compiled_visual(&mut session, &brief.brief_hash, &file, "json").unwrap();
+        let exported: VisualGenerationBrief =
+            serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+        assert_eq!(exported, brief);
+        let bytes = std::fs::read(&file).unwrap();
+        assert!(export_compiled_visual(&mut session, &brief.brief_hash, &file, "json").is_err());
+        assert_eq!(std::fs::read(&file).unwrap(), bytes);
+        let mut changed = before.as_ref().unwrap().entity.clone();
+        if let StoredEntity::CharacterCandidate(c) = &mut changed {
+            c.character.appearance = "Source appearance changed after compilation".into();
+        }
+        active_store(&mut session)
+            .unwrap()
+            .save_candidate(changed, 1)
+            .unwrap();
+        assert!(current_visual_status(&mut session, &brief.brief_hash).unwrap());
+        assert!(
+            export_compiled_visual(
+                &mut session,
+                &brief.brief_hash,
+                &root.join("stale.json"),
+                "json"
+            )
+            .is_err()
+        );
+        assert!(!root.join("stale.json").exists());
+        assert_eq!(session.visual_brief, Some(brief.clone()));
+        let current = compile_saved_visual(
+            &mut session,
+            source_id,
+            VisualRole::Portrait,
+            ArtDirection::default(),
+        )
+        .unwrap();
+        assert_ne!(current.context.context_hash, brief.context.context_hash);
+        assert_eq!(current.context.source.write_version, 2);
+        export_compiled_visual(
+            &mut session,
+            &current.brief_hash,
+            &root.join("brief.md"),
+            "markdown",
+        )
+        .unwrap();
+        assert!(
+            std::fs::read_to_string(root.join("brief.md"))
+                .unwrap()
+                .contains(&current.prompt_text)
+        );
+        assert!(
+            export_compiled_visual(
+                &mut session,
+                &current.brief_hash,
+                &root.join("invalid"),
+                "image"
+            )
+            .is_err()
+        );
+        assert_eq!(
+            active_store(&mut session)
+                .unwrap()
+                .list_entities()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            active_store(&mut session)
+                .unwrap()
+                .list_relationships()
+                .unwrap()
+                .is_empty()
+        );
+        active_store(&mut session)
+            .unwrap()
+            .promote_candidate(source_id, 2)
+            .unwrap();
+        let canon_before = active_store(&mut session)
+            .unwrap()
+            .get_entity(source_id)
+            .unwrap();
+        let canon = compile_saved_visual(
+            &mut session,
+            source_id,
+            VisualRole::CharacterSheet,
+            ArtDirection::default(),
+        )
+        .unwrap();
+        assert_eq!(canon.context.source.canon_state, CanonState::Canon);
+        assert_eq!(canon.context.source.canon_revision, None);
+        assert_eq!(canon.context.source.write_version, 3);
+        assert_eq!(
+            canon_before,
+            active_store(&mut session)
+                .unwrap()
+                .get_entity(source_id)
+                .unwrap()
+        );
+        let quest_dna = QuestForge::new_dna(
+            RootSeed::new(42),
+            "dark-fantasy",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let quest = QuestForge::generate_in_project(&quest_dna, project_id).unwrap();
+        let quest_id = quest.quest.envelope.id;
+        active_store(&mut session)
+            .unwrap()
+            .persist_candidate(StoredEntity::QuestCandidate(quest))
+            .unwrap();
+        let quest_history = active_store(&mut session)
+            .unwrap()
+            .list_history(None)
+            .unwrap();
+        assert!(
+            compile_saved_visual(
+                &mut session,
+                quest_id,
+                VisualRole::Portrait,
+                ArtDirection::default()
+            )
+            .is_err()
+        );
+        assert_eq!(
+            quest_history,
+            active_store(&mut session)
+                .unwrap()
+                .list_history(None)
+                .unwrap()
+        );
+        assert_eq!(session.visual_brief, Some(canon));
+        session.project.close();
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
