@@ -2,10 +2,12 @@
 
 mod character;
 mod character_content;
+mod character_faction;
 mod creature;
 mod creature_content;
 mod faction;
 mod faction_content;
+mod faction_context;
 mod field_stream;
 mod forge_further;
 mod item;
@@ -50,3 +52,10 @@ pub use creature::{
     CREATURE_CONTENT_VERSION, CREATURE_FIELD_ORDER, CREATURE_GENERATOR_VERSION, CreatureCandidate,
     CreatureField, CreatureFieldValue, CreatureForge, CreatureOrigin,
 };
+
+pub use character_faction::{
+    FORGE_FACTION_ACTION, FORGE_FACTION_RECIPE, FactionContextSnapshot, FactionFurtherRecipeRecord,
+    FactionResultBundle, compile_faction_context, finalize_faction_review, forge_character_faction,
+    validate_faction_bundle,
+};
+pub use faction_context::CharacterFactionFacts;

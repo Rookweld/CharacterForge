@@ -4,25 +4,25 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_B6_RELATIONSHIP_LIFECYCLE — universal Connections and explicit lifecycle
-**Current status:** PASS — B6 automated exit gates satisfied
+**Current mission:** THE_FORGE_B7_CHARACTER_FACTION — Character → Forge Their Faction
+**Current status:** PASS — B7 automated exit gates satisfied
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `51d32babb3f7a0ff3f3d6067e72af09d25f95a28` (B6 starting/current HEAD; unchanged)
-**Worktree:** B6 implementation/tests/docs are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `553980c1f165e294f0cee081a8bddc61642fbc5e` (B7 starting/current HEAD; unchanged)
+**Worktree:** B7 implementation/tests/docs are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
 ## Current The Forge handoff
 
-B6 is **PASS — automated exit gates satisfied**. All six saved entity details expose Connections with four app-owned directed definitions, explicit relationship-only Canon/archive actions, persisted versions and read-only history. Relationship truth remains independent of entity truth. No schema/archive/app-version change, Link Existing, new vocabulary, new Forge Further action or later mission is included.
+B7 is **PASS — automated exit gates satisfied**. Saved deterministic Character → Forge Their Faction compiles bounded immutable Character context, reuses canonical FactionForge, proposes Generated Candidate MemberOf, preserves final reviewed DNA and saves the Faction/relationship/typed immutable operation atomically. Universal B6 source/inverse Connections and independent promotion/archive/history remain intact. B2/B2.R1 and all six standalone generators remain green.
 
-Final evidence: **187 Rust tests PASS, 1 existing fixture writer ignored; 79 frontend tests PASS**. Normal parallel explicit no-fail-fast and final sequential `scripts/verify.ps1` runs pass, including the 1,000-sequence gauntlet. Format/lint/typecheck/frontend build, Rust format/strict Clippy, full offline metadata, optimized Tauri no-bundle build and final `git diff --check` PASS. Exact binary: `C:\dev\CharacterForge\target\mission-b6-verify\release\character-forge-desktop.exe`, ProductVersion/FileVersion 1.0.0. Promotion now shares one timestamp with its immutable revision, fixing the documented earlier 1 ms race without weakening assertions. An initial overlapping verification linker lock is retained as environment evidence; the sequential rerun passed. The npm launcher remains unavailable; pnpm checks pass.
+Final evidence: **196 Rust tests PASS, one existing fixture writer ignored; 84 frontend tests PASS**. Explicit workspace no-fail-fast and sequential `scripts/verify.ps1` both pass, including the 1,000-sequence gauntlet. Frontend formatting/lint/typecheck/build, Rust formatting/strict all-target Clippy, full offline Cargo metadata, optimized no-bundle build and final `git diff --check` PASS. Exact binary: `C:\dev\CharacterForge\target\mission-b7-verify\release\character-forge-desktop.exe`, ProductVersion/FileVersion 1.0.0. The machine npm shim remains unavailable; configured Corepack/pnpm 11.25.0 checks pass.
 
-B2's reviewed Hometown provenance and entity truth remain unchanged across relationship promotion/archive; archived assertions and immutable history stay inspectable. No B6 P0/P1/P2 remains known. No independent native operator smoke is claimed. Existing P3 UI-001 and Mission 08's accepted dependency-advisory verification limitation remain open. Branch/HEAD are unchanged; twelve B6 files remain unstaged/uncommitted and four unrelated untracked files remain byte-identical. No reset/commit/tag/push/publication occurred. **STOP at B6.** See `docs/missions/THE_FORGE_B6_RELATIONSHIP_LIFECYCLE_REPORT.md`.
+The 44-example generated/content-author quality packet records Character relevance, coherent intent, distinct complete outputs and no raw ID/hash leakage. It is not independent human/native operator acceptance; B7 permits automated PASS without immediate smoke. No known B7 P0/P1/P2 remains. Existing P3 UI-001 and Mission 08's accepted dependency advisory verification limitation remain open. Schema 2, archive v1 and app 1.0.0 remain unchanged. Branch/HEAD are unchanged; seventeen B7 files are unstaged/uncommitted and four unrelated files remain untracked and byte-identical by SHA-256. No reset/staging/commit/tag/push/publication occurred. **STOP at B7.** No Character → Signature Item, Link Existing, Visual Forge, multi-source Forge or later work began. See `docs/missions/THE_FORGE_B7_CHARACTER_FACTION_REPORT.md` and `docs/quality/THE_FORGE_B7_CHARACTER_FACTION_SAMPLES.md`.
 
 ## Architecture decisions currently locked
 

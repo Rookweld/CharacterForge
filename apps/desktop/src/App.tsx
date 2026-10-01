@@ -10,6 +10,7 @@ import {
   errorMessage,
   type Faction,
   type FactionProfile,
+  type FactionResultBundle,
   type FieldValue,
   type ForgePayload,
   type ForgeResultBundle,
@@ -26,6 +27,10 @@ import {
   type WorkingState,
 } from './api';
 import { Connections } from './Connections';
+
+type FurtherReview =
+  | { kind: 'hometown'; bundle: ForgeResultBundle }
+  | { kind: 'faction'; bundle: FactionResultBundle };
 
 type Section =
   | 'forge'
@@ -552,11 +557,12 @@ export function App() {
   const [selectedRecord, setSelectedRecord] = useState<EntityRecord | null>(
     null,
   );
-  const [hometownReview, setHometownReview] =
-    useState<ForgeResultBundle | null>(null);
-  const [hometownPending, setHometownPending] = useState(false);
-  const [hometownSeed, setHometownSeed] = useState('42');
-  const [hometownSourceId, setHometownSourceId] = useState<string | null>(null);
+  const [furtherReview, setFurtherReview] = useState<FurtherReview | null>(
+    null,
+  );
+  const [furtherPending, setFurtherPending] = useState(false);
+  const [furtherSeed, setFurtherSeed] = useState('42');
+  const [furtherSourceId, setFurtherSourceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -608,9 +614,9 @@ export function App() {
     setSelectedHistory(null);
     setSnapshot(null);
     setRevisionBase(null);
-    setHometownReview(null);
-    setHometownPending(false);
-    setHometownSourceId(null);
+    setFurtherReview(null);
+    setFurtherPending(false);
+    setFurtherSourceId(null);
   }, []);
 
   const setProjectLocationDefaults = useCallback((active: Project) => {
@@ -875,9 +881,9 @@ export function App() {
                   ? api.forgeItem(preset, numericSeed, axes)
                   : api.forgeCreature(preset, numericSeed, axes),
       (value) => {
-        setHometownReview(null);
-        setHometownPending(false);
-        setHometownSourceId(null);
+        setFurtherReview(null);
+        setFurtherPending(false);
+        setFurtherSourceId(null);
         setCandidate(value);
         setCanUndo(false);
         setCanRedo(false);
@@ -918,28 +924,29 @@ export function App() {
   );
 
   const save = async () => {
-    if (hometownPending) {
+    if (furtherPending && furtherReview) {
       await run(
-        () => api.saveForgeBundle(),
+        async () =>
+          furtherReview.kind === 'faction'
+            ? (await api.saveFactionBundle()).faction
+            : (await api.saveForgeBundle()).location,
         (saved) => {
           setRecords((old) =>
-            old.some(
-              (row) => entityId(row.entity) === entityId(saved.location.entity),
-            )
+            old.some((row) => entityId(row.entity) === entityId(saved.entity))
               ? old.map((row) =>
-                  entityId(row.entity) === entityId(saved.location.entity)
-                    ? saved.location
-                    : row,
+                  entityId(row.entity) === entityId(saved.entity) ? saved : row,
                 )
-              : [saved.location, ...old],
+              : [saved, ...old],
           );
-          setSelectedRecord(saved.location);
-          setCandidate(saved.location.entity);
+          setSelectedRecord(saved);
+          setCandidate(saved.entity);
           setDirty(false);
-          setHometownPending(false);
+          setFurtherPending(false);
           void api.listEntities().then(setRecords);
           setNotice(
-            'Hometown Location and born_in Candidate relationship saved together.',
+            furtherReview.kind === 'faction'
+              ? 'Faction and member_of Candidate relationship saved together.'
+              : 'Hometown Location and born_in Candidate relationship saved together.',
           );
         },
       );
@@ -1031,9 +1038,9 @@ export function App() {
       () => api.getEntity(entityId(record.entity)),
       (fresh) => {
         if (fresh) {
-          setHometownReview(null);
-          setHometownPending(false);
-          setHometownSourceId(null);
+          setFurtherReview(null);
+          setFurtherPending(false);
+          setFurtherSourceId(null);
           setSelectedRecord(fresh);
           setCandidate(fresh.entity);
           setDirty(false);
@@ -1089,24 +1096,34 @@ export function App() {
           ),
         ),
     );
-  const forgeHometownFrom = (record: EntityRecord) => {
-    const actionSeed = Number(hometownSeed);
+  const forgeFurtherFrom = (
+    record: EntityRecord,
+    kind: FurtherReview['kind'],
+  ) => {
+    const actionSeed = Number(furtherSeed);
     if (!Number.isSafeInteger(actionSeed) || actionSeed < 0) {
-      setError(
-        'Enter a non-negative whole number for the Hometown action seed.',
-      );
+      setError('Enter a non-negative whole number for the action seed.');
       return;
     }
     const sourceId = entityId(record.entity);
-    setHometownSourceId(sourceId);
-    setHometownReview(null);
     void run(
-      () => api.forgeHometown(sourceId, actionSeed),
-      (bundle) => {
-        setHometownReview(bundle);
-        setHometownPending(true);
-        setCandidate({ kind: 'location_candidate', value: bundle.primary });
-        setMode('location');
+      async (): Promise<FurtherReview> =>
+        kind === 'faction'
+          ? {
+              kind,
+              bundle: await api.forgeCharacterFaction(sourceId, actionSeed),
+            }
+          : { kind, bundle: await api.forgeHometown(sourceId, actionSeed) },
+      (review) => {
+        setFurtherSourceId(sourceId);
+        setFurtherReview(review);
+        setFurtherPending(true);
+        setCandidate(
+          review.kind === 'faction'
+            ? { kind: 'faction_candidate', value: review.bundle.primary }
+            : { kind: 'location_candidate', value: review.bundle.primary },
+        );
+        setMode(review.kind === 'faction' ? 'faction' : 'location');
         setSelectedRecord(null);
         setDirty(true);
         setCanUndo(false);
@@ -1114,20 +1131,30 @@ export function App() {
         setRevisionTarget(false);
         navigateToSection('forge');
         setNotice(
-          'Review this Hometown and its proposed born_in relationship before saving the bundle.',
+          review.kind === 'faction'
+            ? 'Review this Faction and its proposed member_of relationship before saving the bundle.'
+            : 'Review this Hometown and its proposed born_in relationship before saving the bundle.',
         );
       },
     );
   };
+  const forgeHometownFrom = (record: EntityRecord) =>
+    forgeFurtherFrom(record, 'hometown');
+  const forgeFactionFrom = (record: EntityRecord) =>
+    forgeFurtherFrom(record, 'faction');
   const discardHometown = () => {
     void run(
       () => api.discardForgeBundle(),
       () => {
-        setHometownReview(null);
-        setHometownPending(false);
-        setHometownSourceId(null);
+        setFurtherReview(null);
+        setFurtherPending(false);
+        setFurtherSourceId(null);
         clearWorkingView();
-        setNotice('Unsaved Hometown bundle discarded.');
+        setNotice(
+          furtherReview?.kind === 'faction'
+            ? 'Unsaved Faction bundle discarded.'
+            : 'Unsaved Hometown bundle discarded.',
+        );
         navigateToSection('characters');
       },
     );
@@ -1784,65 +1811,96 @@ export function App() {
                 </div>
               ) : (
                 <>
-                  {hometownPending && hometownReview && (
+                  {furtherPending && furtherReview && (
                     <section
                       className="panel context-card"
-                      aria-label="Hometown review"
+                      aria-label={
+                        furtherReview.kind === 'faction'
+                          ? 'Faction review'
+                          : 'Hometown review'
+                      }
                     >
                       <p className="eyebrow">FORGE FURTHER REVIEW</p>
-                      <h3>Hometown · Candidate</h3>
+                      <h3>
+                        {furtherReview.kind === 'faction'
+                          ? 'Forge Their Faction'
+                          : 'Hometown'}{' '}
+                        · Candidate
+                      </h3>
                       <p>
                         Source Character:{' '}
                         {records
                           .filter(
-                            (row) => entityId(row.entity) === hometownSourceId,
+                            (row) => entityId(row.entity) === furtherSourceId,
                           )
                           .map((row) => payloadTitle(row.entity))[0] ??
-                          hometownSourceId}
+                          furtherSourceId}
                       </p>
                       <label className="field-control">
                         Action seed
                         <input
-                          aria-label="Hometown action seed"
+                          aria-label={
+                            furtherReview.kind === 'faction'
+                              ? 'Faction action seed'
+                              : 'Hometown action seed'
+                          }
                           type="number"
                           min="0"
                           step="1"
-                          value={hometownSeed}
+                          value={furtherSeed}
                           onChange={(event) =>
-                            setHometownSeed(event.target.value)
+                            setFurtherSeed(event.target.value)
                           }
                         />
                       </label>
                       <p>
-                        Proposed relationship: Born in{' '}
-                        {payloadTitle({
-                          kind: 'location_candidate',
-                          value: hometownReview.primary,
-                        })}
+                        Proposed relationship:{' '}
+                        {furtherReview.kind === 'faction'
+                          ? 'Member of'
+                          : 'Born in'}{' '}
+                        {furtherReview.kind === 'faction'
+                          ? payloadTitle(
+                              candidate ?? {
+                                kind: 'faction_candidate',
+                                value: furtherReview.bundle.primary,
+                              },
+                            )
+                          : payloadTitle({
+                              kind: 'location_candidate',
+                              value: furtherReview.bundle.primary,
+                            })}
                       </p>
                       <p>
                         Context:{' '}
                         {Object.entries(
-                          hometownReview.recipe.context_snapshot.facts,
+                          furtherReview.bundle.recipe.context_snapshot.facts,
                         )
                           .map(([key, value]) => `${key}: ${value}`)
                           .join(' · ')}
                       </p>
+                      <p>
+                        Generated using action seed{' '}
+                        {furtherReview.bundle.recipe.action_seed}
+                      </p>
                       <small>
                         Context hash:{' '}
-                        {hometownReview.recipe.context_snapshot.context_hash}
+                        {
+                          furtherReview.bundle.recipe.context_snapshot
+                            .context_hash
+                        }
                       </small>
                       <div className="button-row">
                         <button
                           type="button"
                           disabled={busy}
                           onClick={() => {
-                            if (hometownSourceId) {
+                            if (furtherSourceId) {
                               const source = records.find(
                                 (row) =>
-                                  entityId(row.entity) === hometownSourceId,
+                                  entityId(row.entity) === furtherSourceId,
                               );
-                              if (source) forgeHometownFrom(source);
+                              if (source)
+                                forgeFurtherFrom(source, furtherReview.kind);
                             }
                           }}
                         >
@@ -2040,7 +2098,7 @@ export function App() {
               {current && (
                 <section className="panel action-card">
                   <p className="eyebrow">KEEP THIS WORK</p>
-                  {hometownPending ? (
+                  {furtherPending ? (
                     <>
                       <button
                         type="button"
@@ -2059,8 +2117,10 @@ export function App() {
                         Discard Bundle
                       </button>
                       <small>
-                        Location and born_in relationship save together with
-                        frozen provenance.
+                        {furtherReview?.kind === 'faction'
+                          ? 'Faction and member_of relationship'
+                          : 'Location and born_in relationship'}{' '}
+                        save together with frozen provenance.
                       </small>
                     </>
                   ) : (
@@ -2189,6 +2249,7 @@ export function App() {
             onPromote={promote}
             onExport={exportEntity}
             onForgeHometown={forgeHometownFrom}
+            onForgeFaction={forgeFactionFrom}
           />
         )}
         {section === 'quests' && (
@@ -2311,6 +2372,7 @@ export function App() {
             <DetailView
               record={selectedRecord}
               onForgeHometown={forgeHometownFrom}
+              onForgeFaction={forgeFactionFrom}
             />
             {selectedRecord && (
               <RevisionPanel
@@ -2809,11 +2871,13 @@ function DetailView({
   record,
   onExport,
   onForgeHometown,
+  onForgeFaction,
 }: {
   record: EntityRecord | null;
   revisions?: Revision[];
   onExport?: (record: EntityRecord, format: 'json' | 'markdown') => void;
   onForgeHometown?: (record: EntityRecord) => void;
+  onForgeFaction?: (record: EntityRecord) => void;
 }) {
   if (!record)
     return (
@@ -2826,8 +2890,14 @@ function DetailView({
   const character = isCharacter(record.entity);
   const hometownSupported = Boolean(
     character &&
+      record.writeVersion > 0 &&
+      ['candidate', 'canon'].includes(entity.envelope.canon_state) &&
       entity.envelope.origin === 'generated' &&
-      entity.envelope.generation_provenance?.dna.recipe.kind === 'character',
+      entity.envelope.generation_provenance?.dna.recipe.kind === 'character' &&
+      entity.envelope.generation_provenance.dna.generator_version === 1 &&
+      [1, 2].includes(
+        entity.envelope.generation_provenance.dna.content_version ?? -1,
+      ),
   );
   return (
     <section className="detail-panel panel">
@@ -2864,6 +2934,21 @@ function DetailView({
           >
             Forge Hometown
           </button>
+          {onForgeFaction && (
+            <button
+              type="button"
+              className="primary"
+              disabled={!hometownSupported}
+              title={
+                hometownSupported
+                  ? 'Create a Faction Candidate from this saved Character.'
+                  : 'Forge Their Faction requires supported generated Character provenance.'
+              }
+              onClick={() => onForgeFaction(record)}
+            >
+              Forge Their Faction
+            </button>
+          )}
           {!hometownSupported && (
             <small>
               Unavailable: this Character has no supported generated ForgeDNA.
@@ -2967,6 +3052,7 @@ function LibraryView({
   onPromote,
   onExport,
   onForgeHometown,
+  onForgeFaction,
 }: {
   title: string;
   records: EntityRecord[];
@@ -2979,6 +3065,7 @@ function LibraryView({
   onPromote: (record: EntityRecord) => void;
   onExport: (record: EntityRecord, format: 'json' | 'markdown') => void;
   onForgeHometown?: (record: EntityRecord) => void;
+  onForgeFaction?: (record: EntityRecord) => void;
 }) {
   const [selected, setSelected] = useState<EntityRecord | null>(null);
   const select = (record: EntityRecord) => {
@@ -3028,6 +3115,7 @@ function LibraryView({
         }
         onExport={onExport}
         onForgeHometown={onForgeHometown}
+        onForgeFaction={onForgeFaction}
       />
     </div>
   );

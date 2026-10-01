@@ -1,9 +1,11 @@
 use forge_app_core::{
     CharacterCandidate, CharacterField, CharacterFieldValue, CharacterForge, CreatureCandidate,
     CreatureField, CreatureFieldValue, CreatureForge, FactionCandidate, FactionField,
-    FactionFieldValue, FactionForge, ForgeResultBundle, HometownSource, ItemCandidate, ItemField,
-    ItemFieldValue, ItemForge, LocationField, LocationFieldValue, LocationForge, QuestField,
-    QuestFieldValue, QuestForge, finalize_hometown_review, forge_hometown as forge_hometown_core,
+    FactionFieldValue, FactionForge, FactionResultBundle, ForgeResultBundle, HometownSource,
+    ItemCandidate, ItemField, ItemFieldValue, ItemForge, LocationField, LocationFieldValue,
+    LocationForge, QuestField, QuestFieldValue, QuestForge, finalize_faction_review,
+    finalize_hometown_review, forge_character_faction as forge_character_faction_core,
+    forge_hometown as forge_hometown_core,
 };
 use forge_contracts::{
     CanonState, CreativeAxes, CreativeAxis, CreatureProfile, EntityId, FactionProfile,
@@ -38,7 +40,13 @@ struct AppSession {
     working: Option<StoredEntity>,
     write_version: Option<i64>,
     history: Option<SessionHistory<StoredEntity>>,
-    hometown: Option<ForgeResultBundle>,
+    further: Option<FurtherReview>,
+}
+
+#[derive(Clone)]
+enum FurtherReview {
+    Hometown(ForgeResultBundle),
+    Faction(FactionResultBundle),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -507,7 +515,7 @@ fn create_project(
     session.working = None;
     session.write_version = None;
     session.history = None;
-    session.hometown = None;
+    session.further = None;
     remember_recent_project(&app, &project);
     Ok(project)
 }
@@ -544,7 +552,7 @@ fn open_project(
     session.working = None;
     session.write_version = None;
     session.history = None;
-    session.hometown = None;
+    session.further = None;
     let project = project_info(&session)?;
     remember_recent_project(&app, &project);
     Ok(project)
@@ -605,7 +613,7 @@ fn close_project(state: State<'_, AppState>) -> Result<(), UiError> {
     session.working = None;
     session.write_version = None;
     session.history = None;
-    session.hometown = None;
+    session.further = None;
     Ok(())
 }
 
@@ -658,7 +666,7 @@ fn import_project_command(
     session.working = None;
     session.write_version = None;
     session.history = None;
-    session.hometown = None;
+    session.further = None;
     let project = project_info(&session)?;
     debug_assert_eq!(project.name, imported.name);
     remember_recent_project(&app, &project);
@@ -672,7 +680,7 @@ fn restore_backup_command(state: State<'_, AppState>, archive_path: String) -> R
     session.working = None;
     session.write_version = None;
     session.history = None;
-    session.hometown = None;
+    session.further = None;
     Ok(())
 }
 
@@ -1017,7 +1025,7 @@ fn forge_character(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
-    session.hometown = None;
+    session.further = None;
     Ok(entity)
 }
 
@@ -1046,7 +1054,7 @@ fn forge_quest(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
-    session.hometown = None;
+    session.further = None;
     Ok(entity)
 }
 
@@ -1074,7 +1082,7 @@ fn forge_location(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
-    session.hometown = None;
+    session.further = None;
     Ok(entity)
 }
 
@@ -1115,7 +1123,7 @@ fn forge_faction(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
-    session.hometown = None;
+    session.further = None;
     Ok(entity)
 }
 
@@ -1156,7 +1164,7 @@ fn forge_item(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
-    session.hometown = None;
+    session.further = None;
     Ok(entity)
 }
 
@@ -1197,7 +1205,7 @@ fn forge_creature(
     session.working = Some(entity.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(entity.clone()));
-    session.hometown = None;
+    session.further = None;
     Ok(entity)
 }
 
@@ -1246,30 +1254,35 @@ fn forge_hometown(
     session.working = Some(working.clone());
     session.write_version = None;
     session.history = Some(SessionHistory::new(working));
-    session.hometown = Some(bundle.clone());
+    session.further = Some(FurtherReview::Hometown(bundle.clone()));
     Ok(bundle)
 }
 
 #[tauri::command]
 fn discard_forge_bundle(state: State<'_, AppState>) -> Result<(), UiError> {
     let mut session = lock_state(&state)?;
-    session.hometown = None;
+    session.further = None;
     session.working = None;
     session.write_version = None;
     session.history = None;
-    session.hometown = None;
+    session.further = None;
     Ok(())
 }
 
 #[tauri::command]
 fn save_forge_bundle(state: State<'_, AppState>) -> Result<ForgeBundleSaveView, UiError> {
     let mut session = lock_state(&state)?;
-    let mut bundle = session.hometown.clone().ok_or_else(|| UiError {
-        kind: "invalid_operation",
-        message: "There is no Forge Hometown bundle to save.".into(),
-        expected: None,
-        actual: None,
-    })?;
+    let mut bundle = match session.further.clone() {
+        Some(FurtherReview::Hometown(bundle)) => bundle,
+        _ => {
+            return Err(UiError {
+                kind: "invalid_operation",
+                message: "There is no Forge Hometown bundle to save.".into(),
+                expected: None,
+                actual: None,
+            });
+        }
+    };
     let working = session.working.clone().ok_or_else(|| UiError {
         kind: "no_candidate",
         message: "Forge a Hometown before saving its bundle.".into(),
@@ -1303,7 +1316,7 @@ fn save_forge_bundle(state: State<'_, AppState>) -> Result<ForgeBundleSaveView, 
     session.working = Some(entity.clone());
     session.write_version = Some(receipt.location_write_version);
     session.history = Some(SessionHistory::new(entity.clone()));
-    session.hometown = None;
+    session.further = None;
     Ok(ForgeBundleSaveView {
         location: entity_view(EntityRecord {
             entity,
@@ -1312,6 +1325,85 @@ fn save_forge_bundle(state: State<'_, AppState>) -> Result<ForgeBundleSaveView, 
         relationship: relationship.relationship,
         event_id: receipt.forge_event_id,
     })
+}
+
+#[tauri::command]
+fn forge_character_faction(
+    state: State<'_, AppState>,
+    source_id: String,
+    seed: u64,
+) -> Result<FactionResultBundle, UiError> {
+    let mut session = lock_state(&state)?;
+    let store = active_store(&mut session)?;
+    let project = store
+        .load_project()?
+        .ok_or_else(|| ui_storage_error("Open or create a project first."))?;
+    let record = store
+        .get_entity(parse_entity_id(&source_id)?)?
+        .ok_or_else(|| ui_storage_error("The saved Character could not be found."))?;
+    let bundle =
+        forge_character_faction_core(&hometown_source(&record)?, seed, project.envelope.id)?;
+    let working = StoredEntity::FactionCandidate(bundle.primary.clone());
+    session.working = Some(working.clone());
+    session.write_version = None;
+    session.history = Some(SessionHistory::new(working));
+    session.further = Some(FurtherReview::Faction(bundle.clone()));
+    Ok(bundle)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FactionBundleSaveView {
+    faction: EntityView,
+    relationship: forge_contracts::Relationship,
+    event_id: i64,
+}
+
+fn save_faction_review(session: &mut AppSession) -> Result<FactionBundleSaveView, UiError> {
+    let original = match &session.further {
+        Some(FurtherReview::Faction(bundle)) => bundle.clone(),
+        _ => {
+            return Err(invalid_candidate_operation(
+                "There is no Forge Their Faction bundle to save.",
+            ));
+        }
+    };
+    let reviewed = match &session.working {
+        Some(StoredEntity::FactionCandidate(candidate)) => candidate.clone(),
+        _ => {
+            return Err(invalid_candidate_operation(
+                "Faction review requires its original typed Faction Candidate.",
+            ));
+        }
+    };
+    let bundle = finalize_faction_review(&original, reviewed)?;
+    let receipt = active_store(session)?.save_faction_bundle(
+        bundle.recipe.context_snapshot.source_entity_id,
+        bundle.recipe.context_snapshot.source_write_version,
+        &bundle,
+    )?;
+    let store = active_store(session)?;
+    let record = store
+        .get_entity(bundle.primary.faction.envelope.id)?
+        .ok_or_else(|| ui_storage_error("Saved Faction could not be reloaded."))?;
+    let relationship = store
+        .get_relationship(bundle.relationship.id)?
+        .ok_or_else(|| ui_storage_error("Saved member_of connection could not be reloaded."))?;
+    session.working = Some(record.entity.clone());
+    session.write_version = Some(receipt.faction_write_version);
+    session.history = Some(SessionHistory::new(record.entity.clone()));
+    session.further = None;
+    Ok(FactionBundleSaveView {
+        faction: entity_view(record),
+        relationship: relationship.relationship,
+        event_id: receipt.forge_event_id,
+    })
+}
+
+#[tauri::command]
+fn save_faction_bundle(state: State<'_, AppState>) -> Result<FactionBundleSaveView, UiError> {
+    let mut session = lock_state(&state)?;
+    save_faction_review(&mut session)
 }
 
 #[tauri::command]
@@ -1506,9 +1598,9 @@ fn redo_session(state: State<'_, AppState>) -> Result<WorkingState, UiError> {
 #[tauri::command]
 fn save_candidate(state: State<'_, AppState>) -> Result<EntityView, UiError> {
     let mut session = lock_state(&state)?;
-    if session.hometown.is_some() {
+    if session.further.is_some() {
         return Err(invalid_candidate_operation(
-            "Save this Hometown with Save Bundle so its Location and relationship stay atomic.",
+            "Save this Forge Further review with Save Bundle so its entity and relationship stay atomic.",
         ));
     }
     let entity = session.working.clone().ok_or_else(|| UiError {
@@ -1588,7 +1680,7 @@ fn get_entity(state: State<'_, AppState>, id: String) -> Result<Option<EntityVie
         session.working = Some(record.entity.clone());
         session.write_version = Some(record.write_version);
         session.history = Some(SessionHistory::new(record.entity.clone()));
-        session.hometown = None;
+        session.further = None;
     }
     Ok(record.map(entity_view))
 }
@@ -1954,6 +2046,8 @@ pub fn run() {
             forge_item,
             forge_creature,
             forge_hometown,
+            forge_character_faction,
+            save_faction_bundle,
             discard_forge_bundle,
             save_forge_bundle,
             list_relationships_for_entity,
@@ -1985,6 +2079,87 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn character_faction_command_saves_current_edited_undo_redo_snapshot_and_rejects_wrong_type() {
+        let root = std::env::temp_dir().join(format!(
+            "character-forge-b7-{}-{}",
+            std::process::id(),
+            PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut session = AppSession::default();
+        session.project.open(root.join("review.sqlite3")).unwrap();
+        let source = character_candidate(93);
+        let project_id = source.character.envelope.project_id;
+        let store = active_store(&mut session).unwrap();
+        store
+            .create_project(&StoredProject {
+                envelope: ProjectEnvelope {
+                    id: project_id,
+                    schema_version: forge_contracts::SchemaVersion(2),
+                    generator_version: INITIAL_GENERATOR_VERSION,
+                    content_version: INITIAL_CONTENT_VERSION,
+                },
+                name: "Review test".into(),
+                created_at_unix_ms: 0,
+                updated_at_unix_ms: 0,
+            })
+            .unwrap();
+        let source_id = source.character.envelope.id;
+        store
+            .persist_candidate(StoredEntity::CharacterCandidate(source.clone()))
+            .unwrap();
+        let snapshot = hometown_source(&store.get_entity(source_id).unwrap().unwrap()).unwrap();
+        let bundle = forge_character_faction_core(&snapshot, 13, project_id).unwrap();
+        let original = StoredEntity::FactionCandidate(bundle.primary.clone());
+        let mut reviewed = original.clone();
+        edit_entity_field(
+            &mut reviewed,
+            "name",
+            Value::String("Reviewed organization".into()),
+        )
+        .unwrap();
+        set_entity_field_lock(&mut reviewed, "name", true).unwrap();
+        reroll_entity_field(&mut reviewed, "hidden_truth").unwrap();
+        let mut history = SessionHistory::new(original.clone());
+        history.push(reviewed.clone());
+        assert_eq!(history.undo(), Some(&original));
+        assert_eq!(history.redo(), Some(&reviewed));
+        session.further = Some(FurtherReview::Faction(bundle.clone()));
+        session.working = Some(StoredEntity::CharacterCandidate(source));
+        assert!(save_faction_review(&mut session).is_err());
+        assert_eq!(
+            active_store(&mut session)
+                .unwrap()
+                .list_entities()
+                .unwrap()
+                .len(),
+            1
+        );
+        session.working = Some(history.current().clone());
+        session.history = Some(history);
+        let saved = save_faction_review(&mut session).unwrap();
+        assert_eq!(saved.faction.write_version, 1);
+        assert_eq!(session.working, Some(reviewed.clone()));
+        assert!(session.further.is_none());
+        let store = active_store(&mut session).unwrap();
+        let event = store
+            .list_history(Some(bundle.primary.faction.envelope.id))
+            .unwrap()
+            .pop()
+            .unwrap();
+        let recipe: forge_app_core::FactionFurtherRecipeRecord =
+            serde_json::from_str(&event.recipe_json).unwrap();
+        let StoredEntity::FactionCandidate(candidate) = reviewed else {
+            panic!("Faction required")
+        };
+        assert_eq!(recipe.target_dna, candidate.dna);
+        assert_eq!(recipe.context_snapshot, bundle.recipe.context_snapshot);
+        assert_eq!(saved.relationship, bundle.relationship);
+        session.project.close();
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     fn character_candidate(seed: u64) -> CharacterCandidate {
         generate_character_candidate(

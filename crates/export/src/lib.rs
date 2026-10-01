@@ -1405,6 +1405,77 @@ mod tests {
     }
 
     #[test]
+    fn character_faction_bundle_survives_forgeproject_export_import() {
+        let dir = Dir::new();
+        let source_path = dir.path("character_faction-source.sqlite3");
+        let package = dir.path("character_faction.forgeproject");
+        let imported_path = dir.path("character_faction-import.sqlite3");
+        let p = project();
+        let project_id = p.envelope.id;
+        let mut store = ProjectStore::open(&source_path).unwrap();
+        store.create_project(&p).unwrap();
+        let dna = CharacterForge::new_dna(
+            RootSeed::new(901),
+            "dark-fantasy",
+            CreativeAxes::neutral(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let candidate = CharacterForge::generate_in_project(&dna, project_id).unwrap();
+        let source_id = candidate.character.envelope.id;
+        store
+            .persist_candidate(StoredEntity::CharacterCandidate(candidate))
+            .unwrap();
+        let source_record = store.get_entity(source_id).unwrap().unwrap();
+        let StoredEntity::CharacterCandidate(source_character) = source_record.entity else {
+            panic!("generated Character candidate expected");
+        };
+        let source = forge_app_core::HometownSource {
+            character: source_character.character,
+            field_origins: source_character.field_origins,
+            write_version: source_record.write_version,
+        };
+        let bundle = forge_app_core::forge_character_faction(&source, 123, project_id).unwrap();
+        let location_id = bundle.primary.faction.envelope.id;
+        let relationship_id = bundle.relationship.id;
+        store
+            .save_faction_bundle(source_id, source_record.write_version, &bundle)
+            .unwrap();
+        export_project(&store, &package).unwrap();
+        drop(store);
+
+        import_project(&package, &imported_path).unwrap();
+        let imported = ProjectStore::open(&imported_path).unwrap();
+        assert_eq!(
+            imported.get_entity(location_id).unwrap().unwrap().entity,
+            StoredEntity::FactionCandidate(bundle.primary.clone())
+        );
+        assert_eq!(
+            imported
+                .get_relationship(relationship_id)
+                .unwrap()
+                .unwrap()
+                .relationship,
+            bundle.relationship
+        );
+        let events = imported.list_history(Some(location_id)).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            serde_json::from_str::<forge_app_core::FactionFurtherRecipeRecord>(
+                &events[0].recipe_json
+            )
+            .unwrap(),
+            bundle.recipe
+        );
+        assert_eq!(
+            serde_json::from_str::<forge_storage::ForgeBundleHistoryResult>(&events[0].result_json)
+                .unwrap()
+                .mapping,
+            bundle.result
+        );
+    }
+
+    #[test]
     fn real_project_roundtrip_preserves_identity_entities_history_locks_manual_edits_and_canon() {
         let dir = Dir::new();
         let source = dir.path("source.sqlite3");

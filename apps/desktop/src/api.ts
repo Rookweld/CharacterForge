@@ -210,6 +210,8 @@ export type Envelope = {
   generation_provenance: { dna: ForgeDNA; action: string } | null;
 };
 export type ForgeDNA = {
+  generator_version?: number;
+  content_version?: number;
   recipe: {
     kind?: 'character' | 'quest' | 'location' | 'faction' | 'item' | 'creature';
     root_seed: string;
@@ -329,6 +331,39 @@ export type ForgeResultBundle = {
 };
 export type ForgeBundleSaveResponse = {
   location: EntityRecord;
+  relationship: ForgeRelationship;
+  eventId: number;
+};
+export type FactionContextSnapshot = Omit<HometownContextSnapshot, 'facts'> & {
+  facts: HometownContextSnapshot['facts'] & {
+    personality: string[];
+    fear: string;
+    flaw: string;
+    relationship_hook: string;
+  };
+};
+export type FactionResultBundle = Omit<
+  ForgeResultBundle,
+  'primary' | 'recipe' | 'result'
+> & {
+  primary: FactionCandidate;
+  recipe: Omit<
+    ForgeResultBundle['recipe'],
+    'location_dna' | 'context_snapshot'
+  > & {
+    target_dna: ForgeDNA;
+    context_snapshot: FactionContextSnapshot;
+  };
+  result: Omit<
+    ForgeResultBundle['result'],
+    'primary_output_type' | 'relationship_type'
+  > & {
+    primary_output_type: 'faction';
+    relationship_type: 'member_of';
+  };
+};
+export type FactionBundleSaveResponse = {
+  faction: EntityRecord;
   relationship: ForgeRelationship;
   eventId: number;
 };
@@ -482,6 +517,10 @@ export const api = {
     invoke<ForgePayload>('forge_item', { preset, seed, axes }),
   forgeCreature: (preset: string, seed: number, axes: Record<Axis, number>) =>
     invoke<ForgePayload>('forge_creature', { preset, seed, axes }),
+  forgeCharacterFaction: (sourceId: string, seed: number) =>
+    invoke<FactionResultBundle>('forge_character_faction', { sourceId, seed }),
+  saveFactionBundle: () =>
+    invoke<FactionBundleSaveResponse>('save_faction_bundle'),
   forgeHometown: (sourceId: string, seed: number) =>
     invoke<ForgeResultBundle>('forge_hometown', { sourceId, seed }),
   saveForgeBundle: () => invoke<ForgeBundleSaveResponse>('save_forge_bundle'),

@@ -28,12 +28,12 @@ const RESULT_RECORD_FORMAT_VERSION: u16 = 1;
 const PROFILE_CONSTRAINT: &str = "location.profile";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ForgeActionDefinition {
+pub struct ForgeActionDefinition<P = LocationProfile> {
     pub action_id: &'static str,
     pub action_version: u16,
     pub source_type: EntityType,
     pub target_type: EntityType,
-    pub target_profile: LocationProfile,
+    pub target_profile: P,
     pub intent: &'static str,
     pub relationship_type: RelationshipType,
     pub context_recipe_id: &'static str,
@@ -364,7 +364,7 @@ fn action_root_seed(context_hash: &str, action_seed: u64) -> u64 {
     u64::from_le_bytes(bytes[..8].try_into().expect("eight-byte seed"))
 }
 
-fn derive_bytes(domain: &str, parts: &[&[u8]]) -> [u8; 32] {
+pub(crate) fn derive_bytes(domain: &str, parts: &[&[u8]]) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new();
     hasher.update(domain.as_bytes());
     hasher.update(&[0]);
@@ -375,7 +375,7 @@ fn derive_bytes(domain: &str, parts: &[&[u8]]) -> [u8; 32] {
     *hasher.finalize().as_bytes()
 }
 
-fn digest(domain: &str, bytes: &[u8]) -> String {
+pub(crate) fn digest(domain: &str, bytes: &[u8]) -> String {
     let hash = derive_bytes(domain, &[bytes]);
     hash.iter().map(|byte| format!("{byte:02x}")).collect()
 }

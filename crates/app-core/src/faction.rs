@@ -300,13 +300,7 @@ fn validate_faction_dna(dna: &ForgeDNA) -> ValidationResult<()> {
             "unsupported Faction preset",
         ));
     }
-    if !dna.recipe.constraints.is_empty() {
-        return Err(error(
-            ValidationCode::InvalidConstraint,
-            "constraints",
-            "Faction Forge does not currently support generation constraints",
-        ));
-    }
+    crate::faction_context::from_dna(dna)?;
     let expected = FACTION_FIELD_ORDER
         .into_iter()
         .map(FactionField::key)
@@ -362,6 +356,20 @@ fn generate_values(dna: &ForgeDNA) -> ValidationResult<FieldValues<FactionFieldV
 }
 
 fn generate_field(
+    dna: &ForgeDNA,
+    source: &str,
+    field: FactionField,
+    profile: Option<FactionProfile>,
+    stream: &mut FieldStream,
+) -> ValidationResult<FactionFieldValue> {
+    let base = generate_base_field(dna, source, field, profile, stream)?;
+    match crate::faction_context::from_dna(dna)? {
+        None => Ok(base),
+        Some(facts) => crate::faction_context::adapt(&facts, field, base, profile, stream),
+    }
+}
+
+fn generate_base_field(
     dna: &ForgeDNA,
     source: &str,
     field: FactionField,
@@ -838,7 +846,7 @@ fn update_provenance(
     Ok(())
 }
 
-fn profile_structure(profile: FactionProfile) -> &'static str {
+pub(crate) fn profile_structure(profile: FactionProfile) -> &'static str {
     match profile {
         FactionProfile::Guild => "Its members govern a craft or trade association.",
         FactionProfile::Order => "It follows a formal order with ranks and vows.",

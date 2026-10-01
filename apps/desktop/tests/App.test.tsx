@@ -48,6 +48,8 @@ const project: Project = {
   updatedAtUnixMs: 1,
 };
 const dna = {
+  generator_version: 1,
+  content_version: 1,
   recipe: {
     kind: 'character' as const,
     root_seed: '000000000000002a',
@@ -469,6 +471,42 @@ const hometownBundle: ForgeResultBundle = {
     warnings: [],
   },
 };
+const factionBundle = {
+  primary: factionCandidate,
+  supporting: [],
+  relationship: {
+    ...hometownBundle.relationship,
+    id: 'relationship-faction',
+    relationship_type: 'member_of' as const,
+    target_id: 'faction-1',
+  },
+  recipe: {
+    format_version: 1,
+    action_id: 'character.forge-faction',
+    action_version: 1,
+    context_recipe_id: 'character-faction-v1',
+    context_recipe_version: 1,
+    context_snapshot: {
+      ...hometownBundle.recipe.context_snapshot,
+      facts: {
+        ...hometownBundle.recipe.context_snapshot.facts,
+        personality: ['Watchful'],
+        fear: 'Losing the district',
+        flaw: 'Distrust',
+        relationship_hook: 'An old guide returns',
+      },
+    },
+    action_seed: 42,
+    target_dna: factionCandidate.dna,
+  },
+  result: {
+    ...hometownBundle.result,
+    primary_output_type: 'faction' as const,
+    primary_output_id: 'faction-1',
+    relationship_ids: ['relationship-faction'],
+    relationship_type: 'member_of' as const,
+  },
+};
 const record = (entity: ForgePayload, writeVersion = 1): EntityRecord => ({
   entity,
   writeVersion,
@@ -492,6 +530,12 @@ beforeEach(() => {
   vi.mocked(api.restoreBackup).mockResolvedValue(undefined);
   vi.mocked(api.exportEntity).mockResolvedValue(undefined);
   vi.mocked(api.forgeHometown).mockResolvedValue(hometownBundle);
+  vi.mocked(api.forgeCharacterFaction).mockResolvedValue(factionBundle);
+  vi.mocked(api.saveFactionBundle).mockResolvedValue({
+    faction: record(factionPayload),
+    relationship: factionBundle.relationship,
+    eventId: 2,
+  });
   vi.mocked(api.saveForgeBundle).mockResolvedValue({
     location: record(locationPayload),
     relationship: hometownBundle.relationship,
@@ -2130,6 +2174,260 @@ describe('Hometown Connections handoff', () => {
       screen.getByText(
         'Birthplace of Mara Vale · character · Archived · generated',
       ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Archive connection' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('Character Faction review', () => {
+  async function startFaction() {
+    await openWorkspace([record(character)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Forge Their Faction' }),
+    );
+    await screen.findByRole('region', { name: 'Faction review' });
+  }
+  it('reviews typed Faction controls and saves a Candidate bundle through the dedicated command', async () => {
+    vi.mocked(api.setLock).mockResolvedValue(factionPayload);
+    vi.mocked(api.reroll).mockResolvedValue(factionPayload);
+    vi.mocked(api.rerollUnlocked).mockResolvedValue(factionPayload);
+    vi.mocked(api.editField).mockResolvedValue(factionPayload);
+    await startFaction();
+    expect(api.forgeCharacterFaction).toHaveBeenCalledWith('character-1', 42);
+    expect(
+      screen.getByText(/Proposed relationship: Member of The Ashen Concord/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Name' }));
+    await waitFor(() => expect(api.setLock).toHaveBeenCalledWith('name', true));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Lock Faction Profile' }),
+    );
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenCalledWith('faction_profile', true),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reroll Faction Profile' }),
+    );
+    await waitFor(() =>
+      expect(api.reroll).toHaveBeenCalledWith('faction_profile'),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reroll all unlocked fields' }),
+    );
+    await waitFor(() => expect(api.rerollUnlocked).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Name' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Edit Name' }), {
+      target: { value: 'Reviewed faction name' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    await waitFor(() =>
+      expect(api.editField).toHaveBeenCalledWith(
+        'name',
+        'Reviewed faction name',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save Bundle' }));
+    await waitFor(() => expect(api.saveFactionBundle).toHaveBeenCalledOnce());
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+    expect(api.saveForgeBundle).not.toHaveBeenCalled();
+    expect(api.promote).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        /Faction and member_of Candidate relationship saved together/,
+      ),
+    ).toBeInTheDocument();
+    expect(api.listEntities).toHaveBeenCalled();
+  });
+  it('discards without saving and explains unsupported manual provenance', async () => {
+    await startFaction();
+    clickNamedButton('Discard Bundle', 0);
+    await waitFor(() => expect(api.discardForgeBundle).toHaveBeenCalledOnce());
+    expect(api.saveFactionBundle).not.toHaveBeenCalled();
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+    cleanup();
+    await openWorkspace([record(manualCharacter)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      screen.getByRole('button', { name: 'Forge Their Faction' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/no supported generated ForgeDNA/),
+    ).toBeInTheDocument();
+  });
+  it('disables unsupported source generator versions without fabricating a recipe', async () => {
+    const unsupported = structuredClone(character);
+    const provenance =
+      unsupported.value.character.envelope.generation_provenance;
+    if (!provenance) throw new Error('Fixture requires generation provenance');
+    unsupported.value.character.envelope.generation_provenance = {
+      ...provenance,
+      dna: { ...dna, generator_version: 99 },
+    };
+    await openWorkspace([record(unsupported)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      screen.getByRole('button', { name: 'Forge Their Faction' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/no supported generated ForgeDNA/),
+    ).toBeInTheDocument();
+    expect(api.forgeCharacterFaction).not.toHaveBeenCalled();
+  });
+  it('keeps review pending after a stale bundle error instead of faking success', async () => {
+    vi.mocked(api.saveFactionBundle).mockRejectedValue({
+      code: 'conflict',
+      message: 'Source changed; forge again.',
+    });
+    await startFaction();
+    fireEvent.click(screen.getByRole('button', { name: 'Save Bundle' }));
+    await waitFor(() => expect(api.saveFactionBundle).toHaveBeenCalledOnce());
+    expect(
+      screen.getByRole('region', { name: 'Faction review' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Save Bundle' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /Faction and member_of Candidate relationship saved together/,
+      ),
+    ).not.toBeInTheDocument();
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+  });
+});
+describe('Faction Connections handoff', () => {
+  it('uses the saved bundle from both endpoints through explicit Canon and archive actions', async () => {
+    let state: ConnectionView['relationship']['state'] = 'candidate';
+    let version = 1;
+    vi.mocked(api.getEntity).mockImplementation(async (id) =>
+      id === 'character-1' ? record(character) : record(factionPayload),
+    );
+    vi.mocked(api.relationshipsForEntity).mockImplementation(async (id) => [
+      {
+        relationship: { ...factionBundle.relationship, state },
+        writeVersion: version,
+        role: id === 'character-1' ? 'source' : 'target',
+        relatedId: id === 'character-1' ? 'faction-1' : 'character-1',
+        relatedName: id === 'character-1' ? 'The Ashen Concord' : 'Mara Vale',
+        relatedType: id === 'character-1' ? 'faction' : 'character',
+        relatedAvailability: 'available',
+        definition: {
+          key: 'member_of',
+          relationshipType: 'member_of',
+          source: 'character',
+          target: 'faction',
+          directed: true,
+          sourcePhrase: 'Member of',
+          inversePhrase: 'Member:',
+        },
+      },
+    ]);
+    vi.mocked(api.promoteRelationship).mockImplementation(async () => {
+      state = 'canon';
+      return ++version;
+    });
+    vi.mocked(api.archiveRelationship).mockImplementation(async () => {
+      state = 'archived';
+      return ++version;
+    });
+    vi.mocked(api.relationshipRevisions).mockResolvedValue([
+      {
+        revisionNumber: 1,
+        reason: 'promoted to canon',
+        relationship: { ...factionBundle.relationship, state: 'canon' },
+        createdAtUnixMs: 2,
+      },
+      {
+        revisionNumber: 2,
+        reason: 'archive relationship',
+        relationship: { ...factionBundle.relationship, state: 'canon' },
+        createdAtUnixMs: 3,
+      },
+    ]);
+    await openWorkspace([record(character)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Forge Their Faction' }),
+    );
+    expect(
+      await screen.findByText(
+        /Proposed relationship: Member of The Ashen Concord/,
+      ),
+    ).toBeInTheDocument();
+    vi.mocked(api.listEntities).mockResolvedValue([
+      record(character),
+      record(factionPayload),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Save Bundle' }));
+    expect(await screen.findByText(/saved together/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Factions/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /The Ashen Concord/ }),
+    );
+    expect(
+      await screen.findByText(
+        'Member: Mara Vale · character · Candidate · generated',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Promote connection to Canon' }),
+    );
+    expect(
+      await screen.findByText(
+        'Member: Mara Vale · character · Canon · generated',
+      ),
+    ).toBeInTheDocument();
+    expect(api.promoteRelationship).toHaveBeenCalledWith(
+      'relationship-faction',
+      1,
+    );
+    expect(api.promote).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      await screen.findByText(
+        'Member of The Ashen Concord · faction · Canon · generated',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Archive connection' }));
+    fireEvent.click(
+      await screen.findByText('Archived connections · read-only (1)'),
+    );
+    expect(
+      screen.getByText(
+        'Member of The Ashen Concord · faction · Archived · generated',
+      ),
+    ).toBeInTheDocument();
+    expect(api.archiveRelationship).toHaveBeenCalledWith(
+      'relationship-faction',
+      2,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Inspect connection history' }),
+    );
+    expect(
+      await screen.findByText('Revision 1 · promoted to canon'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Revision 2 · archive relationship'),
+    ).toBeInTheDocument();
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^Factions/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /The Ashen Concord/ }),
+    );
+    fireEvent.click(
+      await screen.findByText('Archived connections · read-only (1)'),
+    );
+    expect(
+      screen.getByText('Member: Mara Vale · character · Archived · generated'),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Archive connection' }),
