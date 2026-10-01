@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM — closed at exit gate
+THE_FORGE_B9_VISUAL_FORGE_FOUNDATION — prepared for execution
 
 ## Status
 
-**B8 PASS — all automated exit gates satisfied**
+**B8 PASS — B9 VISUAL FORGE FOUNDATION AUTHORIZED**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,7 +22,7 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `ecdd143061d2e66b4dbfb5667f1fe5b944328235` (B8 starting HEAD)
+- HEAD: `7b22eb9` (`feat: add Character signature item Forge Further`)
 - worktree: B8 changes unstaged/uncommitted; four unrelated files preserved
 - database schema: 2
 - forgeproject archive format: v1
@@ -238,11 +238,17 @@ Final evidence: **208 Rust tests PASS, one existing fixture writer ignored; 90 f
 
 Quality: 44 individually classified generated/content-author examples, four per ten non-Chaos presets plus four Chaos; all usable with minor editing. Principal gear profile/function, source role/skills/abilities, custody/history/secret/hooks reviewed. All full creative bodies distinct; no generated UUID/hash/game-stat leakage found. Independent executable replay reproduced all 44 snapshots exactly. No independent native/human operator smoke claimed. No known B8 P0/P1/P2 remains. Existing P3 UI-001 and Mission 08's incomplete automated transitive advisory scan remain documented limitations. Schema 2, archive v1, app 1.0.0 and existing generator/content versions unchanged.
 
-Branch `master`; HEAD `ecdd143061d2e66b4dbfb5667f1fe5b944328235`; sixteen B8 files unstaged/uncommitted, four unrelated files preserved byte-identically by SHA-256. No reset/staging/commit/tag/push/publication. See `docs/missions/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM_REPORT.md` and `docs/quality/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM_SAMPLES.md`.
+Branch `master`; accepted B8 implementation commit `7b22eb9` (`feat: add Character signature item Forge Further`). Four unrelated files remain untracked and preserved. See `docs/missions/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM_REPORT.md` and `docs/quality/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM_SAMPLES.md`.
 
 ## B8 Exit Gate
 
-**PASS. STOP.** No Visual Forge, Link Existing, multi-source Forge, Creature/Item/Faction reverse Forge Further or later mission begun. Await operator direction.
+**PASS.** B8 is committed at `7b22eb9`.
+
+## Next Mission
+
+`GAZINGA/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION.md`
+
+Scope: provider-neutral Visual Forge context/recipe/brief compiler and desktop preview/export for Character, Location, Faction, Item, and Creature. No actual image provider, credentials, binary asset persistence, Visual Canon, schema bump, or forgeproject v2 until operator choice.
 
 ## Still Open
 
