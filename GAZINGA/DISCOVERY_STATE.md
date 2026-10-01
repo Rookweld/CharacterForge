@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER — prepared for execution
+THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER — closed at exit gate
 
 ## Status
 
-**B9 PASS — B10 LOCAL COMFYUI PROVIDER AUTHORIZED**
+**B10 PASS — automated exit gates satisfied. STOP.**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,8 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `9284c08` (`feat: add Visual Forge foundation`)
-- worktree: B10 mission prep only; four unrelated files preserved
+- HEAD: `2ad9eb56957d29ca51aa3dc8ee45698127301d6d` (B10 starting/current HEAD)
+- worktree: seventeen B10 source/test/doc/lock files unstaged/uncommitted; index empty; four unrelated files byte-identical
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -36,7 +36,8 @@ The operator has authorized continued non-destructive development through bounde
 - standalone deterministic Creature Forge: implemented and verified; B5 closed
 - universal Connections / independent Relationship lifecycle: implemented and verified; B6 closed
 - Character → Forge Their Faction: implemented and verified; B7 closed
-- Character → Forge Their Signature Item: implemented and verified; B8 accepted at `7b22eb9``r`n- provider-neutral Visual Forge foundation: implemented and verified; B9 accepted at `9284c08`
+- Character → Forge Their Signature Item: implemented and verified; B8 accepted at `7b22eb9`
+- provider-neutral Visual Forge foundation: implemented and verified; B9 accepted at `9284c08`
 
 Unrelated files to preserve and never absorb:
 
@@ -252,6 +253,14 @@ Verification: **216 Rust tests PASS**, one existing fixture writer ignored; **10
 
 See `docs/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION_REPORT.md`. No next mission starts. Actual provider/persistence direction requires operator choice.
 
+## B10 Result and Exit Gate
+
+**PASS — automated exit gates satisfied. STOP.** Optional Local ComfyUI extends B9 with strict loopback-only discovery, a bounded fixed core-node workflow, owned prompt ID queue/history polling, transient PNG preview and explicit no-clobber Save Image. B9 remains provider-neutral; Quest remains unsupported. Source checks block stale submission and preserve truthfully stale results. No Entity/Canon/Visual Asset DB write, schema/archive/app-version change, model download/custom node install, credentials, cloud/remote hosts or later work.
+
+Explicit no-fail-fast workspace: **233 Rust tests PASS**, one existing fixture writer ignored; **122 frontend tests PASS**; frontend format/lint/typecheck/build, Rust format/strict Clippy, offline Cargo metadata, 1,000-sequence / 32,000-operation gauntlet, `scripts/verify.ps1`, optimized isolated Tauri no-bundle build and final `git diff --check` PASS. Native health probe: connection refused at 127.0.0.1:8000; no native image-generation/GUI acceptance claim. No server started/killed. Existing UI-001 and accepted Mission 08 advisory-scan limitation remain. See `docs/missions/THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER_REPORT.md`.
+
+STOP at B10. Provider/model/asset persistence/Visual Canon/archive-v2/reference-image/cloud/remote choices require later bounded operator authorization.
+
 ## Still Open
 
 - Manual Link Existing Candidate vs Canon default
@@ -261,16 +270,17 @@ See `docs/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION_REPORT.md`. No next miss
 - Visual Canon
 - World/Lore epistemic truth
 
-None are required for B9.
+None are required for B10.
 
-## Deferred After B9
+## Deferred After B10
 
 - Creature Forge Further
 - Item Forge Further
 - Faction Forge Further
 - full six-entity Forge Further matrix
 - multi-source Forge
-- Visual generation
+- cloud/remote and reference-image providers
+- permanent Visual Asset persistence / forgeproject v2
 - Game Schema Packs
 - engine adapters
 - World / Ability Forge

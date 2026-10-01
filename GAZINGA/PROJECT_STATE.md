@@ -4,21 +4,21 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_B9_VISUAL_FORGE_FOUNDATION — provider-neutral visual briefs
-**Current status:** PASS — B9 automated exit gates satisfied; STOP
+**Current mission:** THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER — local-only ComfyUI adapter
+**Current status:** PASS — B10 automated exit gates satisfied; STOP
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `a925d7f6cf1a5048afc2fee49184da2b16c1c369` (B9 starting/current HEAD; unchanged)
-**Worktree:** B9 implementation/tests/docs are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `2ad9eb56957d29ca51aa3dc8ee45698127301d6d` (B10 starting/current HEAD; unchanged)
+**Worktree:** Seventeen B10 source/test/doc/lock files are unstaged/uncommitted; index empty. Four unrelated operator/export/log files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
 ## Current The Forge handoff
 
-B9 is **PASS — automated exit gates satisfied. STOP.** Five saved visual entity families compile bounded provider-neutral context and deterministic briefs; Quest is deliberately unsupported. Desktop preview, selectable prompt, stale checks and atomic JSON/Markdown export are implemented. No real provider, credentials, binary asset persistence, Visual Canon, schema/archive/version bump or later work. Explicit workspace verification passed 216 Rust tests (one existing fixture writer ignored); 107 frontend tests passed. Final `scripts/verify.ps1`, format/lint/typecheck/build, strict Clippy, Cargo metadata, the 1,000-sequence gauntlet, optimized isolated Tauri no-bundle build and `git diff --check` PASS. Executable: `target/mission-b9-verify/release/character-forge-desktop.exe`, version 1.0.0. Native operator smoke is not claimed. Existing UI-001 and accepted Mission 08 dependency advisory limitation remain. See `docs/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION_REPORT.md`. Four unrelated files are preserved and no commit/tag/push is authorized.
+B10 is **PASS — automated exit gates satisfied. STOP.** Optional loopback-only Local ComfyUI discovery, bounded core-node workflow, exact owned prompt lifecycle, transient PNG preview/metadata and explicit atomic image export extend unchanged provider-neutral B9 briefs. Saved source changes block queueing and flag old results. No Entity/Canon/asset DB/schema/archive mutation, model download/custom node install, credentials, cloud/remote hosts or later work. Explicit workspace verification: **233 Rust tests PASS**, one existing fixture writer ignored; **122 frontend tests PASS**; frontend format/lint/typecheck/build, Rust format/strict Clippy, Cargo metadata, gauntlet, `scripts/verify.ps1`, optimized Tauri no-bundle build and `git diff --check` PASS. Exact executable: `target/mission-b10-verify/release/character-forge-desktop.exe`, version 1.0.0. Native health probe at 127.0.0.1:8000 was refused; no native image generation or independent GUI acceptance is claimed. Existing UI-001, npm launcher issue and accepted Mission 08 advisory limitation remain. See `docs/missions/THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER_REPORT.md`. Four unrelated files are preserved; no commit/tag/push/publication.
 
 ## Architecture decisions currently locked
 

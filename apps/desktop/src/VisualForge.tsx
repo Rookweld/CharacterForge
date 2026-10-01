@@ -6,6 +6,7 @@ import {
   type VisualRecipeDefinition,
   type VisualRole,
 } from './api';
+import { ComfyProvider } from './ComfyProvider';
 
 const emptyDirection: ArtDirection = {
   medium_style: '',
@@ -134,7 +135,10 @@ export function VisualForge({
       {open && (
         <div className="panel context-card">
           <h3>Visual Forge foundation</h3>
-          <p>No image provider is configured in this foundation build.</p>
+          <p>
+            Visual briefs work offline. Local ComfyUI is optional; no provider
+            is contacted until you choose Check Connection or Generate Image.
+          </p>
           <label>
             Visual role
             <select
@@ -170,6 +174,11 @@ export function VisualForge({
             {brief ? 'Recompile Visual Brief' : 'Compile Visual Brief'}
           </button>
           {message && <p role="status">{message}</p>}
+          <ComfyProvider
+            entityId={id}
+            brief={brief}
+            sourceChanged={sourceChanged}
+          />
           {brief && (
             <section aria-label="Visual brief preview">
               {sourceChanged && (

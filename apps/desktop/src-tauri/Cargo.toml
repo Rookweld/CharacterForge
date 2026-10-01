@@ -19,3 +19,6 @@ forge-storage = { path = "../../../crates/storage" }
 forge-export = { path = "../../../crates/export" }
 serde.workspace = true
 serde_json.workspace = true
+
+# B10 approved loopback HTTP only; no TLS, compression, cookies or proxy features.
+ureq = { version = "=3.3.0", default-features = false }

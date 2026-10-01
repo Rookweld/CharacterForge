@@ -119,12 +119,12 @@ describe('Visual Forge foundation', () => {
       ).toEqual(roles[kind]);
       expect(
         screen.getByText(
-          'No image provider is configured in this foundation build.',
+          'Visual briefs work offline. Local ComfyUI is optional; no provider is contacted until you choose Check Connection or Generate Image.',
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Generate Image' }),
-      ).not.toBeInTheDocument();
+        screen.getByRole('button', { name: 'Generate Image' }),
+      ).toBeDisabled();
     },
   );
   it('previews exact visible facts and explicit direction without fake image success', async () => {

@@ -1,3 +1,4 @@
+mod comfyui;
 use forge_app_core::visual::{
     ArtDirection, VisualEntity, VisualGenerationBrief, VisualRecipeDefinition, VisualRole,
     compile_visual_brief, visual_digest, visual_recipes,
@@ -48,6 +49,304 @@ struct AppSession {
     history: Option<SessionHistory<StoredEntity>>,
     further: Option<FurtherReview>,
     visual_brief: Option<VisualGenerationBrief>,
+    comfy: Option<ComfySession>,
+}
+
+#[derive(Clone)]
+struct ComfySession {
+    token: String,
+    brief: VisualGenerationBrief,
+    job: Option<comfyui::Job>,
+    polling: bool,
+    message: String,
+}
+#[derive(Serialize)]
+struct ComfyStatus {
+    state: &'static str,
+    prompt_id: String,
+    stale: bool,
+    message: String,
+    result: Option<comfyui::ResultMetadata>,
+}
+fn provider_error(error: comfyui::ProviderError) -> UiError {
+    visual_error(error.message)
+}
+fn source_visual_stale(
+    session: &mut AppSession,
+    brief: &VisualGenerationBrief,
+) -> Result<bool, UiError> {
+    let record = active_store(session)?
+        .get_entity(brief.context.source.entity_id)?
+        .ok_or_else(|| visual_error("Source no longer exists."))?;
+    Ok(
+        record.entity.envelope().project_id != brief.context.source.project_id
+            || record.write_version != brief.context.source.write_version
+            || visual_digest(&record.entity)? != brief.context.source.source_body_hash,
+    )
+}
+fn comfy_status(session: &mut AppSession, prompt_id: &str) -> Result<ComfyStatus, UiError> {
+    let slot = session
+        .comfy
+        .as_ref()
+        .filter(|slot| slot.job.as_ref().is_some_and(|job| job.id == prompt_id))
+        .ok_or_else(|| visual_error("This image job is not owned by the active session."))?
+        .clone();
+    let stale = source_visual_stale(session, &slot.brief).unwrap_or(true);
+    let job = slot.job.unwrap();
+    Ok(ComfyStatus {
+        state: job.state,
+        prompt_id: job.id,
+        stale,
+        message: slot.message,
+        result: job.result.map(|(metadata, _)| metadata),
+    })
+}
+#[tauri::command]
+async fn comfyui_check(url: String) -> Result<comfyui::Discovery, UiError> {
+    let adapter = comfyui::ComfyAdapter::new(&url).map_err(provider_error)?;
+    tauri::async_runtime::spawn_blocking(move || adapter.check())
+        .await
+        .map_err(|_| visual_error("Provider check could not finish."))
+}
+fn prepare_comfy(
+    session: &mut AppSession,
+    adapter: &comfyui::ComfyAdapter,
+    brief_hash: &str,
+    settings: &comfyui::Settings,
+) -> Result<(String, comfyui::Request), UiError> {
+    use forge_app_core::visual::ImageProviderAdapter;
+    if session.comfy.as_ref().is_some_and(|slot| {
+        slot.job.as_ref().is_none_or(|job| {
+            matches!(job.state, "queued" | "running")
+                && job.started.elapsed() < comfyui::JOB_TIMEOUT
+        })
+    }) {
+        return Err(visual_error(
+            "An owned generation is already pending. Wait for completion or its bounded timeout.",
+        ));
+    }
+    if current_visual_status(session, brief_hash)? {
+        return Err(visual_error(
+            "Source changed. Recompile before image generation.",
+        ));
+    }
+    let brief = session.visual_brief.as_ref().unwrap().clone();
+    let request = adapter
+        .compile_request(&brief, settings)
+        .map_err(provider_error)?;
+    let token = format!(
+        "TheForge-{}-{}-{}",
+        std::process::id(),
+        now_ms()?,
+        PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+    session.comfy = Some(ComfySession {
+        token: token.clone(),
+        brief,
+        job: None,
+        polling: false,
+        message: "Checking provider before queueing.".into(),
+    });
+    Ok((token, request))
+}
+#[tauri::command]
+async fn comfyui_generate(
+    state: State<'_, AppState>,
+    url: String,
+    brief_hash: String,
+    settings: comfyui::Settings,
+) -> Result<ComfyStatus, UiError> {
+    let adapter = comfyui::ComfyAdapter::new(&url).map_err(provider_error)?;
+    let (token, request) =
+        prepare_comfy(&mut *lock_state(&state)?, &adapter, &brief_hash, &settings)?;
+    let check_adapter = adapter.clone();
+    let discovered = tauri::async_runtime::spawn_blocking(move || check_adapter.discover())
+        .await
+        .map_err(|_| visual_error("Provider check failed."))
+        .and_then(|result| result.map_err(provider_error));
+    let discovery = match discovered {
+        Ok(d) => d,
+        Err(e) => {
+            let mut session = lock_state(&state)?;
+            if session.comfy.as_ref().is_some_and(|s| s.token == token) {
+                session.comfy = None;
+            }
+            return Err(e);
+        }
+    };
+    {
+        let mut session = lock_state(&state)?;
+        let brief = session
+            .comfy
+            .as_ref()
+            .filter(|s| s.token == token)
+            .ok_or_else(|| visual_error("Project/session changed before queueing."))?
+            .brief
+            .clone();
+        if source_visual_stale(&mut session, &brief).unwrap_or(true) {
+            session.comfy = None;
+            return Err(visual_error(
+                "Source changed. Recompile before image generation.",
+            ));
+        }
+        if discovery.state != "ready"
+            || !discovery.checkpoints.contains(&settings.checkpoint)
+            || !discovery.samplers.contains(&settings.sampler)
+            || !discovery.schedulers.contains(&settings.scheduler)
+        {
+            session.comfy = None;
+            return Err(visual_error(
+                "Selected local model/settings are unavailable. Check Connection.",
+            ));
+        }
+    }
+    let client = token.clone();
+    let queued = tauri::async_runtime::spawn_blocking(move || {
+        adapter.queue_ready(request, &client, discovery)
+    })
+    .await
+    .map_err(|_| visual_error("Queueing could not finish."))
+    .and_then(|result| result.map_err(provider_error));
+    let mut session = lock_state(&state)?;
+    let slot = session
+        .comfy
+        .as_mut()
+        .filter(|s| s.token == token)
+        .ok_or_else(|| {
+            visual_error(
+                "Session changed. ComfyUI may finish its queued job; no project data was changed.",
+            )
+        })?;
+    match queued {
+        Ok(job) => {
+            let id = job.id.clone();
+            slot.job = Some(job);
+            slot.message = "Queued owned ComfyUI job.".into();
+            comfy_status(&mut session, &id)
+        }
+        Err(e) => {
+            session.comfy = None;
+            Err(e)
+        }
+    }
+}
+#[tauri::command]
+async fn comfyui_generation_status(
+    state: State<'_, AppState>,
+    prompt_id: String,
+) -> Result<ComfyStatus, UiError> {
+    let (token, mut job) = {
+        let mut session = lock_state(&state)?;
+        let slot = session
+            .comfy
+            .as_mut()
+            .filter(|s| s.job.as_ref().is_some_and(|j| j.id == prompt_id))
+            .ok_or_else(|| visual_error("This job is not owned by the active session."))?;
+        if slot.polling
+            || slot
+                .job
+                .as_ref()
+                .is_some_and(|j| matches!(j.state, "completed" | "failed"))
+        {
+            return comfy_status(&mut session, &prompt_id);
+        }
+        slot.polling = true;
+        (slot.token.clone(), slot.job.as_ref().unwrap().clone())
+    };
+    let updated = tauri::async_runtime::spawn_blocking(move || {
+        let result =
+            comfyui::ComfyAdapter::new(&job.url).and_then(|adapter| adapter.poll(&mut job));
+        if result.is_err() {
+            job.state = "failed";
+        }
+        (job, result)
+    })
+    .await
+    .map_err(|_| visual_error("Image polling could not finish."))?;
+    let mut session = lock_state(&state)?;
+    let slot = session
+        .comfy
+        .as_mut()
+        .filter(|s| s.token == token)
+        .ok_or_else(|| visual_error("Session changed while polling."))?;
+    slot.polling = false;
+    slot.message = match updated.1 {
+        Ok(()) => format!("Owned generation {}.", updated.0.state),
+        Err(e) => e.message.into(),
+    };
+    slot.job = Some(updated.0);
+    comfy_status(&mut session, &prompt_id)
+}
+#[tauri::command]
+fn comfyui_resume(
+    state: State<'_, AppState>,
+    entity_id: String,
+) -> Result<Option<ComfyStatus>, UiError> {
+    let mut session = lock_state(&state)?;
+    let id = parse_entity_id(&entity_id)?;
+    let prompt = session
+        .comfy
+        .as_ref()
+        .filter(|s| s.brief.context.source.entity_id == id)
+        .and_then(|s| s.job.as_ref())
+        .map(|j| j.id.clone());
+    prompt
+        .map(|prompt| comfy_status(&mut session, &prompt))
+        .transpose()
+}
+#[tauri::command]
+fn comfyui_image(state: State<'_, AppState>, prompt_id: String) -> Result<Vec<u8>, UiError> {
+    let session = lock_state(&state)?;
+    session
+        .comfy
+        .as_ref()
+        .and_then(|s| s.job.as_ref())
+        .filter(|j| j.id == prompt_id)
+        .and_then(|j| j.result.as_ref())
+        .map(|(_, bytes)| bytes.clone())
+        .ok_or_else(|| visual_error("No completed owned image is available."))
+}
+fn save_comfy_image(session: &AppSession, prompt_id: &str, path: &str) -> Result<(), UiError> {
+    let bytes = session
+        .comfy
+        .as_ref()
+        .and_then(|s| s.job.as_ref())
+        .filter(|j| j.id == prompt_id)
+        .and_then(|j| j.result.as_ref())
+        .map(|(_, bytes)| bytes)
+        .ok_or_else(|| visual_error("No completed owned image is available."))?;
+    if path.trim().is_empty() || !path.to_ascii_lowercase().ends_with(".png") {
+        return Err(visual_error("Choose a PNG export path."));
+    }
+    forge_export::write_visual_image(bytes, Path::new(path.trim()))?;
+    Ok(())
+}
+#[tauri::command]
+fn save_visual_image(
+    state: State<'_, AppState>,
+    prompt_id: String,
+    path: String,
+) -> Result<(), UiError> {
+    let session = lock_state(&state)?;
+    save_comfy_image(&session, &prompt_id, &path)
+}
+
+#[tauri::command]
+fn discard_visual_image(state: State<'_, AppState>, prompt_id: String) -> Result<(), UiError> {
+    let mut session = lock_state(&state)?;
+    let job = session
+        .comfy
+        .as_ref()
+        .and_then(|s| s.job.as_ref())
+        .filter(|j| j.id == prompt_id)
+        .ok_or_else(|| visual_error("This job is not owned by the active session."))?;
+    if matches!(job.state, "queued" | "running") {
+        return Err(visual_error(
+            "Wait for the owned job to complete before discarding.",
+        ));
+    }
+    session.comfy = None;
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -524,6 +823,8 @@ fn create_project(
     session.write_version = None;
     session.history = None;
     session.further = None;
+    session.visual_brief = None;
+    session.comfy = None;
     remember_recent_project(&app, &project);
     Ok(project)
 }
@@ -561,6 +862,8 @@ fn open_project(
     session.write_version = None;
     session.history = None;
     session.further = None;
+    session.visual_brief = None;
+    session.comfy = None;
     let project = project_info(&session)?;
     remember_recent_project(&app, &project);
     Ok(project)
@@ -622,6 +925,8 @@ fn close_project(state: State<'_, AppState>) -> Result<(), UiError> {
     session.write_version = None;
     session.history = None;
     session.further = None;
+    session.visual_brief = None;
+    session.comfy = None;
     Ok(())
 }
 
@@ -675,6 +980,8 @@ fn import_project_command(
     session.write_version = None;
     session.history = None;
     session.further = None;
+    session.visual_brief = None;
+    session.comfy = None;
     let project = project_info(&session)?;
     debug_assert_eq!(project.name, imported.name);
     remember_recent_project(&app, &project);
@@ -689,6 +996,8 @@ fn restore_backup_command(state: State<'_, AppState>, archive_path: String) -> R
     session.write_version = None;
     session.history = None;
     session.further = None;
+    session.visual_brief = None;
+    session.comfy = None;
     Ok(())
 }
 
@@ -2254,6 +2563,13 @@ pub fn run() {
             import_project_command,
             restore_backup_command,
             export_entity_command,
+            comfyui_check,
+            comfyui_generate,
+            comfyui_generation_status,
+            comfyui_image,
+            comfyui_resume,
+            save_visual_image,
+            discard_visual_image,
             get_visual_recipes,
             compile_visual_brief_command,
             visual_brief_stale,
@@ -2393,6 +2709,189 @@ mod tests {
             BTreeMap::new(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn comfy_source_guard_owned_result_export_and_stale_read_only() {
+        let root = std::env::temp_dir().join(format!(
+            "character-forge-b10-{}-{}",
+            std::process::id(),
+            PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut session = AppSession::default();
+        session.project.open(root.join("review.sqlite3")).unwrap();
+        let source = character_candidate(93);
+        let source_id = source.character.envelope.id;
+        let store = active_store(&mut session).unwrap();
+        store
+            .create_project(&StoredProject {
+                envelope: ProjectEnvelope {
+                    id: source.character.envelope.project_id,
+                    schema_version: forge_contracts::SchemaVersion(2),
+                    generator_version: INITIAL_GENERATOR_VERSION,
+                    content_version: INITIAL_CONTENT_VERSION,
+                },
+                name: "B10 test".into(),
+                created_at_unix_ms: 0,
+                updated_at_unix_ms: 0,
+            })
+            .unwrap();
+        store
+            .persist_candidate(StoredEntity::CharacterCandidate(source.clone()))
+            .unwrap();
+        let brief = compile_saved_visual(
+            &mut session,
+            source_id,
+            VisualRole::Portrait,
+            ArtDirection::default(),
+        )
+        .unwrap();
+        let before = active_store(&mut session)
+            .unwrap()
+            .get_entity(source_id)
+            .unwrap();
+        let history = active_store(&mut session)
+            .unwrap()
+            .list_history(None)
+            .unwrap();
+        let adapter = comfyui::ComfyAdapter::new("http://127.0.0.1:1").unwrap();
+        let settings = comfyui::Settings {
+            checkpoint: "test.safetensors".into(),
+            seed: 42,
+            width: 512,
+            height: 512,
+            steps: 20,
+            cfg: 7.0,
+            sampler: "euler".into(),
+            scheduler: "normal".into(),
+        };
+        assert!(prepare_comfy(&mut session, &adapter, "forged-brief", &settings).is_err());
+        let (_, request) =
+            prepare_comfy(&mut session, &adapter, &brief.brief_hash, &settings).unwrap();
+        assert!(prepare_comfy(&mut session, &adapter, &brief.brief_hash, &settings).is_err());
+        assert_eq!(
+            before,
+            active_store(&mut session)
+                .unwrap()
+                .get_entity(source_id)
+                .unwrap()
+        );
+        assert_eq!(
+            history,
+            active_store(&mut session)
+                .unwrap()
+                .list_history(None)
+                .unwrap()
+        );
+        let png = include_bytes!("../tests/fixtures/b10.png").to_vec();
+        let result = comfyui::ResultMetadata {
+            provider: "comfyui_local",
+            server_version: Some("mock".into()),
+            brief_hash: brief.brief_hash.clone(),
+            prompt_id: "owned".into(),
+            settings: settings.clone(),
+            output: comfyui::OutputDescriptor {
+                filename: "TheForge_0001.png".into(),
+                subfolder: "".into(),
+                kind: "output".into(),
+            },
+            mime_type: "image/png",
+            byte_length: png.len(),
+            content_blake3: forge_export::visual_image_hash(&png),
+            completed_unix_ms: 123,
+            warnings: vec![],
+        };
+        session.comfy.as_mut().unwrap().job = Some(comfyui::Job {
+            id: "owned".into(),
+            url: adapter.url.clone(),
+            request,
+            version: None,
+            started: std::time::Instant::now(),
+            last_poll: None,
+            state: "completed",
+            result: Some((result, png.clone())),
+        });
+        assert!(!comfy_status(&mut session, "owned").unwrap().stale);
+        assert!(comfy_status(&mut session, "other-job").is_err());
+        let retained = session.comfy.clone();
+        let mut changed = StoredEntity::CharacterCandidate(source);
+        if let StoredEntity::CharacterCandidate(c) = &mut changed {
+            c.character.appearance = "Reviewed new appearance".into();
+        }
+        active_store(&mut session)
+            .unwrap()
+            .save_candidate(changed, 1)
+            .unwrap();
+        assert!(comfy_status(&mut session, "owned").unwrap().stale);
+        session.comfy = None;
+        assert!(prepare_comfy(&mut session, &adapter, &brief.brief_hash, &settings).is_err());
+        session.comfy = retained;
+        let _current = compile_saved_visual(
+            &mut session,
+            source_id,
+            VisualRole::Portrait,
+            ArtDirection::default(),
+        )
+        .unwrap();
+        assert!(comfy_status(&mut session, "owned").unwrap().stale);
+        assert_eq!(
+            comfy_status(&mut session, "owned")
+                .unwrap()
+                .result
+                .unwrap()
+                .brief_hash,
+            brief.brief_hash
+        );
+        let before = active_store(&mut session)
+            .unwrap()
+            .get_entity(source_id)
+            .unwrap();
+        let history = active_store(&mut session)
+            .unwrap()
+            .list_history(None)
+            .unwrap();
+        let output = root.join("explicit.png");
+        assert!(save_comfy_image(&session, "other-job", output.to_str().unwrap()).is_err());
+        assert!(!output.exists());
+        save_comfy_image(&session, "owned", output.to_str().unwrap()).unwrap();
+        assert_eq!(std::fs::read(&output).unwrap(), png);
+        assert!(save_comfy_image(&session, "owned", output.to_str().unwrap()).is_err());
+        assert_eq!(std::fs::read(&output).unwrap(), png);
+        assert!(
+            save_comfy_image(&session, "owned", root.join("wrong.svg").to_str().unwrap()).is_err()
+        );
+        assert_eq!(
+            before,
+            active_store(&mut session)
+                .unwrap()
+                .get_entity(source_id)
+                .unwrap()
+        );
+        assert_eq!(
+            history,
+            active_store(&mut session)
+                .unwrap()
+                .list_history(None)
+                .unwrap()
+        );
+        assert_eq!(
+            active_store(&mut session)
+                .unwrap()
+                .list_entities()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            active_store(&mut session)
+                .unwrap()
+                .list_relationships()
+                .unwrap()
+                .is_empty()
+        );
+        session.project.close();
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -544,6 +544,16 @@ pub fn write_visual_brief<T: Serialize>(
     }
     atomic_write(&bytes, destination.as_ref())
 }
+/// B10 explicit ordinary image export, never project/asset persistence.
+pub fn write_visual_image(bytes: &[u8], destination: impl AsRef<Path>) -> Result<(), ExportError> {
+    if bytes.len() > 8 * 1024 * 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err(ExportError::Invalid("Expected a bounded PNG image".into()));
+    }
+    atomic_write(bytes, destination.as_ref())
+}
+pub fn visual_image_hash(bytes: &[u8]) -> String {
+    blake3::hash(bytes).to_hex().to_string()
+}
 fn atomic_write(bytes: &[u8], destination: &Path) -> Result<(), ExportError> {
     if destination.exists() {
         return Err(ExportError::DestinationExists);

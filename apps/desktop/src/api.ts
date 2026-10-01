@@ -574,7 +574,60 @@ export type VisualGenerationBrief = {
   prompt_text: string;
   brief_hash: string;
 };
+export type ComfySettings = {
+  checkpoint: string;
+  seed: number;
+  width: number;
+  height: number;
+  steps: number;
+  cfg: number;
+  sampler: string;
+  scheduler: string;
+};
+export type ComfyDiscovery = {
+  state: 'unavailable' | 'no_model' | 'ready';
+  message: string;
+  server_url: string;
+  server_version: string | null;
+  checkpoints: string[];
+  samplers: string[];
+  schedulers: string[];
+  missing_nodes: string[];
+};
+export type ComfyResult = {
+  provider: 'comfyui_local';
+  server_version: string | null;
+  brief_hash: string;
+  prompt_id: string;
+  settings: ComfySettings;
+  output: { filename: string; subfolder: string; type: string };
+  mime_type: string;
+  byte_length: number;
+  content_blake3: string;
+  completed_unix_ms: number;
+  warnings: string[];
+};
+export type ComfyStatus = {
+  state: 'queued' | 'running' | 'completed' | 'failed';
+  prompt_id: string;
+  stale: boolean;
+  message: string;
+  result: ComfyResult | null;
+};
 export const api = {
+  comfyResume: (entityId: string) =>
+    invoke<ComfyStatus | null>('comfyui_resume', { entityId }),
+  comfyCheck: (url: string) => invoke<ComfyDiscovery>('comfyui_check', { url }),
+  comfyGenerate: (url: string, briefHash: string, settings: ComfySettings) =>
+    invoke<ComfyStatus>('comfyui_generate', { url, briefHash, settings }),
+  comfyStatus: (promptId: string) =>
+    invoke<ComfyStatus>('comfyui_generation_status', { promptId }),
+  comfyImage: (promptId: string) =>
+    invoke<number[]>('comfyui_image', { promptId }),
+  comfySave: (promptId: string, path: string) =>
+    invoke<void>('save_visual_image', { promptId, path }),
+  comfyDiscard: (promptId: string) =>
+    invoke<void>('discard_visual_image', { promptId }),
   visualRecipes: (entityType: string) =>
     invoke<VisualRecipeDefinition[]>('get_visual_recipes', { entityType }),
   compileVisualBrief: (id: string, role: VisualRole, direction: ArtDirection) =>
