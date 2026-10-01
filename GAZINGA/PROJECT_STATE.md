@@ -4,27 +4,25 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_B5_CREATURE_CORE — standalone Creature Forge
-**Current status:** PASS — B5 automated exit gates satisfied
+**Current mission:** THE_FORGE_B6_RELATIONSHIP_LIFECYCLE — universal Connections and explicit lifecycle
+**Current status:** PASS — B6 automated exit gates satisfied
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `ccef11a8eae698bdc004e1bf3e4c678a3ba8db5b` (B5 starting/current HEAD; unchanged)
-**Worktree:** B5 implementation/tests/docs are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `51d32babb3f7a0ff3f3d6067e72af09d25f95a28` (B6 starting/current HEAD; unchanged)
+**Worktree:** B6 implementation/tests/docs are unstaged/uncommitted. Four unrelated operator/export/log files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
 ## Current The Forge handoff
 
-B5 Creature Core is **PASS — automated exit gates satisfied**. The sixth authoring mode has fourteen required fields, eleven stable profiles, independent generator/content versions 1/1, all eleven presets, deterministic DNA/field streams, locks/rerolls/manual origins, shared undo/redo, Candidate/favorite/Canon/revision/history persistence, Workbench/library/detail and JSON/Markdown/project/Vault support. Standalone Creature creates no Relationships. Both historical working-copy and Canon transition adapters include Creature; actual Name/Profile controls and invalid typed-edit guards are tested.
+B6 is **PASS — automated exit gates satisfied**. All six saved entity details expose Connections with four app-owned directed definitions, explicit relationship-only Canon/archive actions, persisted versions and read-only history. Relationship truth remains independent of entity truth. No schema/archive/app-version change, Link Existing, new vocabulary, new Forge Further action or later mission is included.
 
-Final evidence: **182 Rust tests PASS, 1 existing fixture writer ignored; 52 frontend tests PASS**. Format/lint/typecheck/frontend build, Rust format, strict Clippy, full offline Cargo metadata, `scripts/verify.ps1`, explicit `cargo test --workspace --no-fail-fast`, 1,000-sequence gauntlet, optimized Tauri no-bundle build and `git diff --check` PASS. Final Rust suites use `RUST_TEST_THREADS=1`; prior parallel timestamp-test failures remain recorded and are not claimed fixed. Exact executable: `C:\dev\CharacterForge\target\mission-b5-verify\release\character-forge-desktop.exe`, ProductVersion/FileVersion 1.0.0. The npm launcher is unavailable; configured pnpm checks pass.
+Final evidence: **187 Rust tests PASS, 1 existing fixture writer ignored; 79 frontend tests PASS**. Normal parallel explicit no-fail-fast and final sequential `scripts/verify.ps1` runs pass, including the 1,000-sequence gauntlet. Format/lint/typecheck/frontend build, Rust format/strict Clippy, full offline metadata, optimized Tauri no-bundle build and final `git diff --check` PASS. Exact binary: `C:\dev\CharacterForge\target\mission-b6-verify\release\character-forge-desktop.exe`, ProductVersion/FileVersion 1.0.0. Promotion now shares one timestamp with its immutable revision, fixing the documented earlier 1 ms race without weakening assertions. An initial overlapping verification linker lock is retained as environment evidence; the sequential rerun passed. The npm launcher remains unavailable; pnpm checks pass.
 
-Quality: 2,816 preset Candidates and 1,024 Chaos seeds validate/replay with zero full-content clones; all eleven profiles, 640 source patterns, 1,013 mixed-source Candidates, maximum source share 11.82%. The 52-sample generated/content-author review rates 17 usable as-is, 35 minor edit, 0 weak; repeated local-encounter motifs and minor authoring needs are documented. This is not independent human acceptance. Existing P3 UI-001 remains open; no B5 P0/P1/P2 remains known. Schema 2, archive v1, app 1.0.0 and old deterministic contracts are unchanged. Mission 08's dependency-advisory verification limitation remains residual maintenance/release risk.
-
-Branch `master`, starting/final HEAD `ccef11a8eae698bdc004e1bf3e4c678a3ba8db5b`; B5 changes remain unstaged/uncommitted. Four unrelated files remain untracked and byte-identical by SHA-256. No commit/tag/push/publication occurred. **STOP at B5. Creature Forge Further, World Forge and later missions remain unstarted.** See `docs/missions/THE_FORGE_B5_CREATURE_CORE_REPORT.md` and `docs/quality/THE_FORGE_B5_CREATURE_SAMPLES.md`.
+B2's reviewed Hometown provenance and entity truth remain unchanged across relationship promotion/archive; archived assertions and immutable history stay inspectable. No B6 P0/P1/P2 remains known. No independent native operator smoke is claimed. Existing P3 UI-001 and Mission 08's accepted dependency-advisory verification limitation remain open. Branch/HEAD are unchanged; twelve B6 files remain unstaged/uncommitted and four unrelated untracked files remain byte-identical. No reset/commit/tag/push/publication occurred. **STOP at B6.** See `docs/missions/THE_FORGE_B6_RELATIONSHIP_LIFECYCLE_REPORT.md`.
 
 ## Architecture decisions currently locked
 

@@ -5,13 +5,17 @@ use forge_contracts::{
     ValidationResult,
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RelationshipDefinition {
     pub key: &'static str,
     pub relationship_type: RelationshipType,
     pub source: EntityType,
     pub target: EntityType,
     pub directed: bool,
+    /// Prefix before the related entity name, for each endpoint perspective.
+    pub source_phrase: &'static str,
+    pub inverse_phrase: &'static str,
 }
 
 pub const RELATIONSHIP_DEFINITIONS: [RelationshipDefinition; 4] = [
@@ -21,6 +25,8 @@ pub const RELATIONSHIP_DEFINITIONS: [RelationshipDefinition; 4] = [
         source: EntityType::Character,
         target: EntityType::Location,
         directed: true,
+        source_phrase: "Born in",
+        inverse_phrase: "Birthplace of",
     },
     RelationshipDefinition {
         key: "member_of",
@@ -28,6 +34,8 @@ pub const RELATIONSHIP_DEFINITIONS: [RelationshipDefinition; 4] = [
         source: EntityType::Character,
         target: EntityType::Faction,
         directed: true,
+        source_phrase: "Member of",
+        inverse_phrase: "Member:",
     },
     RelationshipDefinition {
         key: "owns",
@@ -35,6 +43,8 @@ pub const RELATIONSHIP_DEFINITIONS: [RelationshipDefinition; 4] = [
         source: EntityType::Character,
         target: EntityType::Item,
         directed: true,
+        source_phrase: "Owns",
+        inverse_phrase: "Owned by",
     },
     RelationshipDefinition {
         key: "opposed_by",
@@ -42,6 +52,8 @@ pub const RELATIONSHIP_DEFINITIONS: [RelationshipDefinition; 4] = [
         source: EntityType::Quest,
         target: EntityType::Creature,
         directed: true,
+        source_phrase: "Opposed by",
+        inverse_phrase: "Opposes quest",
     },
 ];
 
@@ -92,6 +104,26 @@ mod tests {
             ]
         );
         assert!(RELATIONSHIP_DEFINITIONS.iter().all(|d| d.directed));
+        let phrases: Vec<_> = RELATIONSHIP_DEFINITIONS
+            .iter()
+            .map(|d| (d.source_phrase, d.inverse_phrase))
+            .collect();
+        assert_eq!(
+            phrases,
+            [
+                ("Born in", "Birthplace of"),
+                ("Member of", "Member:"),
+                ("Owns", "Owned by"),
+                ("Opposed by", "Opposes quest")
+            ]
+        );
+        for definition in RELATIONSHIP_DEFINITIONS {
+            let encoded = serde_json::to_value(definition).unwrap();
+            assert_eq!(encoded["key"], definition.key);
+            assert_eq!(encoded["relationshipType"], definition.key);
+            assert_eq!(encoded["sourcePhrase"], definition.source_phrase);
+            assert_eq!(encoded["inversePhrase"], definition.inverse_phrase);
+        }
     }
 
     #[test]
@@ -129,6 +161,28 @@ mod tests {
                 "{}",
                 definition.key
             );
+            for source in [
+                EntityType::Character,
+                EntityType::Quest,
+                EntityType::Location,
+                EntityType::Faction,
+                EntityType::Item,
+                EntityType::Creature,
+            ] {
+                for target in [
+                    EntityType::Character,
+                    EntityType::Quest,
+                    EntityType::Location,
+                    EntityType::Faction,
+                    EntityType::Item,
+                    EntityType::Creature,
+                ] {
+                    assert_eq!(
+                        validate_relationship_endpoints(&assertion, source, target).is_ok(),
+                        source == definition.source && target == definition.target
+                    );
+                }
+            }
         }
     }
 }

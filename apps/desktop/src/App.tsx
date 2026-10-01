@@ -12,7 +12,6 @@ import {
   type FactionProfile,
   type FieldValue,
   type ForgePayload,
-  type ForgeRelationship,
   type ForgeResultBundle,
   type HistoryRecord,
   type Item,
@@ -26,6 +25,7 @@ import {
   type UserSettings,
   type WorkingState,
 } from './api';
+import { Connections } from './Connections';
 
 type Section =
   | 'forge'
@@ -557,9 +557,6 @@ export function App() {
   const [hometownPending, setHometownPending] = useState(false);
   const [hometownSeed, setHometownSeed] = useState('42');
   const [hometownSourceId, setHometownSourceId] = useState<string | null>(null);
-  const [selectedRelationships, setSelectedRelationships] = useState<
-    ForgeRelationship[]
-  >([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -940,7 +937,6 @@ export function App() {
           setCandidate(saved.location.entity);
           setDirty(false);
           setHometownPending(false);
-          setSelectedRelationships([saved.relationship]);
           void api.listEntities().then(setRecords);
           setNotice(
             'Hometown Location and born_in Candidate relationship saved together.',
@@ -1039,7 +1035,6 @@ export function App() {
           setHometownPending(false);
           setHometownSourceId(null);
           setSelectedRecord(fresh);
-          setSelectedRelationships([]);
           setCandidate(fresh.entity);
           setDirty(false);
           setCanUndo(false);
@@ -1047,12 +1042,6 @@ export function App() {
           setRevisionTarget(false);
           setSelectedRevision(null);
           setRevisions([]);
-          if (isCharacter(fresh.entity)) {
-            void api
-              .relationshipsForEntity(entityId(fresh.entity))
-              .then(setSelectedRelationships)
-              .catch(() => setSelectedRelationships([]));
-          }
           void api
             .revisions(entityId(fresh.entity))
             .then(setRevisions)
@@ -2200,8 +2189,6 @@ export function App() {
             onPromote={promote}
             onExport={exportEntity}
             onForgeHometown={forgeHometownFrom}
-            relationships={selectedRelationships}
-            allRecords={records}
           />
         )}
         {section === 'quests' && (
@@ -2324,8 +2311,6 @@ export function App() {
             <DetailView
               record={selectedRecord}
               onForgeHometown={forgeHometownFrom}
-              relationships={selectedRelationships}
-              records={records}
             />
             {selectedRecord && (
               <RevisionPanel
@@ -2824,15 +2809,11 @@ function DetailView({
   record,
   onExport,
   onForgeHometown,
-  relationships = [],
-  records = [],
 }: {
   record: EntityRecord | null;
   revisions?: Revision[];
   onExport?: (record: EntityRecord, format: 'json' | 'markdown') => void;
   onForgeHometown?: (record: EntityRecord) => void;
-  relationships?: ForgeRelationship[];
-  records?: EntityRecord[];
 }) {
   if (!record)
     return (
@@ -2914,30 +2895,11 @@ function DetailView({
           </article>
         ))}
       </div>
-      {character && relationships.length > 0 && (
-        <section className="detail-connections" aria-label="Connections">
-          <h3>Connections</h3>
-          {relationships.map((relationship) => {
-            const relatedId =
-              relationship.source_id === entity.envelope.id
-                ? relationship.target_id
-                : relationship.source_id;
-            const related = records.find(
-              (row) => entityId(row.entity) === relatedId,
-            );
-            const relatedName = related
-              ? payloadTitle(related.entity)
-              : relatedId;
-            return (
-              <p key={relationship.id}>
-                {relationship.relationship_type === 'born_in'
-                  ? `Born in ${relatedName}`
-                  : `${relationship.relationship_type}: ${relatedName}`}{' '}
-                · {friendlyAction(relationship.state)}
-              </p>
-            );
-          })}
-        </section>
+      {record.writeVersion > 0 && (
+        <Connections
+          key={`${entity.envelope.project_id}:${entity.envelope.id}`}
+          entityId={entity.envelope.id}
+        />
       )}
     </section>
   );
@@ -3005,8 +2967,6 @@ function LibraryView({
   onPromote,
   onExport,
   onForgeHometown,
-  relationships = [],
-  allRecords = [],
 }: {
   title: string;
   records: EntityRecord[];
@@ -3019,8 +2979,6 @@ function LibraryView({
   onPromote: (record: EntityRecord) => void;
   onExport: (record: EntityRecord, format: 'json' | 'markdown') => void;
   onForgeHometown?: (record: EntityRecord) => void;
-  relationships?: ForgeRelationship[];
-  allRecords?: EntityRecord[];
 }) {
   const [selected, setSelected] = useState<EntityRecord | null>(null);
   const select = (record: EntityRecord) => {
@@ -3070,8 +3028,6 @@ function LibraryView({
         }
         onExport={onExport}
         onForgeHometown={onForgeHometown}
-        relationships={relationships}
-        records={allRecords}
       />
     </div>
   );

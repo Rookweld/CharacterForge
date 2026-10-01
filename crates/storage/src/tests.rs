@@ -2569,3 +2569,389 @@ fn creature_actions_history_canonical_payload_and_column_mismatch_are_checked() 
     assert!(matches!(store.get_entity(id), Err(StoreError::Corrupt(_))));
     assert!(store.list_relationships().unwrap().is_empty());
 }
+
+fn six_connection_entities() -> Vec<StoredEntity> {
+    vec![
+        StoredEntity::CharacterCandidate(character_candidate(88001)),
+        StoredEntity::QuestCandidate(quest_candidate(88002, 3)),
+        StoredEntity::LocationCandidate(
+            LocationForge::generate_in_project(
+                &LocationForge::new_dna(
+                    RootSeed::new(88003),
+                    "dark-fantasy",
+                    CreativeAxes::neutral(),
+                )
+                .unwrap(),
+                project_id(),
+            )
+            .unwrap(),
+        ),
+        StoredEntity::FactionCandidate(
+            FactionForge::generate_in_project(
+                &FactionForge::new_dna(
+                    RootSeed::new(88004),
+                    "dark-fantasy",
+                    CreativeAxes::neutral(),
+                )
+                .unwrap(),
+                project_id(),
+            )
+            .unwrap(),
+        ),
+        StoredEntity::ItemCandidate(
+            ItemForge::generate_in_project(
+                &ItemForge::new_dna(
+                    RootSeed::new(88005),
+                    "dark-fantasy",
+                    CreativeAxes::neutral(),
+                )
+                .unwrap(),
+                project_id(),
+            )
+            .unwrap(),
+        ),
+        StoredEntity::CreatureCandidate(
+            CreatureForge::generate_in_project(
+                &CreatureForge::new_dna(
+                    RootSeed::new(88006),
+                    "dark-fantasy",
+                    CreativeAxes::neutral(),
+                )
+                .unwrap(),
+                project_id(),
+            )
+            .unwrap(),
+        ),
+    ]
+}
+
+#[test]
+fn connections_resolve_all_six_endpoints_without_inverse_rows_or_read_side_effects() {
+    let db = TestDb::new("connections-six");
+    let mut store = create_store(&db);
+    let entities = six_connection_entities();
+    for entity in &entities {
+        store.persist_candidate(entity.clone()).unwrap();
+    }
+    for (index, definition) in forge_app_core::RELATIONSHIP_DEFINITIONS.iter().enumerate() {
+        let source = entities
+            .iter()
+            .find(|e| e.envelope().entity_type == definition.source)
+            .unwrap();
+        let target = entities
+            .iter()
+            .find(|e| e.envelope().entity_type == definition.target)
+            .unwrap();
+        let mut relation = born_in_relationship(source.envelope().id, target.envelope().id);
+        relation.id = RelationshipId::from_bytes([50 + index as u8; 16]);
+        relation.relationship_type = definition.relationship_type;
+        store.create_relationship(relation.clone()).unwrap();
+        let before = fixture_rows(&store.connection);
+        for (viewed, related, role) in [
+            (source, target, ConnectionRole::Source),
+            (target, source, ConnectionRole::Target),
+        ] {
+            let views = store.list_connection_views(viewed.envelope().id).unwrap();
+            let view = views
+                .iter()
+                .find(|v| v.relationship.id == relation.id)
+                .unwrap();
+            assert_eq!(view.relationship, relation);
+            assert_eq!(view.write_version, 1);
+            assert_eq!(view.role, role);
+            assert_eq!(view.related_id, related.envelope().id);
+            assert_eq!(
+                view.related_name.as_deref(),
+                Some(related.envelope().name.as_str())
+            );
+            assert_eq!(view.related_type, related.envelope().entity_type);
+            assert_eq!(view.related_availability, RelatedAvailability::Available);
+            assert_eq!(view.definition, *definition);
+            assert_eq!(
+                store.list_connection_views(viewed.envelope().id).unwrap(),
+                views
+            );
+            let json = serde_json::to_value(view).unwrap();
+            assert_eq!(json["writeVersion"], 1);
+            assert_eq!(
+                json["definition"]["relationshipType"],
+                relation.relationship_type.key()
+            );
+        }
+        assert_eq!(fixture_rows(&store.connection), before);
+    }
+    assert_eq!(store.list_relationships().unwrap().len(), 4);
+    for entity in &entities {
+        assert!(
+            !store
+                .list_connection_views(entity.envelope().id)
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let ordered = store
+        .list_connection_views(entities[0].envelope().id)
+        .unwrap();
+    assert_eq!(
+        ordered
+            .iter()
+            .map(|v| v.relationship.id)
+            .collect::<Vec<_>>(),
+        (50..53)
+            .map(|n| RelationshipId::from_bytes([n; 16]))
+            .collect::<Vec<_>>()
+    );
+    assert!(matches!(
+        store.list_connection_views(EntityId::from_bytes([99; 16])),
+        Err(StoreError::NotFound(_))
+    ));
+    drop(store);
+    let reopened = ProjectStore::open(db.path()).unwrap();
+    assert_eq!(
+        reopened
+            .list_connection_views(entities[0].envelope().id)
+            .unwrap(),
+        ordered
+    );
+    let other_db = TestDb::new("connections-other-project");
+    let other = create_store(&other_db);
+    assert!(matches!(
+        other.list_connection_views(entities[0].envelope().id),
+        Err(StoreError::NotFound(_))
+    ));
+}
+
+#[test]
+fn connections_report_archived_and_missing_related_entities_without_cross_project_fallback() {
+    let db = TestDb::new("connections-missing");
+    let mut store = create_store(&db);
+    let entities = six_connection_entities();
+    let source = entities[0].clone();
+    let mut target = entities[2].clone();
+    let source_id = source.envelope().id;
+    let target_id = target.envelope().id;
+    store.persist_candidate(source).unwrap();
+    target.set_state(CanonState::Archived);
+    // Simulate a valid archived endpoint from an imported project; no new archive API.
+    let tx = store.connection.transaction().unwrap();
+    insert_entity(&tx, &target).unwrap();
+    tx.commit().unwrap();
+    store
+        .create_relationship(born_in_relationship(source_id, target_id))
+        .unwrap();
+    assert_eq!(
+        store.list_connection_views(source_id).unwrap()[0].related_availability,
+        RelatedAvailability::Archived
+    );
+    store
+        .connection
+        .execute_batch("PRAGMA foreign_keys=OFF")
+        .unwrap();
+    store
+        .connection
+        .execute(
+            "DELETE FROM entities WHERE id=?1",
+            [id_text(target_id.uuid())],
+        )
+        .unwrap();
+    let missing = &store.list_connection_views(source_id).unwrap()[0];
+    assert_eq!(missing.related_availability, RelatedAvailability::Missing);
+    assert_eq!(missing.related_name, None);
+    assert_eq!(missing.related_id, target_id);
+}
+
+#[test]
+fn hometown_connection_promotion_and_archive_are_independent_revisioned_and_stale_safe() {
+    let db = TestDb::new("hometown-connection-lifecycle");
+    let mut store = create_store(&db);
+    let (source_id, source_version, original) = saved_hometown_bundle(&mut store, 88010);
+    let mut reviewed = original.primary.clone();
+    LocationForge::lock(&mut reviewed, LocationField::Name).unwrap();
+    LocationForge::reroll_all_unlocked(&mut reviewed).unwrap();
+    let bundle = finalize_hometown_review(&original, reviewed).unwrap();
+    store
+        .save_forge_bundle(source_id, source_version, &bundle)
+        .unwrap();
+    let location_id = bundle.primary.location.envelope.id;
+    let id = bundle.relationship.id;
+    let before = fixture_rows(&store.connection);
+    for endpoint in [source_id, location_id] {
+        let view = &store.list_connection_views(endpoint).unwrap()[0];
+        assert_eq!(view.relationship.state, RelationshipState::Candidate);
+        assert_eq!(view.write_version, 1);
+    }
+    assert_eq!(
+        store.list_connection_views(source_id).unwrap()[0]
+            .definition
+            .source_phrase,
+        "Born in"
+    );
+    assert_eq!(
+        store.list_connection_views(location_id).unwrap()[0]
+            .definition
+            .inverse_phrase,
+        "Birthplace of"
+    );
+    assert!(matches!(
+        store.promote_relationship(id, 99),
+        Err(StoreError::Conflict { .. })
+    ));
+    assert!(store.list_relationship_revisions(id).unwrap().is_empty());
+    assert_eq!(store.promote_relationship(id, 1).unwrap(), 2);
+    let canon = store.get_relationship(id).unwrap().unwrap();
+    assert_eq!(canon.relationship.id, bundle.relationship.id);
+    assert_eq!(
+        canon.relationship.relationship_type,
+        bundle.relationship.relationship_type
+    );
+    assert_eq!(canon.relationship.source_id, source_id);
+    assert_eq!(canon.relationship.target_id, location_id);
+    let history = store.list_relationship_revisions(id).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].relationship, canon.relationship);
+    assert_eq!(history[0].revision_number, 1);
+    assert_eq!(history[0].reason, "promoted to canon");
+    assert_eq!(
+        history[0].created_at_unix_ms,
+        canon.relationship.updated_at_unix_ms
+    );
+    for endpoint in [source_id, location_id] {
+        assert_eq!(
+            store.list_connection_views(endpoint).unwrap()[0]
+                .relationship
+                .state,
+            RelationshipState::Canon
+        );
+        assert_eq!(
+            store
+                .get_entity(endpoint)
+                .unwrap()
+                .unwrap()
+                .entity
+                .envelope()
+                .canon_state,
+            CanonState::Candidate
+        );
+    }
+    assert_eq!(fixture_rows(&store.connection), before);
+    assert!(matches!(
+        store.promote_relationship(id, 1),
+        Err(StoreError::Conflict { .. })
+    ));
+    assert!(matches!(
+        store.promote_relationship(id, 2),
+        Err(StoreError::InvalidOperation(_))
+    ));
+    assert!(matches!(
+        store.archive_relationship(id, 1),
+        Err(StoreError::Conflict { .. })
+    ));
+    assert_eq!(store.get_relationship(id).unwrap().unwrap(), canon);
+    assert_eq!(store.list_relationship_revisions(id).unwrap(), history);
+    assert_eq!(store.archive_relationship(id, 2).unwrap(), 3);
+    let archived = store.get_relationship(id).unwrap().unwrap();
+    assert_eq!(archived.relationship.state, RelationshipState::Archived);
+    let revisions = store.list_relationship_revisions(id).unwrap();
+    assert_eq!(revisions.len(), 2);
+    assert_eq!(revisions[0], history[0]);
+    assert_eq!(revisions[1].relationship, canon.relationship); // Existing archive snapshot contract.
+    for endpoint in [source_id, location_id] {
+        assert_eq!(
+            store.list_connection_views(endpoint).unwrap()[0].relationship,
+            archived.relationship
+        );
+        assert_eq!(
+            store.list_connection_views(endpoint).unwrap()[0].write_version,
+            3
+        );
+    }
+    assert!(matches!(
+        store.archive_relationship(id, 3),
+        Err(StoreError::InvalidOperation(_))
+    ));
+    assert_eq!(fixture_rows(&store.connection), before); // Includes frozen history/context/DNA and every entity row.
+    assert_eq!(store.list_relationships().unwrap().len(), 1);
+    drop(store);
+    let reopened = ProjectStore::open(db.path()).unwrap();
+    assert_eq!(fixture_rows(&reopened.connection), before);
+    assert_eq!(reopened.list_relationship_revisions(id).unwrap(), revisions);
+    assert_eq!(reopened.get_relationship(id).unwrap().unwrap(), archived);
+}
+
+#[test]
+fn candidate_connection_archive_preserves_snapshot_and_entity_truth_is_independent() {
+    let db = TestDb::new("candidate-connection-archive");
+    let mut store = create_store(&db);
+    let (source_id, source_version, bundle) = saved_hometown_bundle(&mut store, 88011);
+    store
+        .save_forge_bundle(source_id, source_version, &bundle)
+        .unwrap();
+    let id = bundle.relationship.id;
+    store
+        .promote_candidate(bundle.primary.location.envelope.id, 1)
+        .unwrap();
+    assert_eq!(
+        store
+            .get_relationship(id)
+            .unwrap()
+            .unwrap()
+            .relationship
+            .state,
+        RelationshipState::Candidate
+    );
+    let before = fixture_rows(&store.connection);
+    assert!(matches!(
+        store.archive_relationship(id, 2),
+        Err(StoreError::Conflict { .. })
+    ));
+    assert!(store.list_relationship_revisions(id).unwrap().is_empty());
+    assert_eq!(store.archive_relationship(id, 1).unwrap(), 2);
+    let history = store.list_relationship_revisions(id).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].relationship, bundle.relationship);
+    assert_eq!(history[0].reason, "archive relationship");
+    assert_eq!(fixture_rows(&store.connection), before);
+    assert!(matches!(
+        store.promote_relationship(id, 2),
+        Err(StoreError::InvalidOperation(_))
+    ));
+    assert!(matches!(
+        store.archive_relationship(id, 1),
+        Err(StoreError::Conflict { .. })
+    ));
+    assert_eq!(store.list_relationship_revisions(id).unwrap(), history);
+    assert_eq!(
+        store.list_connection_views(source_id).unwrap()[0]
+            .relationship
+            .state,
+        RelationshipState::Archived
+    );
+}
+
+#[test]
+fn relationship_mutation_uses_one_monotonic_timestamp_for_current_and_revision() {
+    let db = TestDb::new("relationship-clock");
+    let mut store = create_store(&db);
+    let entities = six_connection_entities();
+    for entity in [&entities[0], &entities[2]] {
+        store.persist_candidate(entity.clone()).unwrap();
+    }
+    let mut relation = born_in_relationship(entities[0].envelope().id, entities[2].envelope().id);
+    // A restored project can legitimately have a timestamp ahead of the local clock.
+    let future = now_unix_ms().unwrap() + 60_000;
+    relation.updated_at_unix_ms = future;
+    store.create_relationship(relation.clone()).unwrap();
+    store.promote_relationship(relation.id, 1).unwrap();
+    let canon = store.get_relationship(relation.id).unwrap().unwrap();
+    let first = store.list_relationship_revisions(relation.id).unwrap();
+    assert_eq!(canon.relationship.updated_at_unix_ms, future);
+    assert_eq!(first[0].relationship, canon.relationship);
+    assert_eq!(first[0].created_at_unix_ms, future);
+    store.archive_relationship(relation.id, 2).unwrap();
+    let archived = store.get_relationship(relation.id).unwrap().unwrap();
+    let history = store.list_relationship_revisions(relation.id).unwrap();
+    assert_eq!(archived.relationship.updated_at_unix_ms, future);
+    assert_eq!(history[0], first[0]);
+    assert_eq!(history[1].relationship, canon.relationship);
+    assert_eq!(history[1].created_at_unix_ms, future);
+}

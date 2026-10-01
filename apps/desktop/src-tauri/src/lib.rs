@@ -1318,14 +1318,53 @@ fn save_forge_bundle(state: State<'_, AppState>) -> Result<ForgeBundleSaveView, 
 fn list_relationships_for_entity(
     state: State<'_, AppState>,
     id: String,
-) -> Result<Vec<forge_contracts::Relationship>, UiError> {
+) -> Result<Vec<forge_storage::ConnectionView>, UiError> {
     let mut session = lock_state(&state)?;
-    let id = parse_entity_id(&id)?;
+    Ok(active_store(&mut session)?.list_connection_views(parse_entity_id(&id)?)?)
+}
+
+fn parse_relationship_id(value: &str) -> Result<forge_contracts::RelationshipId, UiError> {
+    value
+        .parse::<forge_contracts::Uuid128>()
+        .map(forge_contracts::RelationshipId)
+        .map_err(UiError::from)
+}
+
+#[tauri::command]
+fn promote_relationship(
+    state: State<'_, AppState>,
+    id: String,
+    expected_version: i64,
+) -> Result<i64, UiError> {
+    let mut session = lock_state(&state)?;
     Ok(active_store(&mut session)?
-        .list_relationships_for_entity(id)?
-        .into_iter()
-        .map(|record| record.relationship)
-        .collect())
+        .promote_relationship(parse_relationship_id(&id)?, expected_version)?)
+}
+
+#[tauri::command]
+fn archive_relationship(
+    state: State<'_, AppState>,
+    id: String,
+    expected_version: i64,
+) -> Result<i64, UiError> {
+    let mut session = lock_state(&state)?;
+    Ok(active_store(&mut session)?
+        .archive_relationship(parse_relationship_id(&id)?, expected_version)?)
+}
+
+#[tauri::command]
+fn list_relationship_revisions(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Vec<forge_storage::RelationshipRevision>, UiError> {
+    let mut session = lock_state(&state)?;
+    let store = active_store(&mut session)?;
+    let id = parse_relationship_id(&id)?;
+    // History is available for active and archived assertions in the active project only.
+    store
+        .get_relationship(id)?
+        .ok_or_else(|| ui_storage_error("Connection no longer exists in this project."))?;
+    Ok(store.list_relationship_revisions(id)?)
 }
 
 #[tauri::command]
@@ -1918,6 +1957,9 @@ pub fn run() {
             discard_forge_bundle,
             save_forge_bundle,
             list_relationships_for_entity,
+            promote_relationship,
+            archive_relationship,
+            list_relationship_revisions,
             set_field_lock,
             reroll_field,
             reroll_unlocked,

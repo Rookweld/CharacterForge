@@ -253,6 +253,30 @@ export type ForgeRelationship = {
   created_at_unix_ms: number;
   updated_at_unix_ms: number;
 };
+export type ConnectionView = {
+  relationship: ForgeRelationship;
+  writeVersion: number;
+  role: 'source' | 'target';
+  relatedId: string;
+  relatedType: Envelope['entity_type'];
+  relatedName: string | null;
+  relatedAvailability: 'available' | 'archived' | 'missing';
+  definition: {
+    key: ForgeRelationship['relationship_type'];
+    relationshipType: ForgeRelationship['relationship_type'];
+    source: Envelope['entity_type'];
+    target: Envelope['entity_type'];
+    directed: boolean;
+    sourcePhrase: string;
+    inversePhrase: string;
+  };
+};
+export type RelationshipRevision = {
+  revisionNumber: number;
+  reason: string;
+  relationship: ForgeRelationship;
+  createdAtUnixMs: number;
+};
 export type HometownContextSnapshot = {
   format_version: number;
   context_recipe_id: string;
@@ -463,7 +487,13 @@ export const api = {
   saveForgeBundle: () => invoke<ForgeBundleSaveResponse>('save_forge_bundle'),
   discardForgeBundle: () => invoke<void>('discard_forge_bundle'),
   relationshipsForEntity: (id: string) =>
-    invoke<ForgeRelationship[]>('list_relationships_for_entity', { id }),
+    invoke<ConnectionView[]>('list_relationships_for_entity', { id }),
+  promoteRelationship: (id: string, expectedVersion: number) =>
+    invoke<number>('promote_relationship', { id, expectedVersion }),
+  archiveRelationship: (id: string, expectedVersion: number) =>
+    invoke<number>('archive_relationship', { id, expectedVersion }),
+  relationshipRevisions: (id: string) =>
+    invoke<RelationshipRevision[]>('list_relationship_revisions', { id }),
   setLock: (field: string, locked: boolean) =>
     invoke<ForgePayload>('set_field_lock', { field, locked }),
   reroll: (field: string) => invoke<ForgePayload>('reroll_field', { field }),

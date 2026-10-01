@@ -12,6 +12,7 @@ import {
   api,
   type Character,
   type CharacterCandidate,
+  type ConnectionView,
   type CreatureCandidate,
   type EntityRecord,
   type FactionCandidate,
@@ -1958,5 +1959,180 @@ describe('desktop creative workflows', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'changed since you opened it',
     );
+  });
+});
+
+describe('universal saved entity Connections', () => {
+  it.each([
+    ['Characters', character, 'character-1'],
+    ['Quests', quest, 'quest-1'],
+    ['Locations', locationPayload, 'location-1'],
+    ['Factions', factionPayload, 'faction-1'],
+    ['Items', itemPayload, 'item-1'],
+    ['Creatures', creaturePayload, 'creature-1'],
+  ] as const)(
+    'renders Connections in %s detail',
+    async (section, payload, id) => {
+      vi.mocked(api.getEntity).mockResolvedValue(record(payload));
+      await openWorkspace([record(payload)]);
+      fireEvent.click(
+        within(
+          screen.getByRole('navigation', { name: 'Main navigation' }),
+        ).getByRole('button', { name: new RegExp(`^${section}`) }),
+      );
+      const list = screen
+        .getByRole('heading', { name: section, level: 2 })
+        .closest('section');
+      if (!list) throw new Error('Missing library');
+      const open = await waitFor(() => {
+        const row = list.querySelector('button.record-main');
+        if (!row) throw new Error('Missing entity row');
+        return row;
+      });
+      fireEvent.click(open);
+      const connections = await screen.findByRole('region', {
+        name: 'Connections',
+      });
+      expect(
+        await within(connections).findByText('No connections yet.'),
+      ).toBeInTheDocument();
+      expect(api.relationshipsForEntity).toHaveBeenCalledWith(id);
+    },
+  );
+});
+
+describe('Hometown Connections handoff', () => {
+  it('uses the saved bundle from both endpoints through explicit Canon and archive actions', async () => {
+    let state: ConnectionView['relationship']['state'] = 'candidate';
+    let version = 1;
+    vi.mocked(api.getEntity).mockImplementation(async (id) =>
+      id === 'character-1' ? record(character) : record(locationPayload),
+    );
+    vi.mocked(api.relationshipsForEntity).mockImplementation(async (id) => [
+      {
+        relationship: { ...hometownBundle.relationship, state },
+        writeVersion: version,
+        role: id === 'character-1' ? 'source' : 'target',
+        relatedId: id === 'character-1' ? 'location-1' : 'character-1',
+        relatedName: id === 'character-1' ? 'North Bell Lodge' : 'Mara Vale',
+        relatedType: id === 'character-1' ? 'location' : 'character',
+        relatedAvailability: 'available',
+        definition: {
+          key: 'born_in',
+          relationshipType: 'born_in',
+          source: 'character',
+          target: 'location',
+          directed: true,
+          sourcePhrase: 'Born in',
+          inversePhrase: 'Birthplace of',
+        },
+      },
+    ]);
+    vi.mocked(api.promoteRelationship).mockImplementation(async () => {
+      state = 'canon';
+      return ++version;
+    });
+    vi.mocked(api.archiveRelationship).mockImplementation(async () => {
+      state = 'archived';
+      return ++version;
+    });
+    vi.mocked(api.relationshipRevisions).mockResolvedValue([
+      {
+        revisionNumber: 1,
+        reason: 'promoted to canon',
+        relationship: { ...hometownBundle.relationship, state: 'canon' },
+        createdAtUnixMs: 2,
+      },
+      {
+        revisionNumber: 2,
+        reason: 'archive relationship',
+        relationship: { ...hometownBundle.relationship, state: 'canon' },
+        createdAtUnixMs: 3,
+      },
+    ]);
+    await openWorkspace([record(character)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Forge Hometown' }),
+    );
+    expect(
+      await screen.findByText(
+        /Proposed relationship: Born in North Bell Lodge/,
+      ),
+    ).toBeInTheDocument();
+    vi.mocked(api.listEntities).mockResolvedValue([
+      record(character),
+      record(locationPayload),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Save Bundle' }));
+    expect(await screen.findByText(/saved together/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Locations/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /North Bell Lodge/ }),
+    );
+    expect(
+      await screen.findByText(
+        'Birthplace of Mara Vale · character · Candidate · generated',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Promote connection to Canon' }),
+    );
+    expect(
+      await screen.findByText(
+        'Birthplace of Mara Vale · character · Canon · generated',
+      ),
+    ).toBeInTheDocument();
+    expect(api.promoteRelationship).toHaveBeenCalledWith(
+      'relationship-hometown',
+      1,
+    );
+    expect(api.promote).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      await screen.findByText(
+        'Born in North Bell Lodge · location · Canon · generated',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Archive connection' }));
+    fireEvent.click(
+      await screen.findByText('Archived connections · read-only (1)'),
+    );
+    expect(
+      screen.getByText(
+        'Born in North Bell Lodge · location · Archived · generated',
+      ),
+    ).toBeInTheDocument();
+    expect(api.archiveRelationship).toHaveBeenCalledWith(
+      'relationship-hometown',
+      2,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Inspect connection history' }),
+    );
+    expect(
+      await screen.findByText('Revision 1 · promoted to canon'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Revision 2 · archive relationship'),
+    ).toBeInTheDocument();
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^Locations/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /North Bell Lodge/ }),
+    );
+    fireEvent.click(
+      await screen.findByText('Archived connections · read-only (1)'),
+    );
+    expect(
+      screen.getByText(
+        'Birthplace of Mara Vale · character · Archived · generated',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Archive connection' }),
+    ).not.toBeInTheDocument();
   });
 });

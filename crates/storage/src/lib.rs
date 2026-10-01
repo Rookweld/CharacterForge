@@ -4,8 +4,8 @@
 
 use forge_app_core::{
     CharacterCandidate, CreatureCandidate, FactionCandidate, ForgeResultBundle, HometownSource,
-    ItemCandidate, LocationCandidate, QuestCandidate, compile_hometown_context,
-    validate_relationship_endpoints,
+    ItemCandidate, LocationCandidate, QuestCandidate, RelationshipDefinition,
+    compile_hometown_context, relationship_definition, validate_relationship_endpoints,
 };
 use forge_contracts::{
     CanonState, Character, Creature, EntityEnvelope, EntityId, EntityOrigin, EntityType, Faction,
@@ -287,12 +287,42 @@ pub struct RelationshipRecord {
     pub write_version: i64,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RelationshipRevision {
     pub revision_number: i64,
     pub reason: String,
     pub relationship: Relationship,
     pub created_at_unix_ms: i64,
+}
+
+/// Presentation of one persisted assertion from either endpoint; never an inverse row.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionRole {
+    Source,
+    Target,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelatedAvailability {
+    Available,
+    Archived,
+    Missing,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionView {
+    pub relationship: Relationship,
+    pub write_version: i64,
+    pub role: ConnectionRole,
+    pub related_id: EntityId,
+    pub related_type: EntityType,
+    pub related_name: Option<String>,
+    pub related_availability: RelatedAvailability,
+    pub definition: RelationshipDefinition,
 }
 
 #[derive(Debug)]
@@ -450,6 +480,78 @@ impl ProjectStore {
         .collect()
     }
 
+    /// Resolves only this project's saved endpoints, including archived assertions.
+    pub fn list_connection_views(&self, id: EntityId) -> StoreResult<Vec<ConnectionView>> {
+        let viewed = self
+            .get_entity(id)?
+            .ok_or_else(|| StoreError::NotFound(id_text(id.uuid())))?;
+        let project_id = viewed.entity.envelope().project_id;
+        self.list_relationships_for_entity(id)?
+            .into_iter()
+            .map(|record| {
+                let relationship = record.relationship;
+                if relationship.project_id != project_id {
+                    return Err(StoreError::Corrupt(
+                        "connection crosses project boundary".into(),
+                    ));
+                }
+                let definition = *relationship_definition(relationship.relationship_type);
+                let (role, related_id, related_type, viewed_type) = if relationship.source_id == id
+                {
+                    (
+                        ConnectionRole::Source,
+                        relationship.target_id,
+                        definition.target,
+                        definition.source,
+                    )
+                } else {
+                    (
+                        ConnectionRole::Target,
+                        relationship.source_id,
+                        definition.source,
+                        definition.target,
+                    )
+                };
+                if viewed.entity.envelope().entity_type != viewed_type {
+                    return Err(StoreError::Corrupt(
+                        "connection endpoint type disagrees with definition".into(),
+                    ));
+                }
+                let related = self.get_entity(related_id)?;
+                let (related_name, related_availability) = match related {
+                    None => (None, RelatedAvailability::Missing),
+                    Some(record) => {
+                        let envelope = record.entity.envelope();
+                        if envelope.project_id != project_id || envelope.entity_type != related_type
+                        {
+                            return Err(StoreError::Corrupt(
+                                "related endpoint crosses project or type boundary".into(),
+                            ));
+                        }
+                        (
+                            Some(envelope.name.clone()),
+                            if envelope.canon_state == CanonState::Archived {
+                                RelatedAvailability::Archived
+                            } else {
+                                RelatedAvailability::Available
+                            },
+                        )
+                    }
+                };
+                Ok(ConnectionView {
+                    relationship,
+                    write_version: record.write_version,
+                    role,
+                    related_id,
+                    related_type,
+                    related_name,
+                    related_availability,
+                    definition,
+                })
+            })
+            .collect()
+    }
+
     pub fn promote_relationship(&mut self, id: RelationshipId, expected: i64) -> StoreResult<i64> {
         self.mutate_relationship(
             id,
@@ -557,7 +659,9 @@ impl ProjectStore {
             .ok_or_else(|| StoreError::NotFound(id_text(id.uuid())))?;
         check_version(expected, Some(current))?;
         let mut relationship = decode_relationship(&body)?;
-        let prior_updated_at = relationship.updated_at_unix_ms;
+        // One timestamp for the mutation and promotion snapshot; separate clock reads
+        // previously allowed current Canon and its revision to differ by 1 ms.
+        let mutation_time = now_unix_ms()?.max(relationship.updated_at_unix_ms);
         if relationship.state == RelationshipState::Archived {
             return Err(StoreError::InvalidOperation(
                 "archived relationship is immutable".into(),
@@ -570,7 +674,7 @@ impl ProjectStore {
         }
         if state == RelationshipState::Canon {
             relationship.state = RelationshipState::Canon;
-            relationship.updated_at_unix_ms = now_unix_ms()?.max(prior_updated_at);
+            relationship.updated_at_unix_ms = mutation_time;
         }
         if let Some(reason) = reason {
             let revision_number: i64 = tx.query_row("SELECT COALESCE(MAX(revision_number),0)+1 FROM relationship_revisions WHERE relationship_id=?1", [id_text(id.uuid())], |row| row.get(0))?;
@@ -579,10 +683,10 @@ impl ProjectStore {
             } else {
                 body
             };
-            tx.execute("INSERT INTO relationship_revisions(relationship_id,revision_number,reason,body_json,created_at) VALUES (?1,?2,?3,?4,?5)", params![id_text(id.uuid()), revision_number, reason, snapshot, now_unix_ms()?])?;
+            tx.execute("INSERT INTO relationship_revisions(relationship_id,revision_number,reason,body_json,created_at) VALUES (?1,?2,?3,?4,?5)", params![id_text(id.uuid()), revision_number, reason, snapshot, mutation_time])?;
         }
         relationship.state = state;
-        relationship.updated_at_unix_ms = now_unix_ms()?.max(prior_updated_at);
+        relationship.updated_at_unix_ms = mutation_time;
         let new_body = encode_json(&relationship)?;
         let changed = tx.execute("UPDATE relationships SET state=?1,body_json=?2,updated_at=?3,write_version=write_version+1 WHERE id=?4 AND write_version=?5", params![relationship_state(state), new_body, relationship.updated_at_unix_ms, id_text(id.uuid()), expected])?;
         if changed != 1 {

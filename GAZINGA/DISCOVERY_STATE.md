@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B6_RELATIONSHIP_LIFECYCLE — prepared for execution
+THE_FORGE_B6_RELATIONSHIP_LIFECYCLE — universal Connections and explicit lifecycle
 
 ## Status
 
-**B5 PASS — B6 RELATIONSHIP LIFECYCLE AUTHORIZED**
+**B6 PASS — automated exit gates satisfied**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,7 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `821dbeb` (`feat: add Creature Forge core`)
+- HEAD: `51d32babb3f7a0ff3f3d6067e72af09d25f95a28` (`docs: prepare Relationship lifecycle mission`)
+- worktree: B6 implementation/tests/docs unstaged and uncommitted; four unrelated files preserved
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -198,6 +199,20 @@ Branch `master`; accepted B5 implementation commit `821dbeb` (`feat: add Creatur
 
 **PASS. STOP.** No Creature Forge Further, World Forge or later mission was begun.
 
+## B6 Result
+
+**PASS — automated exit gates satisfied.** Universal saved-entity Connections, metadata-driven source/inverse grammar for the four existing types, actual persisted write versions, explicit Candidate promotion, archive, and read-only history are implemented. No schema/vocabulary/entity-truth change or new Forge action is included. The prior promotion timestamp race is repaired by sharing one monotonic timestamp between the current row and its Canon revision; baseline assertions remain intact.
+
+Final evidence: **187 Rust tests PASS, 1 existing fixture writer ignored; 79 frontend tests PASS**. Normal parallel Rust execution passed both explicit no-fail-fast and final sequential `scripts/verify.ps1` runs, including the 1,000-sequence gauntlet. Format/lint/typecheck/frontend build, Rust format/strict Clippy, full offline Cargo metadata, optimized Tauri no-bundle build and final `git diff --check` PASS. Exact executable: `C:\dev\CharacterForge\target\mission-b6-verify\release\character-forge-desktop.exe`; ProductVersion/FileVersion 1.0.0. The initial overlapping consolidated run hit a Windows test-executable linker lock; its log is preserved and the sequential complete rerun passed. The machine npm launcher remains unavailable; configured pnpm checks pass.
+
+Real reviewed Hometown Candidate → Canon → Archived is visible from both endpoints with immutable revisions, unchanged entity truth and frozen provenance. No B6 P0/P1/P2 remains known. No independent native smoke is claimed. Existing P3 UI-001 and Mission 08's accepted incomplete transitive advisory verification limitation remain documented.
+
+Branch `master`, unchanged HEAD `51d32babb3f7a0ff3f3d6067e72af09d25f95a28`. Twelve B6 implementation/test/doc files remain unstaged/uncommitted. All four unrelated untracked files remain byte-identical by SHA-256. No reset/commit/tag/push/publication occurred. See `docs/missions/THE_FORGE_B6_RELATIONSHIP_LIFECYCLE_REPORT.md`.
+
+## B6 Exit Gate
+
+**PASS. STOP.** No Link Existing, new relationship vocabulary, new Forge Further action, Visual Forge or later mission was begun.
+
 ## Still Open
 
 - Manual Link Existing Candidate vs Canon default
@@ -207,9 +222,9 @@ Branch `master`; accepted B5 implementation commit `821dbeb` (`feat: add Creatur
 - Visual Canon
 - World/Lore epistemic truth
 
-None are required for B5.
+None are required for B6.
 
-## Deferred After B5
+## Deferred After B6
 
 - Creature Forge Further
 - Item Forge Further
