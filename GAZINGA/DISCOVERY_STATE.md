@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B6_RELATIONSHIP_LIFECYCLE — universal Connections and explicit lifecycle
+THE_FORGE_B7_CHARACTER_FACTION — prepared for execution
 
 ## Status
 
-**B6 PASS — automated exit gates satisfied**
+**B6 PASS — B7 CHARACTER → FACTION AUTHORIZED**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,7 +22,7 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `51d32babb3f7a0ff3f3d6067e72af09d25f95a28` (`docs: prepare Relationship lifecycle mission`)
+- HEAD: `ce6caf0` (`feat: add relationship lifecycle UI`)
 - worktree: B6 implementation/tests/docs unstaged and uncommitted; four unrelated files preserved
 - database schema: 2
 - forgeproject archive format: v1
@@ -207,11 +207,17 @@ Final evidence: **187 Rust tests PASS, 1 existing fixture writer ignored; 79 fro
 
 Real reviewed Hometown Candidate → Canon → Archived is visible from both endpoints with immutable revisions, unchanged entity truth and frozen provenance. No B6 P0/P1/P2 remains known. No independent native smoke is claimed. Existing P3 UI-001 and Mission 08's accepted incomplete transitive advisory verification limitation remain documented.
 
-Branch `master`, unchanged HEAD `51d32babb3f7a0ff3f3d6067e72af09d25f95a28`. Twelve B6 implementation/test/doc files remain unstaged/uncommitted. All four unrelated untracked files remain byte-identical by SHA-256. No reset/commit/tag/push/publication occurred. See `docs/missions/THE_FORGE_B6_RELATIONSHIP_LIFECYCLE_REPORT.md`.
+Branch `master`; accepted B6 implementation commit `ce6caf0` (`feat: add relationship lifecycle UI`). Four unrelated files remain untracked and preserved. See `docs/missions/THE_FORGE_B6_RELATIONSHIP_LIFECYCLE_REPORT.md`.
 
 ## B6 Exit Gate
 
-**PASS. STOP.** No Link Existing, new relationship vocabulary, new Forge Further action, Visual Forge or later mission was begun.
+**PASS.** B6 is committed at `ce6caf0`.
+
+## Next Mission
+
+`GAZINGA/missions/THE_FORGE_B7_CHARACTER_FACTION.md`
+
+Scope: Character → Forge Their Faction using bounded Character context, canonical FactionForge, Candidate member_of relationship, reviewed-DNA provenance parity, atomic bundle save, and B6 Connections lifecycle. No Link Existing, no bundled Canon promotion, no new relationship vocabulary, no Visual Forge yet.
 
 ## Still Open
 
