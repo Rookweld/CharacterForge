@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B9_VISUAL_FORGE_FOUNDATION — closed at exit gate
+THE_FORGE_B10_COMFYUI_LOCAL_PROVIDER — prepared for execution
 
 ## Status
 
-**B9 PASS — automated exit gates satisfied. STOP.**
+**B9 PASS — B10 LOCAL COMFYUI PROVIDER AUTHORIZED**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,8 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `a925d7f6cf1a5048afc2fee49184da2b16c1c369` (B9 starting/current HEAD)
-- worktree: twelve B9 source/test/doc files unstaged/uncommitted; index empty; four unrelated files preserved
+- HEAD: `9284c08` (`feat: add Visual Forge foundation`)
+- worktree: B10 mission prep only; four unrelated files preserved
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -36,7 +36,7 @@ The operator has authorized continued non-destructive development through bounde
 - standalone deterministic Creature Forge: implemented and verified; B5 closed
 - universal Connections / independent Relationship lifecycle: implemented and verified; B6 closed
 - Character → Forge Their Faction: implemented and verified; B7 closed
-- Character → Forge Their Signature Item: implemented and verified; B8 accepted at `7b22eb9`
+- Character → Forge Their Signature Item: implemented and verified; B8 accepted at `7b22eb9``r`n- provider-neutral Visual Forge foundation: implemented and verified; B9 accepted at `9284c08`
 
 Unrelated files to preserve and never absorb:
 
