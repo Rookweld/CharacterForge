@@ -367,6 +367,39 @@ export type FactionBundleSaveResponse = {
   relationship: ForgeRelationship;
   eventId: number;
 };
+export type SignatureItemContextSnapshot = Omit<
+  HometownContextSnapshot,
+  'facts'
+> & {
+  facts: Omit<HometownContextSnapshot['facts'], 'faction_hint'> & {
+    appearance: string;
+    personality: string[];
+    fear: string;
+    flaw: string;
+    signature_gear: string;
+    skills: string[];
+    abilities: string[];
+    relationship_hook: string;
+  };
+};
+export type SignatureItemResultBundle = Omit<
+  FactionResultBundle,
+  'primary' | 'recipe' | 'result'
+> & {
+  primary: ItemCandidate;
+  recipe: Omit<FactionResultBundle['recipe'], 'context_snapshot'> & {
+    context_snapshot: SignatureItemContextSnapshot;
+  };
+  result: Omit<
+    FactionResultBundle['result'],
+    'primary_output_type' | 'relationship_type'
+  > & { primary_output_type: 'item'; relationship_type: 'owns' };
+};
+export type SignatureItemBundleSaveResponse = {
+  item: EntityRecord;
+  relationship: ForgeRelationship;
+  eventId: number;
+};
 export type HistoryRecord = {
   runId: string;
   entityId: string | null;
@@ -517,6 +550,13 @@ export const api = {
     invoke<ForgePayload>('forge_item', { preset, seed, axes }),
   forgeCreature: (preset: string, seed: number, axes: Record<Axis, number>) =>
     invoke<ForgePayload>('forge_creature', { preset, seed, axes }),
+  forgeCharacterSignatureItem: (sourceId: string, seed: number) =>
+    invoke<SignatureItemResultBundle>('forge_character_signature_item', {
+      sourceId,
+      seed,
+    }),
+  saveSignatureItemBundle: () =>
+    invoke<SignatureItemBundleSaveResponse>('save_signature_item_bundle'),
   forgeCharacterFaction: (sourceId: string, seed: number) =>
     invoke<FactionResultBundle>('forge_character_faction', { sourceId, seed }),
   saveFactionBundle: () =>

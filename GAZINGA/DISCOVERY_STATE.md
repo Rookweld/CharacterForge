@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM — prepared for execution
+THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM — closed at exit gate
 
 ## Status
 
-**B7 PASS — B8 CHARACTER → SIGNATURE ITEM AUTHORIZED**
+**B8 PASS — all automated exit gates satisfied**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,8 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `78c0e19` (`feat: add Character faction Forge Further`)
-- worktree: B7 implementation/tests/docs unstaged and uncommitted; four unrelated files preserved
+- HEAD: `ecdd143061d2e66b4dbfb5667f1fe5b944328235` (B8 starting HEAD)
+- worktree: B8 changes unstaged/uncommitted; four unrelated files preserved
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -34,6 +34,9 @@ The operator has authorized continued non-destructive development through bounde
 - standalone deterministic Faction Forge: implemented and verified
 - standalone deterministic Item Forge: implemented and verified; B4 closed
 - standalone deterministic Creature Forge: implemented and verified; B5 closed
+- universal Connections / independent Relationship lifecycle: implemented and verified; B6 closed
+- Character → Forge Their Faction: implemented and verified; B7 closed
+- Character → Forge Their Signature Item: implemented and verified; B8 closed, uncommitted
 
 Unrelated files to preserve and never absorb:
 
@@ -227,11 +230,19 @@ Branch `master`; accepted B7 implementation commit `78c0e19` (`feat: add Charact
 
 **PASS.** B7 is committed at `78c0e19`.
 
-## Next Mission
+## B8 Result
 
-`GAZINGA/missions/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM.md`
+**PASS — automated exit gates satisfied.** The third real Forge Further action is saved Character → Forge Their Signature Item: `character.forge-signature-item` v1 / `character-signature-item-v1` v1. Fifteen exact bounded frozen Character facts, canonical ItemForge, gear-prioritized intent, Generated Candidate Owns, final reviewed DNA parity and atomic Item/relationship/typed immutable operation save. Source context/hash and stable identities remain frozen. No source mutation, graph traversal or inverse duplicate; B6 lifecycle remains independent.
 
-Scope: Character → Forge Their Signature Item using bounded Character context, canonical ItemForge, Candidate owns relationship, reviewed-DNA provenance parity, atomic bundle save, and B6 Connections lifecycle. No wields, Link Existing, bundled Canon promotion, new vocabulary, multi-source Forge, or Visual Forge yet.
+Final evidence: **208 Rust tests PASS, one existing fixture writer ignored; 90 frontend tests PASS**. Explicit workspace no-fail-fast and sequential `scripts/verify.ps1` pass, including the 1,000-sequence gauntlet. Frontend format/lint/typecheck/build, Rust format/strict all-target Clippy, full offline Cargo metadata, optimized Tauri no-bundle build and final `git diff --check` PASS. Exact executable: `C:\dev\CharacterForge\target\mission-b8-verify\release\character-forge-desktop.exe`, ProductVersion/FileVersion 1.0.0. Machine npm shim remains unavailable; configured Corepack/pnpm tests pass.
+
+Quality: 44 individually classified generated/content-author examples, four per ten non-Chaos presets plus four Chaos; all usable with minor editing. Principal gear profile/function, source role/skills/abilities, custody/history/secret/hooks reviewed. All full creative bodies distinct; no generated UUID/hash/game-stat leakage found. Independent executable replay reproduced all 44 snapshots exactly. No independent native/human operator smoke claimed. No known B8 P0/P1/P2 remains. Existing P3 UI-001 and Mission 08's incomplete automated transitive advisory scan remain documented limitations. Schema 2, archive v1, app 1.0.0 and existing generator/content versions unchanged.
+
+Branch `master`; HEAD `ecdd143061d2e66b4dbfb5667f1fe5b944328235`; sixteen B8 files unstaged/uncommitted, four unrelated files preserved byte-identically by SHA-256. No reset/staging/commit/tag/push/publication. See `docs/missions/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM_REPORT.md` and `docs/quality/THE_FORGE_B8_CHARACTER_SIGNATURE_ITEM_SAMPLES.md`.
+
+## B8 Exit Gate
+
+**PASS. STOP.** No Visual Forge, Link Existing, multi-source Forge, Creature/Item/Faction reverse Forge Further or later mission begun. Await operator direction.
 
 ## Still Open
 
@@ -242,9 +253,9 @@ Scope: Character → Forge Their Signature Item using bounded Character context,
 - Visual Canon
 - World/Lore epistemic truth
 
-None are required for B7.
+None are required for B8.
 
-## Deferred After B7
+## Deferred After B8
 
 - Creature Forge Further
 - Item Forge Further

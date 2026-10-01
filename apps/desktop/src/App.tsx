@@ -22,6 +22,7 @@ import {
   type Quest,
   type RecentProject,
   type Revision,
+  type SignatureItemResultBundle,
   type UiError,
   type UserSettings,
   type WorkingState,
@@ -30,7 +31,33 @@ import { Connections } from './Connections';
 
 type FurtherReview =
   | { kind: 'hometown'; bundle: ForgeResultBundle }
-  | { kind: 'faction'; bundle: FactionResultBundle };
+  | { kind: 'faction'; bundle: FactionResultBundle }
+  | { kind: 'item'; bundle: SignatureItemResultBundle };
+const furtherLabels = {
+  hometown: 'Hometown',
+  faction: 'Faction',
+  item: 'Signature Item',
+};
+const furtherActions = {
+  hometown: 'Hometown',
+  faction: 'Forge Their Faction',
+  item: 'Forge Their Signature Item',
+};
+const furtherPhrases = {
+  hometown: 'Born in',
+  faction: 'Member of',
+  item: 'Owns',
+};
+function furtherPayload(review: FurtherReview): ForgePayload {
+  switch (review.kind) {
+    case 'hometown':
+      return { kind: 'location_candidate', value: review.bundle.primary };
+    case 'faction':
+      return { kind: 'faction_candidate', value: review.bundle.primary };
+    case 'item':
+      return { kind: 'item_candidate', value: review.bundle.primary };
+  }
+}
 
 type Section =
   | 'forge'
@@ -927,9 +954,11 @@ export function App() {
     if (furtherPending && furtherReview) {
       await run(
         async () =>
-          furtherReview.kind === 'faction'
-            ? (await api.saveFactionBundle()).faction
-            : (await api.saveForgeBundle()).location,
+          furtherReview.kind === 'item'
+            ? (await api.saveSignatureItemBundle()).item
+            : furtherReview.kind === 'faction'
+              ? (await api.saveFactionBundle()).faction
+              : (await api.saveForgeBundle()).location,
         (saved) => {
           setRecords((old) =>
             old.some((row) => entityId(row.entity) === entityId(saved.entity))
@@ -944,9 +973,11 @@ export function App() {
           setFurtherPending(false);
           void api.listEntities().then(setRecords);
           setNotice(
-            furtherReview.kind === 'faction'
-              ? 'Faction and member_of Candidate relationship saved together.'
-              : 'Hometown Location and born_in Candidate relationship saved together.',
+            furtherReview.kind === 'item'
+              ? 'Item and owns Candidate relationship saved together.'
+              : furtherReview.kind === 'faction'
+                ? 'Faction and member_of Candidate relationship saved together.'
+                : 'Hometown Location and born_in Candidate relationship saved together.',
           );
         },
       );
@@ -1108,22 +1139,26 @@ export function App() {
     const sourceId = entityId(record.entity);
     void run(
       async (): Promise<FurtherReview> =>
-        kind === 'faction'
+        kind === 'item'
           ? {
               kind,
-              bundle: await api.forgeCharacterFaction(sourceId, actionSeed),
+              bundle: await api.forgeCharacterSignatureItem(
+                sourceId,
+                actionSeed,
+              ),
             }
-          : { kind, bundle: await api.forgeHometown(sourceId, actionSeed) },
+          : kind === 'faction'
+            ? {
+                kind,
+                bundle: await api.forgeCharacterFaction(sourceId, actionSeed),
+              }
+            : { kind, bundle: await api.forgeHometown(sourceId, actionSeed) },
       (review) => {
         setFurtherSourceId(sourceId);
         setFurtherReview(review);
         setFurtherPending(true);
-        setCandidate(
-          review.kind === 'faction'
-            ? { kind: 'faction_candidate', value: review.bundle.primary }
-            : { kind: 'location_candidate', value: review.bundle.primary },
-        );
-        setMode(review.kind === 'faction' ? 'faction' : 'location');
+        setCandidate(furtherPayload(review));
+        setMode(review.kind === 'hometown' ? 'location' : review.kind);
         setSelectedRecord(null);
         setDirty(true);
         setCanUndo(false);
@@ -1131,9 +1166,11 @@ export function App() {
         setRevisionTarget(false);
         navigateToSection('forge');
         setNotice(
-          review.kind === 'faction'
-            ? 'Review this Faction and its proposed member_of relationship before saving the bundle.'
-            : 'Review this Hometown and its proposed born_in relationship before saving the bundle.',
+          review.kind === 'item'
+            ? 'Review this Signature Item and its proposed owns relationship before saving the bundle.'
+            : review.kind === 'faction'
+              ? 'Review this Faction and its proposed member_of relationship before saving the bundle.'
+              : 'Review this Hometown and its proposed born_in relationship before saving the bundle.',
         );
       },
     );
@@ -1142,6 +1179,8 @@ export function App() {
     forgeFurtherFrom(record, 'hometown');
   const forgeFactionFrom = (record: EntityRecord) =>
     forgeFurtherFrom(record, 'faction');
+  const forgeSignatureItemFrom = (record: EntityRecord) =>
+    forgeFurtherFrom(record, 'item');
   const discardHometown = () => {
     void run(
       () => api.discardForgeBundle(),
@@ -1151,9 +1190,11 @@ export function App() {
         setFurtherSourceId(null);
         clearWorkingView();
         setNotice(
-          furtherReview?.kind === 'faction'
-            ? 'Unsaved Faction bundle discarded.'
-            : 'Unsaved Hometown bundle discarded.',
+          furtherReview?.kind === 'item'
+            ? 'Unsaved Signature Item bundle discarded.'
+            : furtherReview?.kind === 'faction'
+              ? 'Unsaved Faction bundle discarded.'
+              : 'Unsaved Hometown bundle discarded.',
         );
         navigateToSection('characters');
       },
@@ -1814,19 +1855,10 @@ export function App() {
                   {furtherPending && furtherReview && (
                     <section
                       className="panel context-card"
-                      aria-label={
-                        furtherReview.kind === 'faction'
-                          ? 'Faction review'
-                          : 'Hometown review'
-                      }
+                      aria-label={`${furtherLabels[furtherReview.kind]} review`}
                     >
                       <p className="eyebrow">FORGE FURTHER REVIEW</p>
-                      <h3>
-                        {furtherReview.kind === 'faction'
-                          ? 'Forge Their Faction'
-                          : 'Hometown'}{' '}
-                        · Candidate
-                      </h3>
+                      <h3>{furtherActions[furtherReview.kind]} · Candidate</h3>
                       <p>
                         Source Character:{' '}
                         {records
@@ -1839,11 +1871,7 @@ export function App() {
                       <label className="field-control">
                         Action seed
                         <input
-                          aria-label={
-                            furtherReview.kind === 'faction'
-                              ? 'Faction action seed'
-                              : 'Hometown action seed'
-                          }
+                          aria-label={`${furtherLabels[furtherReview.kind]} action seed`}
                           type="number"
                           min="0"
                           step="1"
@@ -1855,20 +1883,12 @@ export function App() {
                       </label>
                       <p>
                         Proposed relationship:{' '}
-                        {furtherReview.kind === 'faction'
-                          ? 'Member of'
-                          : 'Born in'}{' '}
-                        {furtherReview.kind === 'faction'
-                          ? payloadTitle(
-                              candidate ?? {
-                                kind: 'faction_candidate',
-                                value: furtherReview.bundle.primary,
-                              },
-                            )
-                          : payloadTitle({
-                              kind: 'location_candidate',
-                              value: furtherReview.bundle.primary,
-                            })}
+                        {furtherPhrases[furtherReview.kind]}{' '}
+                        {payloadTitle(
+                          furtherReview.kind === 'hometown'
+                            ? furtherPayload(furtherReview)
+                            : (candidate ?? furtherPayload(furtherReview)),
+                        )}
                       </p>
                       <p>
                         Context:{' '}
@@ -2117,9 +2137,11 @@ export function App() {
                         Discard Bundle
                       </button>
                       <small>
-                        {furtherReview?.kind === 'faction'
-                          ? 'Faction and member_of relationship'
-                          : 'Location and born_in relationship'}{' '}
+                        {furtherReview?.kind === 'item'
+                          ? 'Item and owns relationship'
+                          : furtherReview?.kind === 'faction'
+                            ? 'Faction and member_of relationship'
+                            : 'Location and born_in relationship'}{' '}
                         save together with frozen provenance.
                       </small>
                     </>
@@ -2250,6 +2272,7 @@ export function App() {
             onExport={exportEntity}
             onForgeHometown={forgeHometownFrom}
             onForgeFaction={forgeFactionFrom}
+            onForgeSignatureItem={forgeSignatureItemFrom}
           />
         )}
         {section === 'quests' && (
@@ -2373,6 +2396,7 @@ export function App() {
               record={selectedRecord}
               onForgeHometown={forgeHometownFrom}
               onForgeFaction={forgeFactionFrom}
+              onForgeSignatureItem={forgeSignatureItemFrom}
             />
             {selectedRecord && (
               <RevisionPanel
@@ -2872,12 +2896,14 @@ function DetailView({
   onExport,
   onForgeHometown,
   onForgeFaction,
+  onForgeSignatureItem,
 }: {
   record: EntityRecord | null;
   revisions?: Revision[];
   onExport?: (record: EntityRecord, format: 'json' | 'markdown') => void;
   onForgeHometown?: (record: EntityRecord) => void;
   onForgeFaction?: (record: EntityRecord) => void;
+  onForgeSignatureItem?: (record: EntityRecord) => void;
 }) {
   if (!record)
     return (
@@ -2947,6 +2973,21 @@ function DetailView({
               onClick={() => onForgeFaction(record)}
             >
               Forge Their Faction
+            </button>
+          )}
+          {onForgeSignatureItem && (
+            <button
+              type="button"
+              className="primary"
+              disabled={!hometownSupported}
+              title={
+                hometownSupported
+                  ? 'Create a Signature Item Candidate from this saved Character.'
+                  : 'Forge Their Signature Item requires supported generated Character provenance.'
+              }
+              onClick={() => onForgeSignatureItem(record)}
+            >
+              Forge Their Signature Item
             </button>
           )}
           {!hometownSupported && (
@@ -3053,6 +3094,7 @@ function LibraryView({
   onExport,
   onForgeHometown,
   onForgeFaction,
+  onForgeSignatureItem,
 }: {
   title: string;
   records: EntityRecord[];
@@ -3066,6 +3108,7 @@ function LibraryView({
   onExport: (record: EntityRecord, format: 'json' | 'markdown') => void;
   onForgeHometown?: (record: EntityRecord) => void;
   onForgeFaction?: (record: EntityRecord) => void;
+  onForgeSignatureItem?: (record: EntityRecord) => void;
 }) {
   const [selected, setSelected] = useState<EntityRecord | null>(null);
   const select = (record: EntityRecord) => {
@@ -3116,6 +3159,7 @@ function LibraryView({
         onExport={onExport}
         onForgeHometown={onForgeHometown}
         onForgeFaction={onForgeFaction}
+        onForgeSignatureItem={onForgeSignatureItem}
       />
     </div>
   );

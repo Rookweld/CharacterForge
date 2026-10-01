@@ -5,8 +5,9 @@
 use forge_app_core::{
     CharacterCandidate, CreatureCandidate, FactionCandidate, FactionResultBundle,
     ForgeResultBundle, HometownSource, ItemCandidate, LocationCandidate, QuestCandidate,
-    RelationshipDefinition, compile_faction_context, compile_hometown_context,
-    relationship_definition, validate_faction_bundle, validate_relationship_endpoints,
+    RelationshipDefinition, SignatureItemResultBundle, compile_faction_context,
+    compile_hometown_context, compile_signature_item_context, relationship_definition,
+    validate_faction_bundle, validate_relationship_endpoints, validate_signature_item_bundle,
 };
 use forge_contracts::{
     CanonState, Character, Creature, EntityEnvelope, EntityId, EntityOrigin, EntityType, Faction,
@@ -206,6 +207,18 @@ pub struct FactionBundleSaveReceipt {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FactionBundleFailpoint {
+    Primary,
+    Relationship,
+    Event,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SignatureItemBundleSaveReceipt {
+    pub item_write_version: i64,
+    pub relationship_write_version: i64,
+    pub forge_event_id: i64,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SignatureItemBundleFailpoint {
     Primary,
     Relationship,
     Event,
@@ -973,6 +986,84 @@ impl ProjectStore {
         tx.commit()?;
         Ok(FactionBundleSaveReceipt {
             faction_write_version: 1,
+            relationship_write_version: 1,
+            forge_event_id,
+        })
+    }
+
+    pub fn save_signature_item_bundle(
+        &mut self,
+        source_id: EntityId,
+        expected_source_version: i64,
+        bundle: &SignatureItemResultBundle,
+    ) -> StoreResult<SignatureItemBundleSaveReceipt> {
+        self.save_signature_item_bundle_inner(source_id, expected_source_version, bundle, None)
+    }
+
+    fn save_signature_item_bundle_inner(
+        &mut self,
+        source_id: EntityId,
+        expected_source_version: i64,
+        bundle: &SignatureItemResultBundle,
+        fail_at: Option<SignatureItemBundleFailpoint>,
+    ) -> StoreResult<SignatureItemBundleSaveReceipt> {
+        validate_signature_item_bundle(bundle)?;
+        if bundle.recipe.context_snapshot.source_entity_id != source_id
+            || bundle.recipe.context_snapshot.source_write_version != expected_source_version
+        {
+            return Err(StoreError::InvalidOperation(
+                "Signature Item bundle source/version does not match the reviewed context".into(),
+            ));
+        }
+        let primary = StoredEntity::ItemCandidate(bundle.primary.clone());
+        let tx = self.connection.transaction()?;
+        let source = get_entity_tx(&tx, source_id)?
+            .ok_or_else(|| StoreError::NotFound(id_text(source_id.uuid())))?;
+        check_version(expected_source_version, Some(source.write_version))?;
+        let snapshot = compile_signature_item_context(&hometown_source(&source)?)?;
+        if snapshot != bundle.recipe.context_snapshot
+            || source.entity.envelope().project_id != primary.envelope().project_id
+        {
+            return Err(StoreError::InvalidOperation(
+                "Signature Item bundle no longer matches its persisted source context/project"
+                    .into(),
+            ));
+        }
+        insert_entity(&tx, &primary)?;
+        if fail_at == Some(SignatureItemBundleFailpoint::Primary) {
+            return Err(StoreError::InvalidOperation(
+                "injected Signature Item bundle failure after primary".into(),
+            ));
+        }
+        insert_candidate_relationship(&tx, &bundle.relationship)?;
+        if fail_at == Some(SignatureItemBundleFailpoint::Relationship) {
+            return Err(StoreError::InvalidOperation(
+                "injected Signature Item bundle failure after relationship".into(),
+            ));
+        }
+        let generation = primary.generation().ok_or_else(|| {
+            StoreError::InvalidOperation("Signature Item must retain generation provenance".into())
+        })?;
+        let recipe_json = encode_json(&bundle.recipe)?;
+        let result_json = encode_json(&ForgeBundleHistoryResult {
+            format_version: 1,
+            mapping: bundle.result.clone(),
+            primary_snapshot: primary.clone(),
+        })?;
+        tx.execute("INSERT INTO forge_runs(run_id,project_id,entity_id,action,parent_run_id,recipe_json,result_json,created_at) VALUES (?1,?2,?3,'forge_character_signature_item',NULL,?4,?5,?6)",
+            params![id_text(generation.generation_id.uuid()), id_text(primary.envelope().project_id.uuid()), id_text(primary.envelope().id.uuid()), recipe_json, result_json, generation.generated_at_unix_ms])?;
+        let forge_event_id = tx.last_insert_rowid();
+        if fail_at == Some(SignatureItemBundleFailpoint::Event) {
+            return Err(StoreError::InvalidOperation(
+                "injected Signature Item bundle failure after event".into(),
+            ));
+        }
+        let final_source = get_entity_tx(&tx, source_id)?
+            .ok_or_else(|| StoreError::NotFound(id_text(source_id.uuid())))?;
+        check_version(expected_source_version, Some(final_source.write_version))?;
+        tx.commit()?;
+        Ok(SignatureItemBundleSaveReceipt {
+            item_write_version: 1,
             relationship_write_version: 1,
             forge_event_id,
         })

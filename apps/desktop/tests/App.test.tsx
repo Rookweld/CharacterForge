@@ -507,6 +507,49 @@ const factionBundle = {
     relationship_type: 'member_of' as const,
   },
 };
+const signatureItemBundle = {
+  ...factionBundle,
+  primary: itemCandidate,
+  relationship: {
+    ...factionBundle.relationship,
+    id: 'relationship-signature-item',
+    relationship_type: 'owns' as const,
+    target_id: 'item-1',
+  },
+  recipe: {
+    ...factionBundle.recipe,
+    action_id: 'character.forge-signature-item',
+    context_recipe_id: 'character-signature-item-v1',
+    target_dna: itemCandidate.dna,
+    context_snapshot: {
+      ...factionBundle.recipe.context_snapshot,
+      facts: {
+        name: 'Mara Vale',
+        title: 'Road witness',
+        archetype: 'Guide',
+        role: 'Scout',
+        appearance: 'Weathered coat',
+        personality: ['Watchful'],
+        desire: 'Keep routes open',
+        fear: 'Losing the district',
+        flaw: 'Distrust',
+        signature_gear: 'A field journal',
+        skills: ['Tracking'],
+        abilities: ['Reads storms'],
+        relationship_hook: 'An old guide returns',
+        backstory_hook: 'A vanished road',
+        secret: 'A missing map',
+      },
+    },
+  },
+  result: {
+    ...factionBundle.result,
+    primary_output_type: 'item' as const,
+    primary_output_id: 'item-1',
+    relationship_ids: ['relationship-signature-item'],
+    relationship_type: 'owns' as const,
+  },
+};
 const record = (entity: ForgePayload, writeVersion = 1): EntityRecord => ({
   entity,
   writeVersion,
@@ -530,6 +573,14 @@ beforeEach(() => {
   vi.mocked(api.restoreBackup).mockResolvedValue(undefined);
   vi.mocked(api.exportEntity).mockResolvedValue(undefined);
   vi.mocked(api.forgeHometown).mockResolvedValue(hometownBundle);
+  vi.mocked(api.forgeCharacterSignatureItem).mockResolvedValue(
+    signatureItemBundle,
+  );
+  vi.mocked(api.saveSignatureItemBundle).mockResolvedValue({
+    item: record(itemPayload),
+    relationship: signatureItemBundle.relationship,
+    eventId: 3,
+  });
   vi.mocked(api.forgeCharacterFaction).mockResolvedValue(factionBundle);
   vi.mocked(api.saveFactionBundle).mockResolvedValue({
     faction: record(factionPayload),
@@ -2428,6 +2479,308 @@ describe('Faction Connections handoff', () => {
     );
     expect(
       screen.getByText('Member: Mara Vale · character · Archived · generated'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Archive connection' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('Character Signature Item review', () => {
+  async function startSignatureItem() {
+    await openWorkspace([record(character)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Forge Their Signature Item' }),
+    );
+    await screen.findByRole('region', { name: 'Signature Item review' });
+  }
+  it('offers the action on saved Canon Character and explains imported provenance', async () => {
+    const canon: ForgePayload = {
+      kind: 'character',
+      value: {
+        ...character.value.character,
+        envelope: {
+          ...character.value.character.envelope,
+          canon_state: 'canon',
+        },
+      },
+    };
+    await openWorkspace([record(canon, 5)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      screen.getByRole('button', { name: 'Forge Their Signature Item' }),
+    ).toBeEnabled();
+    cleanup();
+    const imported: ForgePayload = {
+      kind: 'character',
+      value: {
+        ...character.value.character,
+        envelope: { ...character.value.character.envelope, origin: 'imported' },
+      },
+    };
+    await openWorkspace([record(imported)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      screen.getByRole('button', { name: 'Forge Their Signature Item' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/no supported generated ForgeDNA/),
+    ).toBeInTheDocument();
+  });
+  it('reviews typed Item controls and saves a Candidate bundle through the dedicated command', async () => {
+    vi.mocked(api.setLock).mockResolvedValue(itemPayload);
+    vi.mocked(api.reroll).mockResolvedValue(itemPayload);
+    vi.mocked(api.rerollUnlocked).mockResolvedValue(itemPayload);
+    const edited: ForgePayload = {
+      kind: 'item_candidate',
+      value: {
+        ...itemCandidate,
+        item: {
+          ...itemCandidate.item,
+          envelope: {
+            ...itemCandidate.item.envelope,
+            name: 'Reviewed item name',
+          },
+        },
+      },
+    };
+    vi.mocked(api.editField).mockResolvedValue(edited);
+    await startSignatureItem();
+    expect(api.forgeCharacterSignatureItem).toHaveBeenCalledWith(
+      'character-1',
+      42,
+    );
+    expect(
+      screen.getByText(/Proposed relationship: Owns The Winter Pledge/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Name' }));
+    await waitFor(() => expect(api.setLock).toHaveBeenCalledWith('name', true));
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Item Profile' }));
+    await waitFor(() =>
+      expect(api.setLock).toHaveBeenCalledWith('item_profile', true),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reroll Item Profile' }),
+    );
+    await waitFor(() =>
+      expect(api.reroll).toHaveBeenCalledWith('item_profile'),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reroll all unlocked fields' }),
+    );
+    await waitFor(() => expect(api.rerollUnlocked).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Name' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Edit Name' }), {
+      target: { value: 'Reviewed item name' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+    await waitFor(() =>
+      expect(api.editField).toHaveBeenCalledWith('name', 'Reviewed item name'),
+    );
+    expect(
+      await screen.findByText(/Proposed relationship: Owns Reviewed item name/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save Bundle' }));
+    await waitFor(() =>
+      expect(api.saveSignatureItemBundle).toHaveBeenCalledOnce(),
+    );
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+    expect(api.saveForgeBundle).not.toHaveBeenCalled();
+    expect(api.saveFactionBundle).not.toHaveBeenCalled();
+    expect(api.promote).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        /Item and owns Candidate relationship saved together/,
+      ),
+    ).toBeInTheDocument();
+    expect(api.listEntities).toHaveBeenCalled();
+  });
+  it('discards without saving and explains unsupported manual provenance', async () => {
+    await startSignatureItem();
+    clickNamedButton('Discard Bundle', 0);
+    await waitFor(() => expect(api.discardForgeBundle).toHaveBeenCalledOnce());
+    expect(api.saveSignatureItemBundle).not.toHaveBeenCalled();
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+    cleanup();
+    await openWorkspace([record(manualCharacter)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      screen.getByRole('button', { name: 'Forge Their Signature Item' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/no supported generated ForgeDNA/),
+    ).toBeInTheDocument();
+  });
+  it('disables unsupported source generator versions without fabricating a recipe', async () => {
+    const unsupported = structuredClone(character);
+    const provenance =
+      unsupported.value.character.envelope.generation_provenance;
+    if (!provenance) throw new Error('Fixture requires generation provenance');
+    unsupported.value.character.envelope.generation_provenance = {
+      ...provenance,
+      dna: { ...dna, generator_version: 99 },
+    };
+    await openWorkspace([record(unsupported)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      screen.getByRole('button', { name: 'Forge Their Signature Item' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/no supported generated ForgeDNA/),
+    ).toBeInTheDocument();
+    expect(api.forgeCharacterSignatureItem).not.toHaveBeenCalled();
+  });
+  it('keeps review pending after a stale bundle error instead of faking success', async () => {
+    vi.mocked(api.saveSignatureItemBundle).mockRejectedValue({
+      code: 'conflict',
+      message: 'Source changed; forge again.',
+    });
+    await startSignatureItem();
+    fireEvent.click(screen.getByRole('button', { name: 'Save Bundle' }));
+    await waitFor(() =>
+      expect(api.saveSignatureItemBundle).toHaveBeenCalledOnce(),
+    );
+    expect(
+      screen.getByRole('region', { name: 'Signature Item review' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Save Bundle' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Item and owns Candidate relationship saved together/),
+    ).not.toBeInTheDocument();
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+  });
+});
+describe('Signature Item Connections handoff', () => {
+  it('uses the saved bundle from both endpoints through explicit Canon and archive actions', async () => {
+    let state: ConnectionView['relationship']['state'] = 'candidate';
+    let version = 1;
+    vi.mocked(api.getEntity).mockImplementation(async (id) =>
+      id === 'character-1' ? record(character) : record(itemPayload),
+    );
+    vi.mocked(api.relationshipsForEntity).mockImplementation(async (id) => [
+      {
+        relationship: { ...signatureItemBundle.relationship, state },
+        writeVersion: version,
+        role: id === 'character-1' ? 'source' : 'target',
+        relatedId: id === 'character-1' ? 'item-1' : 'character-1',
+        relatedName: id === 'character-1' ? 'The Winter Pledge' : 'Mara Vale',
+        relatedType: id === 'character-1' ? 'item' : 'character',
+        relatedAvailability: 'available',
+        definition: {
+          key: 'owns',
+          relationshipType: 'owns',
+          source: 'character',
+          target: 'item',
+          directed: true,
+          sourcePhrase: 'Owns',
+          inversePhrase: 'Owned by',
+        },
+      },
+    ]);
+    vi.mocked(api.promoteRelationship).mockImplementation(async () => {
+      state = 'canon';
+      return ++version;
+    });
+    vi.mocked(api.archiveRelationship).mockImplementation(async () => {
+      state = 'archived';
+      return ++version;
+    });
+    vi.mocked(api.relationshipRevisions).mockResolvedValue([
+      {
+        revisionNumber: 1,
+        reason: 'promoted to canon',
+        relationship: { ...signatureItemBundle.relationship, state: 'canon' },
+        createdAtUnixMs: 2,
+      },
+      {
+        revisionNumber: 2,
+        reason: 'archive relationship',
+        relationship: { ...signatureItemBundle.relationship, state: 'canon' },
+        createdAtUnixMs: 3,
+      },
+    ]);
+    await openWorkspace([record(character)]);
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Forge Their Signature Item' }),
+    );
+    expect(
+      await screen.findByText(/Proposed relationship: Owns The Winter Pledge/),
+    ).toBeInTheDocument();
+    vi.mocked(api.listEntities).mockResolvedValue([
+      record(character),
+      record(itemPayload),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Save Bundle' }));
+    expect(await screen.findByText(/saved together/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Items/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /The Winter Pledge/ }),
+    );
+    expect(
+      await screen.findByText(
+        'Owned by Mara Vale · character · Candidate · generated',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Promote connection to Canon' }),
+    );
+    expect(
+      await screen.findByText(
+        'Owned by Mara Vale · character · Canon · generated',
+      ),
+    ).toBeInTheDocument();
+    expect(api.promoteRelationship).toHaveBeenCalledWith(
+      'relationship-signature-item',
+      1,
+    );
+    expect(api.promote).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mara Vale/ }));
+    expect(
+      await screen.findByText(
+        'Owns The Winter Pledge · item · Canon · generated',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Archive connection' }));
+    fireEvent.click(
+      await screen.findByText('Archived connections · read-only (1)'),
+    );
+    expect(
+      screen.getByText('Owns The Winter Pledge · item · Archived · generated'),
+    ).toBeInTheDocument();
+    expect(api.archiveRelationship).toHaveBeenCalledWith(
+      'relationship-signature-item',
+      2,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Inspect connection history' }),
+    );
+    expect(
+      await screen.findByText('Revision 1 · promoted to canon'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Revision 2 · archive relationship'),
+    ).toBeInTheDocument();
+    expect(api.saveCandidate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^Items/ }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /The Winter Pledge/ }),
+    );
+    fireEvent.click(
+      await screen.findByText('Archived connections · read-only (1)'),
+    );
+    expect(
+      screen.getByText('Owned by Mara Vale · character · Archived · generated'),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Archive connection' }),

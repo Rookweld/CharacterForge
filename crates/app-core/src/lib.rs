@@ -59,3 +59,12 @@ pub use character_faction::{
     validate_faction_bundle,
 };
 pub use faction_context::CharacterFactionFacts;
+
+mod character_signature_item;
+mod item_context;
+pub use character_signature_item::{
+    FORGE_SIGNATURE_ITEM_ACTION, FORGE_SIGNATURE_ITEM_RECIPE, SignatureItemContextSnapshot,
+    SignatureItemRecipeRecord, SignatureItemResultBundle, compile_signature_item_context,
+    finalize_signature_item_review, forge_character_signature_item, validate_signature_item_bundle,
+};
+pub use item_context::CharacterItemFacts;

@@ -300,13 +300,7 @@ fn validate_item_dna(dna: &ForgeDNA) -> ValidationResult<()> {
             "unsupported Item preset",
         ));
     }
-    if !dna.recipe.constraints.is_empty() {
-        return Err(error(
-            ValidationCode::InvalidConstraint,
-            "constraints",
-            "Item Forge does not currently support generation constraints",
-        ));
-    }
+    crate::item_context::from_dna(dna)?;
     let expected = ITEM_FIELD_ORDER
         .into_iter()
         .map(ItemField::key)
@@ -378,6 +372,20 @@ fn generate_values(dna: &ForgeDNA) -> ValidationResult<FieldValues<ItemFieldValu
 }
 
 fn generate_field(
+    dna: &ForgeDNA,
+    source: &str,
+    field: ItemField,
+    profile: Option<ItemProfile>,
+    stream: &mut FieldStream,
+) -> ValidationResult<ItemFieldValue> {
+    let base = generate_base_field(dna, source, field, profile, stream)?;
+    match crate::item_context::from_dna(dna)? {
+        None => Ok(base),
+        Some(facts) => crate::item_context::adapt(&facts, dna, source, field, base, stream),
+    }
+}
+
+fn generate_base_field(
     dna: &ForgeDNA,
     source: &str,
     field: ItemField,

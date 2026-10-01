@@ -3139,3 +3139,189 @@ fn character_faction_member_of_views_and_lifecycle_preserve_independent_entity_t
     assert_eq!(store.get_entity(target_id).unwrap(), target);
     assert_eq!(store.list_history(Some(target_id)).unwrap(), events);
 }
+
+fn saved_character_signature_item_bundle(
+    store: &mut ProjectStore,
+    seed: u64,
+    canon: bool,
+) -> (EntityId, i64, forge_app_core::SignatureItemResultBundle) {
+    let source = character_candidate(seed);
+    let id = source.character.envelope.id;
+    store
+        .persist_candidate(StoredEntity::CharacterCandidate(source))
+        .unwrap();
+    if canon {
+        store.promote_candidate(id, 1).unwrap();
+    }
+    let record = store.get_entity(id).unwrap().unwrap();
+    let snapshot = hometown_source(&record).unwrap();
+    let bundle =
+        forge_app_core::forge_character_signature_item(&snapshot, 9876, project_id()).unwrap();
+    (id, record.write_version, bundle)
+}
+
+#[test]
+fn character_signature_item_candidate_and_canon_sources_save_exact_typed_review_and_reopen() {
+    for canon in [false, true] {
+        for field_only in [false, true] {
+            let db = TestDb::new("character-signature-item-reviewed");
+            let mut store = create_store(&db);
+            let (source_id, source_version, original) =
+                saved_character_signature_item_bundle(&mut store, 9001, canon);
+            let source_before = store.get_entity(source_id).unwrap().unwrap();
+            assert_eq!(store.list_entities().unwrap().len(), 1);
+            assert!(store.list_relationships().unwrap().is_empty());
+            assert_eq!(store.list_history(None).unwrap().len(), 1);
+            let mut working = original.primary.clone();
+            ItemForge::lock(&mut working, ItemField::Name).unwrap();
+            if field_only {
+                ItemForge::reroll_field(&mut working, ItemField::Secret).unwrap();
+            } else {
+                ItemForge::reroll_all_unlocked(&mut working).unwrap();
+            }
+            ItemForge::manual_edit(
+                &mut working,
+                ItemField::Purpose,
+                ItemFieldValue::Text("Reviewed item purpose".into()),
+            )
+            .unwrap();
+            let bundle =
+                forge_app_core::finalize_signature_item_review(&original, working.clone()).unwrap();
+            let receipt = store
+                .save_signature_item_bundle(source_id, source_version, &bundle)
+                .unwrap();
+            assert_eq!(receipt.item_write_version, 1);
+            assert_eq!(receipt.relationship_write_version, 1);
+            let id = bundle.primary.item.envelope.id;
+            assert_eq!(store.list_entities().unwrap().len(), 2);
+            assert_eq!(store.list_relationships().unwrap().len(), 1);
+            assert_eq!(store.get_entity(source_id).unwrap().unwrap(), source_before);
+            let events = store.list_history(Some(id)).unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].action, "forge_character_signature_item");
+            assert_eq!(
+                serde_json::from_str::<forge_app_core::SignatureItemRecipeRecord>(
+                    &events[0].recipe_json
+                )
+                .unwrap(),
+                bundle.recipe
+            );
+            let result: ForgeBundleHistoryResult =
+                serde_json::from_str(&events[0].result_json).unwrap();
+            assert_eq!(result.mapping, bundle.result);
+            assert_eq!(
+                result.primary_snapshot,
+                StoredEntity::ItemCandidate(working.clone())
+            );
+            let before = fixture_rows(&store.connection);
+            assert!(
+                store
+                    .save_signature_item_bundle(source_id, source_version, &bundle)
+                    .is_err()
+            );
+            assert_eq!(fixture_rows(&store.connection), before);
+            drop(store);
+            let reopened = ProjectStore::open(db.path()).unwrap();
+            assert_eq!(
+                reopened.get_entity(id).unwrap().unwrap().entity,
+                StoredEntity::ItemCandidate(working)
+            );
+            assert_eq!(reopened.list_history(Some(id)).unwrap(), events);
+            assert_eq!(
+                reopened
+                    .get_relationship(bundle.relationship.id)
+                    .unwrap()
+                    .unwrap()
+                    .relationship,
+                bundle.relationship
+            );
+            assert_eq!(
+                reopened.get_entity(source_id).unwrap().unwrap(),
+                source_before
+            );
+        }
+    }
+}
+
+#[test]
+fn character_signature_item_each_transaction_stage_and_stale_source_roll_back_every_row() {
+    for failpoint in [
+        SignatureItemBundleFailpoint::Primary,
+        SignatureItemBundleFailpoint::Relationship,
+        SignatureItemBundleFailpoint::Event,
+    ] {
+        let db = TestDb::new("character-signature-item-rollback");
+        let mut store = create_store(&db);
+        let (id, version, bundle) = saved_character_signature_item_bundle(&mut store, 9010, false);
+        let before = fixture_rows(&store.connection);
+        assert!(
+            store
+                .save_signature_item_bundle_inner(id, version, &bundle, Some(failpoint))
+                .is_err()
+        );
+        assert_eq!(fixture_rows(&store.connection), before);
+        assert!(store.list_relationships().unwrap().is_empty());
+        assert_eq!(store.list_history(None).unwrap().len(), 1);
+    }
+    let db = TestDb::new("character-signature-item-stale");
+    let mut store = create_store(&db);
+    let (id, version, bundle) = saved_character_signature_item_bundle(&mut store, 9011, false);
+    let mut changed = store.get_entity(id).unwrap().unwrap().entity;
+    if let StoredEntity::CharacterCandidate(c) = &mut changed {
+        c.character.secret.push_str(" revised");
+    }
+    store.save_candidate(changed, version).unwrap();
+    let before = fixture_rows(&store.connection);
+    assert!(matches!(
+        store.save_signature_item_bundle(id, version, &bundle),
+        Err(StoreError::Conflict { .. })
+    ));
+    assert_eq!(fixture_rows(&store.connection), before);
+    let mut bad = bundle.clone();
+    bad.relationship.relationship_type = RelationshipType::BornIn;
+    assert!(store.save_signature_item_bundle(id, version, &bad).is_err());
+    assert_eq!(fixture_rows(&store.connection), before);
+}
+
+#[test]
+fn character_signature_item_owns_views_and_lifecycle_preserve_independent_entity_truth() {
+    let db = TestDb::new("character-signature-item-lifecycle");
+    let mut store = create_store(&db);
+    let (source_id, version, bundle) =
+        saved_character_signature_item_bundle(&mut store, 9020, false);
+    store
+        .save_signature_item_bundle(source_id, version, &bundle)
+        .unwrap();
+    let target_id = bundle.primary.item.envelope.id;
+    let id = bundle.relationship.id;
+    let source = store.get_entity(source_id).unwrap();
+    let target = store.get_entity(target_id).unwrap();
+    assert_eq!(
+        store.list_connection_views(source_id).unwrap()[0]
+            .definition
+            .source_phrase,
+        "Owns"
+    );
+    assert_eq!(
+        store.list_connection_views(target_id).unwrap()[0]
+            .definition
+            .inverse_phrase,
+        "Owned by"
+    );
+    let events = store.list_history(Some(target_id)).unwrap();
+    store.promote_relationship(id, 1).unwrap();
+    store.archive_relationship(id, 2).unwrap();
+    assert_eq!(store.list_relationships().unwrap().len(), 1);
+    assert_eq!(store.list_relationship_revisions(id).unwrap().len(), 2);
+    for endpoint in [source_id, target_id] {
+        assert_eq!(
+            store.list_connection_views(endpoint).unwrap()[0]
+                .relationship
+                .state,
+            RelationshipState::Archived
+        );
+    }
+    assert_eq!(store.get_entity(source_id).unwrap(), source);
+    assert_eq!(store.get_entity(target_id).unwrap(), target);
+    assert_eq!(store.list_history(Some(target_id)).unwrap(), events);
+}

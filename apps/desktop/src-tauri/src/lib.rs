@@ -3,8 +3,10 @@ use forge_app_core::{
     CreatureField, CreatureFieldValue, CreatureForge, FactionCandidate, FactionField,
     FactionFieldValue, FactionForge, FactionResultBundle, ForgeResultBundle, HometownSource,
     ItemCandidate, ItemField, ItemFieldValue, ItemForge, LocationField, LocationFieldValue,
-    LocationForge, QuestField, QuestFieldValue, QuestForge, finalize_faction_review,
-    finalize_hometown_review, forge_character_faction as forge_character_faction_core,
+    LocationForge, QuestField, QuestFieldValue, QuestForge, SignatureItemResultBundle,
+    finalize_faction_review, finalize_hometown_review, finalize_signature_item_review,
+    forge_character_faction as forge_character_faction_core,
+    forge_character_signature_item as forge_character_signature_item_core,
     forge_hometown as forge_hometown_core,
 };
 use forge_contracts::{
@@ -47,6 +49,7 @@ struct AppSession {
 enum FurtherReview {
     Hometown(ForgeResultBundle),
     Faction(FactionResultBundle),
+    SignatureItem(SignatureItemResultBundle),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1407,6 +1410,89 @@ fn save_faction_bundle(state: State<'_, AppState>) -> Result<FactionBundleSaveVi
 }
 
 #[tauri::command]
+fn forge_character_signature_item(
+    state: State<'_, AppState>,
+    source_id: String,
+    seed: u64,
+) -> Result<SignatureItemResultBundle, UiError> {
+    let mut session = lock_state(&state)?;
+    let store = active_store(&mut session)?;
+    let project = store
+        .load_project()?
+        .ok_or_else(|| ui_storage_error("Open or create a project first."))?;
+    let record = store
+        .get_entity(parse_entity_id(&source_id)?)?
+        .ok_or_else(|| ui_storage_error("The saved Character could not be found."))?;
+    let bundle =
+        forge_character_signature_item_core(&hometown_source(&record)?, seed, project.envelope.id)?;
+    let working = StoredEntity::ItemCandidate(bundle.primary.clone());
+    session.working = Some(working.clone());
+    session.write_version = None;
+    session.history = Some(SessionHistory::new(working));
+    session.further = Some(FurtherReview::SignatureItem(bundle.clone()));
+    Ok(bundle)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SignatureItemBundleSaveView {
+    item: EntityView,
+    relationship: forge_contracts::Relationship,
+    event_id: i64,
+}
+
+fn save_signature_item_review(
+    session: &mut AppSession,
+) -> Result<SignatureItemBundleSaveView, UiError> {
+    let original = match &session.further {
+        Some(FurtherReview::SignatureItem(bundle)) => bundle.clone(),
+        _ => {
+            return Err(invalid_candidate_operation(
+                "There is no Forge Their Signature Item bundle to save.",
+            ));
+        }
+    };
+    let reviewed = match &session.working {
+        Some(StoredEntity::ItemCandidate(candidate)) => candidate.clone(),
+        _ => {
+            return Err(invalid_candidate_operation(
+                "Signature Item review requires its original typed Item Candidate.",
+            ));
+        }
+    };
+    let bundle = finalize_signature_item_review(&original, reviewed)?;
+    let receipt = active_store(session)?.save_signature_item_bundle(
+        bundle.recipe.context_snapshot.source_entity_id,
+        bundle.recipe.context_snapshot.source_write_version,
+        &bundle,
+    )?;
+    let store = active_store(session)?;
+    let record = store
+        .get_entity(bundle.primary.item.envelope.id)?
+        .ok_or_else(|| ui_storage_error("Saved Item could not be reloaded."))?;
+    let relationship = store
+        .get_relationship(bundle.relationship.id)?
+        .ok_or_else(|| ui_storage_error("Saved owns connection could not be reloaded."))?;
+    session.working = Some(record.entity.clone());
+    session.write_version = Some(receipt.item_write_version);
+    session.history = Some(SessionHistory::new(record.entity.clone()));
+    session.further = None;
+    Ok(SignatureItemBundleSaveView {
+        item: entity_view(record),
+        relationship: relationship.relationship,
+        event_id: receipt.forge_event_id,
+    })
+}
+
+#[tauri::command]
+fn save_signature_item_bundle(
+    state: State<'_, AppState>,
+) -> Result<SignatureItemBundleSaveView, UiError> {
+    let mut session = lock_state(&state)?;
+    save_signature_item_review(&mut session)
+}
+
+#[tauri::command]
 fn list_relationships_for_entity(
     state: State<'_, AppState>,
     id: String,
@@ -2047,7 +2133,9 @@ pub fn run() {
             forge_creature,
             forge_hometown,
             forge_character_faction,
+            forge_character_signature_item,
             save_faction_bundle,
+            save_signature_item_bundle,
             discard_forge_bundle,
             save_forge_bundle,
             list_relationships_for_entity,
@@ -2170,6 +2258,88 @@ mod tests {
             BTreeMap::new(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn character_signature_item_command_saves_current_edited_undo_redo_snapshot_and_rejects_wrong_type()
+     {
+        let root = std::env::temp_dir().join(format!(
+            "character-forge-b8-{}-{}",
+            std::process::id(),
+            PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut session = AppSession::default();
+        session.project.open(root.join("review.sqlite3")).unwrap();
+        let source = character_candidate(93);
+        let project_id = source.character.envelope.project_id;
+        let store = active_store(&mut session).unwrap();
+        store
+            .create_project(&StoredProject {
+                envelope: ProjectEnvelope {
+                    id: project_id,
+                    schema_version: forge_contracts::SchemaVersion(2),
+                    generator_version: INITIAL_GENERATOR_VERSION,
+                    content_version: INITIAL_CONTENT_VERSION,
+                },
+                name: "Review test".into(),
+                created_at_unix_ms: 0,
+                updated_at_unix_ms: 0,
+            })
+            .unwrap();
+        let source_id = source.character.envelope.id;
+        store
+            .persist_candidate(StoredEntity::CharacterCandidate(source.clone()))
+            .unwrap();
+        let snapshot = hometown_source(&store.get_entity(source_id).unwrap().unwrap()).unwrap();
+        let bundle = forge_character_signature_item_core(&snapshot, 13, project_id).unwrap();
+        let original = StoredEntity::ItemCandidate(bundle.primary.clone());
+        let mut reviewed = original.clone();
+        edit_entity_field(
+            &mut reviewed,
+            "name",
+            Value::String("Reviewed signature item".into()),
+        )
+        .unwrap();
+        set_entity_field_lock(&mut reviewed, "name", true).unwrap();
+        reroll_entity_field(&mut reviewed, "secret").unwrap();
+        let mut history = SessionHistory::new(original.clone());
+        history.push(reviewed.clone());
+        assert_eq!(history.undo(), Some(&original));
+        assert_eq!(history.redo(), Some(&reviewed));
+        session.further = Some(FurtherReview::SignatureItem(bundle.clone()));
+        session.working = Some(StoredEntity::CharacterCandidate(source));
+        assert!(save_signature_item_review(&mut session).is_err());
+        assert_eq!(
+            active_store(&mut session)
+                .unwrap()
+                .list_entities()
+                .unwrap()
+                .len(),
+            1
+        );
+        session.working = Some(history.current().clone());
+        session.history = Some(history);
+        let saved = save_signature_item_review(&mut session).unwrap();
+        assert_eq!(saved.item.write_version, 1);
+        assert_eq!(session.working, Some(reviewed.clone()));
+        assert!(session.further.is_none());
+        let store = active_store(&mut session).unwrap();
+        let event = store
+            .list_history(Some(bundle.primary.item.envelope.id))
+            .unwrap()
+            .pop()
+            .unwrap();
+        let recipe: forge_app_core::SignatureItemRecipeRecord =
+            serde_json::from_str(&event.recipe_json).unwrap();
+        let StoredEntity::ItemCandidate(candidate) = reviewed else {
+            panic!("Item required")
+        };
+        assert_eq!(recipe.target_dna, candidate.dna);
+        assert_eq!(recipe.context_snapshot, bundle.recipe.context_snapshot);
+        assert_eq!(saved.relationship, bundle.relationship);
+        session.project.close();
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
