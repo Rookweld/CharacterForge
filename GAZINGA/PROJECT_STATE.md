@@ -4,14 +4,14 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_B10_R1_VISUAL_PROMPT_REMEDIATION — focused prompt/brief repair
-**Current status:** PASS — B10.R1 automated remediation exit gates satisfied; STOP
+**Current mission:** THE_FORGE_B10_R2_VISUAL_SPECIFICITY_PASS — focused Character prompt specificity
+**Current status:** PARTIAL — specificity remediation / verification in progress
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `88c07d6f80cc14680c71f5934cfdc8e792c78c89` (B10.R1 starting/current HEAD; unchanged)
-**Worktree:** B10.R1 changes are unstaged/uncommitted; accepted B10 implementation remains intact; index empty. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `3dbb60931be301a11049b5e0ae207a8aad08c22a` (B10.R2 starting/current HEAD; unchanged)
+**Worktree:** B10.R2 changes are unstaged/uncommitted; accepted B10 implementation remains intact; index empty. Four unrelated operator/export/log files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged

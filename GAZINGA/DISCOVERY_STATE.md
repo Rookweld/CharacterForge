@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B10_R1_VISUAL_PROMPT_REMEDIATION — closed at remediation exit gate
+THE_FORGE_B10_R2_VISUAL_SPECIFICITY_PASS — in progress
 
 ## Status
 
-**B10.R1 PASS — automated remediation exit gates satisfied. STOP.**
+**B10.R2 PARTIAL — specificity remediation / verification in progress.**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,8 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `88c07d6f80cc14680c71f5934cfdc8e792c78c89` (B10.R1 starting/current HEAD)
-- worktree: B10.R1 changes unstaged/uncommitted; accepted B10 architecture preserved; four unrelated files byte-identical
+- HEAD: `3dbb60931be301a11049b5e0ae207a8aad08c22a` (B10.R2 starting/current HEAD)
+- worktree: B10.R2 changes unstaged/uncommitted; accepted B10 architecture preserved; four unrelated files byte-identical
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -252,6 +252,12 @@ Branch `master`; accepted B8 implementation commit `7b22eb9` (`feat: add Charact
 Verification: **216 Rust tests PASS**, one existing fixture writer ignored; **107 frontend tests PASS**; full format/lint/typecheck/build, strict Clippy, Cargo metadata, explicit no-fail-fast workspace suite, 1,000-sequence / 32,000-operation gauntlet, `scripts/verify.ps1`, optimized isolated Tauri no-bundle build and `git diff --check` PASS. Native operator smoke is not claimed. The existing npm shim limitation remains; configured Corepack/pnpm suites pass. Existing UI-001 and accepted Mission 08 dependency-review limitation remain open.
 
 See `docs/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION_REPORT.md`. No next mission starts. Actual provider/persistence direction requires operator choice.
+
+## B10.R2 Visual Specificity Pass
+
+**PARTIAL — final verification in progress.** Character prompts now prioritize role, canonical appearance and named equipment, followed by concrete occupation evidence, title/archetype prop/scene interpretations and placed symbolic motifs. Genre/style remain late; conditional negatives address anonymous glamour and occupation-free clergy drift while respecting actual clergy and explicit requested styling. R1 species classification is unchanged. No provider/frontend/persistence changes. Visual brief format 3 distinguishes the revised compiler output; context/recipe/source identity, schema/archive/app and entity replay remain unchanged.
+
+Focused visual suite: 15 tests PASS; frontend format/lint/typecheck/build and 123 tests PASS. Full workspace/consolidated/build gates pending. Actual checkpoint image acceptance requires operator retest. See `docs/missions/THE_FORGE_B10_R2_VISUAL_SPECIFICITY_PASS_REPORT.md`. Existing UI-001 and Mission 08 advisory verification limitation remain. STOP at B10.R2 after verification; no later work.
 
 ## B10.R1 Prompt Remediation
 

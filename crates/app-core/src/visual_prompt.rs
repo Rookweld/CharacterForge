@@ -1,4 +1,4 @@
-//! B10.R1 deterministic projection: physical identity precedes figurative labels.
+//! B10.R1/R2 deterministic projection: physical identity and role precede styling.
 use super::{
     LiteralizationRisk as L, PromptSemantics, SpeciesMode as M, SubjectClassification,
     SubjectKind as K, VisualContextSnapshot, VisualField as F,
@@ -197,6 +197,8 @@ fn profession(c: &VisualContextSnapshot) -> String {
         "physician",
         "doctor",
         "healer",
+        "apothecary",
+        "surgeon",
         "warden",
         "keeper",
         "knight",
@@ -230,6 +232,94 @@ fn profession(c: &VisualContextSnapshot) -> String {
         .find(|s| professions.contains(&s.as_str()))
         .cloned()
         .unwrap_or_else(|| "person".into())
+}
+/// Suggested image details, not additional source facts. Canonical appearance and
+/// equipment take precedence; this finite vocabulary never assigns species.
+fn role_evidence(profession: &str) -> &'static str {
+    match profession {
+        "physician" | "doctor" | "healer" | "surgeon" | "apothecary" => {
+            "medical instrument roll, folded bandages and stoppered medicine bottles; practical treatment apron or satchel, worn cuffs and medicinal stains; visible preparation for treating a patient"
+        }
+        "scholar" => {
+            "annotated pages, writing implement and reference folio; ink-marked cuffs and well-used book edges"
+        }
+        "engineer" => {
+            "measuring tools, repair kit and technical sketches; workwear with material dust and repaired seams"
+        }
+        "detective" => {
+            "evidence notebook and inspection tools; travel-worn coat details and a visible clue under examination"
+        }
+        "courier" => {
+            "message case and route notes; weather-worn carrying straps and scuffed travel gear"
+        }
+        "merchant" => {
+            "sample goods, balance and transaction ledger; handled packaging and a practical carrying case"
+        }
+        "sailor" | "pilot" => {
+            "navigation instruments and route chart; weathered working equipment and travel wear"
+        }
+        "hunter" | "ranger" => {
+            "tracking kit and field supplies; repaired outdoor gear and traces of fieldwork"
+        }
+        "soldier" | "guard" | "knight" | "warrior" => {
+            "source-described defensive equipment in functional use; maintained edges, repaired straps and service wear"
+        }
+        "butcher" => "cutting tools and work apron; marked work surfaces and wear from the trade",
+        "priest" | "priestess" => {
+            "ritual objects and a worn devotional text; service-worn ceremonial garment details"
+        }
+        "keeper" | "warden" => {
+            "maintenance tools, keys and inspection notes; repaired workwear and signs of a tended post"
+        }
+        "mage" | "witch" => {
+            "working implements and annotated ritual materials; material residue on practical equipment"
+        }
+        "thief" | "assassin" | "smuggler" => {
+            "discreet tool case and concealed carrying compartments; worn fastenings and practical travel layers"
+        }
+        _ => {
+            "functional use, material texture and wear of the source-described signature gear; occupation cues drawn from the canonical role"
+        }
+    }
+}
+fn has(tokens: &[String], word: &str) -> bool {
+    tokens.iter().any(|s| s == word)
+}
+/// Interpret only public title/archetype vocabulary. These are optional staging
+/// motifs, never an authoritative location, affiliation, uniform or possession.
+fn label_cues(c: &VisualContextSnapshot) -> (Vec<String>, Vec<String>) {
+    let tokens = words(&[fact(c, F::Name), fact(c, F::Title), fact(c, F::Archetype)].join(" "));
+    let mut props = Vec::new();
+    let mut setting = Vec::new();
+    if has(&tokens, "chapel") {
+        props.push(
+            "chapel-associated garment accents: faded votive-stitch trim and candle-wax wear"
+                .into(),
+        );
+        setting.push("weathered chapel stone arch or votive niche as a secondary backdrop".into());
+    }
+    if has(&tokens, "unlit") {
+        props.push("extinguished lamp accessory and candle-soot marks on equipment".into());
+        setting.push("unlit lamp silhouettes in the secondary backdrop".into());
+    }
+    if has(&tokens, "mile")
+        && ["keeper", "road", "route", "way"]
+            .iter()
+            .any(|w| has(&tokens, w))
+    {
+        props.push("small mile-marker motif on a carrying strap or tool case".into());
+        setting.push(
+            "forgotten roadside mile-marker beside a lonely waystation or parish-route fragment"
+                .into(),
+        );
+    }
+    if has(&tokens, "bell") {
+        props.push("worn bell-shaped accessory or brass clapper detail".into());
+    }
+    if has(&tokens, "ash") {
+        props.push("ash-grey garment edging and soot-marked working materials".into());
+    }
+    (props, setting)
 }
 pub(super) fn compile_semantics(
     c: &VisualContextSnapshot,
@@ -272,6 +362,38 @@ pub(super) fn compile_semantics(
     ];
     let mut safeguards =
         vec!["Canonical physical identity precedes names and figurative labels.".into()];
+    if c.source.entity_type == E::Character {
+        safeguards.push("Role evidence and label-derived props/settings are visual interpretations, subordinate to canonical appearance/equipment; no Canon facts or insignia are established.".into());
+        // Target anonymous aesthetic drift, not attractiveness or genuine clergy.
+        let requested_style = words(&c.art_direction.medium_style);
+        if !["glamour", "fashion", "beauty", "beautiful"]
+            .iter()
+            .any(|s| has(&requested_style, s))
+        {
+            negative.extend(
+                [
+                    "anonymous glamour headshot",
+                    "fashion editorial without occupational cues",
+                ]
+                .map(str::to_owned),
+            );
+        }
+        let clerical =
+            words(&[labels.join(" "), fact(c, F::Role), fact(c, F::Appearance)].join(" "));
+        if has(&label_words, "chapel")
+            && !["nun", "monk", "priest", "priestess", "abbot", "bishop"]
+                .iter()
+                .any(|s| has(&clerical, s))
+        {
+            negative.extend(
+                [
+                    "nun-only portrait without occupational tools",
+                    "monk-only portrait without occupational tools",
+                ]
+                .map(str::to_owned),
+            );
+        }
+    }
     if guard {
         negative.extend(["animal head", "animal body", "mascot", "parody"].map(str::to_owned));
         for risk in &risks {
@@ -344,10 +466,22 @@ pub(super) fn compile_semantics(
     };
     match c.source.entity_type {
         E::Character => {
-            add("Physical identity", &[F::Appearance]);
             add("Role / profession", &[F::Role]);
+            add("Physical identity", &[F::Appearance]);
             add("Clothing / equipment", &[F::SignatureGear]);
-            identity.push("Setting: neutral subject background; universe context guides design, not new fictional facts".into());
+            identity.push(format!("Role evidence (visual interpretation; canonical gear/appearance take precedence): {}", role_evidence(&profession(c))));
+            let (props, settings) = label_cues(c);
+            if !props.is_empty() {
+                identity.push(format!(
+                    "Title / archetype prop accents (visual interpretation): {}",
+                    props.join("; ")
+                ));
+            }
+            identity.push(if settings.is_empty() {
+                "Setting: restrained working context suggested by the canonical role; subject and named equipment remain dominant".into()
+            } else {
+                format!("Setting (title / archetype visual interpretation): {}; subordinate to the working {} and source-described equipment", settings.join("; "), profession(c))
+            });
             flavor.push(format!(
                 "Identity labels / epithets (figurative): {}",
                 labels.join("; ")
@@ -357,7 +491,9 @@ pub(super) fn compile_semantics(
                     "Symbolic motifs: {}",
                     risks
                         .iter()
-                        .map(|s| format!("subtle {s} symbolism in decorative motifs"))
+                        .map(|s| format!(
+                            "subtle {s} symbolism on garment trim or a small tool-case ornament"
+                        ))
                         .collect::<Vec<_>>()
                         .join("; ")
                 ));
