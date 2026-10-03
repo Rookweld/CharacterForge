@@ -305,6 +305,20 @@ pub struct PromptSemantics {
     pub identity: Vec<String>,
     pub flavor_symbolism: Vec<String>,
     pub negative_guardrails: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character_selection: Option<CharacterPromptSelection>,
+}
+/// Budgeted image interpretation; canonical facts remain in the exact context.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CharacterPromptSelection {
+    pub occupation: Option<String>,
+    pub narrative_role: String,
+    pub appearance: Option<String>,
+    pub signature_gear: Option<String>,
+    pub occupation_evidence: Vec<String>,
+    pub prop_accents: Vec<String>,
+    pub setting: Vec<String>,
+    pub motifs: Vec<String>,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VisualGenerationBrief {
@@ -563,7 +577,7 @@ pub fn compile_visual_brief(
     let subject_description = prompt_semantics.identity[0].clone();
     let avoid = prompt_semantics.negative_guardrails.clone();
     let mut brief = VisualGenerationBrief {
-        format_version: 3,
+        format_version: 4,
         subject_classification,
         prompt_semantics,
         safeguards_applied,
@@ -617,14 +631,14 @@ fn scrub_identifiers(s: &str) -> String {
     out
 }
 fn render_prompt(b: &VisualGenerationBrief) -> String {
+    if b.context.source.entity_type == EntityType::Character {
+        return prompt::render_character(b);
+    }
     let mut lines = b.prompt_semantics.identity.clone();
     lines.extend(b.prompt_semantics.flavor_symbolism.clone());
     // Style/composition are last. Negative terms never enter the positive channel.
     lines.push(style_line(&b.context));
     lines.push(format!("Composition: {}", b.composition_intent));
-    if b.context.source.entity_type == EntityType::Character {
-        lines.push("Keep occupational tools, working garment details and identifying motifs readable within the chosen framing; role and distinctive appearance are the focal points.".into());
-    }
     lines
         .into_iter()
         .map(|s| scrub_identifiers(&s))
@@ -745,7 +759,7 @@ pub fn validate_visual_brief(brief: &VisualGenerationBrief) -> ValidationResult<
     {
         return Err(invalid());
     }
-    if brief.format_version != 3
+    if brief.format_version != 4
         || brief.context.format_version != 1
         || brief.brief_hash != visual_digest(&unsigned)?
         || brief.prompt_text != render_prompt(brief)
@@ -1027,29 +1041,21 @@ mod tests {
             brief.subject_classification.literalization_risk,
             LiteralizationRisk::High
         );
-        assert!(
-            brief
-                .prompt_text
-                .starts_with("human dark fantasy physician\nRole / profession:")
-        );
+        assert!(brief.prompt_text.starts_with(
+            "A single human dark fantasy physician Character as the dominant focal subject"
+        ));
         assert!(brief.prompt_text.contains("subtle rat symbolism"));
         for cue in [
-            "medical instrument roll",
+            "medical satchel",
             "folded bandages",
-            "stoppered medicine bottles",
-            "practical treatment apron",
-            "worn cuffs",
-            "medicinal stains",
-            "chapel-associated garment accents",
+            "chapel-associated garment stitch",
             "extinguished lamp",
-            "candle-soot",
             "roadside mile-marker",
-            "waystation",
-            "tool-case ornament",
+            "small garment motif",
         ] {
             assert!(
                 brief.prompt_text.contains(cue),
-                "Missing specificity cue: {cue}"
+                "Missing budgeted specificity cue: {cue}"
             );
         }
         assert!(
@@ -1075,14 +1081,18 @@ mod tests {
         }
         let mut last = 0;
         for section in [
-            "Role / profession:",
-            "Physical identity:",
-            "Clothing / equipment:",
+            "Occupation evidence",
+            "Prop accents",
             "Setting (",
-            "Symbolic motifs:",
+            "Symbolic motif:",
             "Style:",
             "Composition:",
         ] {
+            let section = if section == "Symbolic motif:" {
+                "Symbolic motif ("
+            } else {
+                section
+            };
             let at = brief.prompt_text.find(section).unwrap();
             assert!(at > last);
             last = at;
@@ -1092,7 +1102,7 @@ mod tests {
             brief,
             compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap()
         );
-        assert_eq!(brief.format_version, 3);
+        assert_eq!(brief.format_version, 4);
         validate_visual_brief(&brief).unwrap();
     }
     #[test]
@@ -1113,15 +1123,15 @@ mod tests {
             b.subject_classification.subject_kind
         );
         assert_ne!(a.prompt_semantics.identity, b.prompt_semantics.identity);
-        assert!(a.prompt_text.contains("chapel stone arch"));
+        assert!(a.prompt_text.contains("chapel-associated garment stitch"));
         assert!(a.prompt_text.contains("extinguished lamp"));
-        assert!(a.prompt_text.contains("parish-route fragment"));
+        assert!(a.prompt_text.contains("roadside mile-marker"));
         assert!(!b.prompt_text.contains("chapel stone arch"));
         assert!(!b.prompt_text.contains("extinguished lamp"));
         assert!(!b.prompt_text.contains("mile-marker"));
-        assert!(b.prompt_text.contains("brass clapper detail"));
-        assert!(a.prompt_text.contains("medical instrument roll"));
-        assert!(b.prompt_text.contains("medical instrument roll"));
+        assert!(b.prompt_text.contains("bell-shaped accessory"));
+        assert!(a.prompt_text.contains("medical satchel"));
+        assert!(b.prompt_text.contains("medical satchel"));
         assert_ne!(a.brief_hash, b.brief_hash);
         assert_ne!(a.context.context_hash, b.context.context_hash);
         validate_visual_brief(&a).unwrap();
@@ -1130,12 +1140,12 @@ mod tests {
     #[test]
     fn occupation_cues_are_specific_read_only_and_derived_hash_validated() {
         for (occupation, cue) in [
-            ("apothecary", "medicine bottles"),
+            ("apothecary", "medical satchel"),
             ("engineer", "measuring tools"),
             ("scholar", "annotated pages"),
             ("detective", "evidence notebook"),
             ("courier", "message case"),
-            ("unlisted occupation", "source-described signature gear"),
+            ("unlisted occupation", "Named iron cane"),
         ] {
             let mut source = physician("A human with a scar and silver hair");
             if let VisualEntity::Character(c) = &mut source {
@@ -1155,8 +1165,10 @@ mod tests {
                     .prompt_text
                     .contains("Named iron cane with a red wrap")
             );
-            assert!(brief.prompt_text.contains("visual interpretation"));
-            assert!(brief.prompt_text.contains("Keep occupational tools"));
+            if occupation != "unlisted occupation" {
+                assert!(brief.prompt_text.contains("visual interpretation"));
+            }
+            assert!(brief.prompt_text.contains("Character is primary"));
             assert_eq!(source, before);
             let gear = brief
                 .context
@@ -1220,7 +1232,7 @@ mod tests {
         assert!(!styled.negative_prompt_text.contains("fashion editorial"));
         assert!(styled.negative_prompt_text.contains("literal rat"));
         assert!(
-            styled.prompt_text.find("medical instrument roll").unwrap()
+            styled.prompt_text.find("medical satchel").unwrap()
                 < styled
                     .prompt_text
                     .find("beautiful fashion portrait")
@@ -1259,11 +1271,22 @@ mod tests {
                 SpeciesMode::InferredDefault
             );
             assert!(brief.subject_classification.humanoid_guardrail);
-            assert!(
-                brief
-                    .prompt_text
-                    .contains(&format!("subtle {word} symbolism"))
-            );
+            if brief
+                .prompt_semantics
+                .character_selection
+                .as_ref()
+                .unwrap()
+                .motifs
+                .is_empty()
+            {
+                assert!(brief.prompt_text.contains(word)); // canonical costume already represents this family
+            } else {
+                assert!(
+                    brief
+                        .prompt_text
+                        .contains(&format!("subtle {word} symbolism"))
+                );
+            }
         }
         let mut source = physician("Silver hair and a patched coat");
         if let VisualEntity::Character(c) = &mut source {
@@ -1276,6 +1299,237 @@ mod tests {
             LiteralizationRisk::Low
         );
         assert!(!brief.negative_prompt_text.contains("literal crow"));
+    }
+    fn mara_crowl() -> VisualEntity {
+        let mut source =
+            physician("Funeral linen covers one eye and bears a fresh name each dawn.");
+        if let VisualEntity::Character(c) = &mut source {
+            c.envelope.name = "Mara Crowl".into();
+            c.role = "keeper of parish keys that fit no church".into();
+            c.signature_gear = "a six-shot chapel pistol wrapped in funeral linen".into();
+        }
+        source
+    }
+    #[test]
+    fn mara_crowl_anchor_is_self_sufficient_and_person_dominant() {
+        let source = mara_crowl();
+        let before = source.clone();
+        for role in [R::Portrait, R::FullBody, R::CharacterSheet] {
+            let b = compile_visual_brief(&source, 1, None, ArtDirection::default(), role).unwrap();
+            let plan = b.prompt_semantics.character_selection.as_ref().unwrap();
+            let anchor = b.prompt_text.lines().next().unwrap();
+            assert!(anchor.starts_with(
+                "A single human dark fantasy physician Character as the dominant focal subject"
+            ));
+            assert!(anchor.contains("Funeral linen covers one eye"));
+            assert!(anchor.contains("six-shot chapel pistol wrapped in funeral linen"));
+            assert_eq!(plan.occupation.as_deref(), Some("physician"));
+            assert_eq!(
+                plan.narrative_role,
+                "keeper of parish keys that fit no church"
+            );
+            assert!(
+                b.prompt_text
+                    .contains("Narrative role: keeper of parish keys that fit no church")
+            );
+            assert!(!b.prompt_text.contains("Role / profession:"));
+            assert!(b.prompt_text.contains("Character is primary"));
+            assert!(
+                b.prompt_text
+                    .contains("architecture and environment are secondary")
+            );
+            assert!(plan.occupation_evidence.len() <= prompt::OCCUPATION_LIMIT);
+            assert!(plan.prop_accents.len() <= prompt::ACCENT_LIMIT);
+            assert_eq!(plan.setting.len(), 1);
+            assert_eq!(plan.motifs.len(), 1);
+            assert_eq!(b.prompt_text.matches("subtle rat symbolism").count(), 1);
+            assert!(!b.prompt_text.contains("chapel-associated garment stitch"));
+            assert!(!b.prompt_text.contains("chapel stone arch"));
+            for negative in prompt::DOMINANCE_NEGATIVES {
+                assert!(b.negative_prompt_text.contains(negative));
+            }
+            for negative in [
+                "literal rat",
+                "anthropomorphic rodent",
+                "animal head",
+                "mascot",
+                "parody",
+            ] {
+                assert!(b.negative_prompt_text.contains(negative));
+            }
+            let mut last = 0;
+            for label in [
+                "Occupation evidence",
+                "Narrative role:",
+                "Prop accents",
+                "Setting (",
+                "Symbolic motif (",
+                "Style:",
+                "Composition:",
+            ] {
+                let at = b.prompt_text.find(label).unwrap();
+                assert!(at > last);
+                last = at;
+            }
+            assert_eq!(source, before);
+            assert_eq!(
+                b,
+                compile_visual_brief(&source, 1, None, ArtDirection::default(), role).unwrap()
+            );
+            validate_visual_brief(&b).unwrap();
+            if role == R::Portrait {
+                println!(
+                    "R3_MARA_PROMPT_BEGIN\n{}\nR3_MARA_PROMPT_END",
+                    b.prompt_text
+                );
+            }
+        }
+    }
+    #[test]
+    fn character_budget_collapses_repeated_families_under_cue_heavy_labels() {
+        let mut source = mara_crowl();
+        if let VisualEntity::Character(c) = &mut source {
+            c.title = "Keeper Unlit Mile Chapel Bell Ash Rat Raven Crow Wolf Serpent Spider Beast Ghost Bone Plague Carrion Butcher ".repeat(4);
+            c.archetype = "Chapel Rat Physician Unlit Mile Bell Ash Chapel Rat Physician".into();
+        }
+        let b =
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap();
+        let plan = b.prompt_semantics.character_selection.as_ref().unwrap();
+        assert!(plan.occupation_evidence.len() <= prompt::OCCUPATION_LIMIT);
+        assert!(plan.prop_accents.len() <= prompt::ACCENT_LIMIT);
+        assert!(plan.setting.len() <= prompt::SETTING_LIMIT);
+        assert!(plan.motifs.len() <= prompt::MOTIF_LIMIT);
+        assert_eq!(b.prompt_text.matches("extinguished lamp").count(), 1);
+        assert_eq!(b.prompt_text.matches("mile-marker").count(), 1);
+        assert_eq!(b.prompt_text.matches("subtle rat symbolism").count(), 1);
+        assert_eq!(b.prompt_text.matches("chapel").count(), 1); // canonical pistol, no duplicate scenery
+        assert!(!b.prompt_text.contains("waystation"));
+        assert!(!b.prompt_text.contains("candle-soot"));
+        assert!(!b.prompt_text.contains("Supporting design context"));
+        assert!(b.prompt_text.split_whitespace().count() < 180);
+        assert_eq!(
+            b,
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap()
+        );
+    }
+    #[test]
+    fn canonical_animal_motif_does_not_receive_a_duplicate_interpretation() {
+        let mut source = mara_crowl();
+        if let VisualEntity::Character(c) = &mut source {
+            c.appearance = "A human with one small rat motif on a coat".into();
+        }
+        let b =
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap();
+        assert!(
+            b.prompt_semantics
+                .character_selection
+                .as_ref()
+                .unwrap()
+                .motifs
+                .is_empty()
+        );
+        assert_eq!(b.prompt_text.matches("rat motif").count(), 1);
+        assert!(!b.prompt_text.contains("subtle rat symbolism"));
+        assert!(b.negative_prompt_text.contains("literal rat"));
+        assert!(b.subject_classification.humanoid_guardrail);
+        validate_visual_brief(&b).unwrap();
+    }
+    #[test]
+    fn narrative_keeper_and_unknown_archetype_do_not_fabricate_occupation() {
+        for archetype in [
+            "Bearer of the Nameless Hour",
+            "not a physician",
+            "keeper",
+            "warden",
+        ] {
+            let mut source = mara_crowl();
+            if let VisualEntity::Character(c) = &mut source {
+                c.archetype = archetype.into();
+            }
+            let b = compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait)
+                .unwrap();
+            let plan = b.prompt_semantics.character_selection.as_ref().unwrap();
+            assert_eq!(plan.occupation, None, "{archetype}");
+            assert!(plan.occupation_evidence.is_empty());
+            assert!(!b.prompt_text.contains("Occupation evidence"));
+            assert!(!b.prompt_text.lines().next().unwrap().contains("physician"));
+            assert!(
+                b.prompt_text
+                    .contains("Narrative role: keeper of parish keys that fit no church")
+            );
+            validate_visual_brief(&b).unwrap();
+        }
+    }
+    #[test]
+    fn character_selection_keeps_exact_context_and_selects_whole_short_clauses() {
+        let mut source = mara_crowl();
+        if let VisualEntity::Character(c) = &mut source {
+            c.appearance = format!(
+                "{}. Funeral linen covers one eye.",
+                "decorative clothing ".repeat(70)
+            );
+            c.signature_gear = format!(
+                "{}; a chapel pistol wrapped in funeral linen",
+                "ornate descriptive equipment ".repeat(45)
+            );
+        }
+        let before = source.clone();
+        let b = compile_visual_brief(
+            &source,
+            1,
+            None,
+            ArtDirection {
+                medium_style: format!("{}; ink drawing", "cinematic atmosphere ".repeat(20)),
+                atmosphere: "broad distant scenery ".repeat(20),
+                ..Default::default()
+            },
+            R::Portrait,
+        )
+        .unwrap();
+        let plan = b.prompt_semantics.character_selection.as_ref().unwrap();
+        assert_eq!(
+            plan.appearance.as_deref(),
+            Some("Funeral linen covers one eye")
+        );
+        assert_eq!(
+            plan.signature_gear.as_deref(),
+            Some("a chapel pistol wrapped in funeral linen")
+        );
+        assert!(b.prompt_text.contains("Style: dark fantasy ink drawing"));
+        assert!(!b.prompt_text.contains("decorative clothing"));
+        assert!(!b.prompt_text.contains("broad distant scenery"));
+        assert_eq!(source, before);
+        if let VisualEntity::Character(c) = &source {
+            assert_eq!(
+                b.context
+                    .facts
+                    .iter()
+                    .find(|f| f.field == F::Appearance)
+                    .unwrap()
+                    .values,
+                std::slice::from_ref(&c.appearance)
+            );
+            assert_eq!(
+                b.context
+                    .facts
+                    .iter()
+                    .find(|f| f.field == F::SignatureGear)
+                    .unwrap()
+                    .values,
+                std::slice::from_ref(&c.signature_gear)
+            );
+        }
+        let mut forged = b.clone();
+        forged
+            .prompt_semantics
+            .character_selection
+            .as_mut()
+            .unwrap()
+            .occupation = Some("architect".into());
+        forged.brief_hash.clear();
+        forged.brief_hash = visual_digest(&forged).unwrap();
+        assert!(validate_visual_brief(&forged).is_err());
+        validate_visual_brief(&b).unwrap();
     }
     #[test]
     fn explicit_nonhuman_character_appearance_preserves_literal_form() {
@@ -1337,7 +1591,7 @@ mod tests {
                 &sources[0],
                 R::Portrait,
                 SubjectKind::Human,
-                "Physical identity:",
+                "A single human",
             ),
             (
                 &sources[1],
@@ -1379,6 +1633,10 @@ mod tests {
                 );
                 assert!(!brief.prompt_text.contains("Keep occupational tools"));
                 assert!(!brief.negative_prompt_text.contains("anonymous glamour"));
+                assert!(brief.prompt_semantics.character_selection.is_none());
+                for negative in prompt::DOMINANCE_NEGATIVES {
+                    assert!(!brief.negative_prompt_text.contains(negative));
+                }
             }
             validate_visual_brief(&brief).unwrap();
         }

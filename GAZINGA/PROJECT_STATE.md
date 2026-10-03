@@ -4,21 +4,21 @@
 
 > Codex: maintain this file after every mission. Keep it concise; do not turn it into a build log.
 
-**Current mission:** THE_FORGE_B10_R2_VISUAL_SPECIFICITY_PASS — focused Character prompt specificity
-**Current status:** PARTIAL — specificity remediation / verification in progress
+**Current mission:** THE_FORGE_B10_R3_SUBJECT_DOMINANCE_PROMPT_BUDGET — Character subject dominance
+**Current status:** PARTIAL - automated gates PASS; operator image acceptance PENDING; STOP
 **Target release:** v1.0.0 FOUNDATION
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `3dbb60931be301a11049b5e0ae207a8aad08c22a` (B10.R2 starting/current HEAD; unchanged)
-**Worktree:** B10.R2 changes are unstaged/uncommitted; accepted B10 implementation remains intact; index empty. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `4fa3a05596dbb7f8134bb2d9c7b5d946c46b4ea1` (B10.R3 starting/current HEAD; unchanged)
+**Worktree:** B10.R3 changes are unstaged/uncommitted; accepted B10 implementation remains intact; index empty. Four unrelated operator/export/log files remain untouched. No commit was created.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
 ## Current The Forge handoff
 
-B10.R1 is **PASS — automated remediation exit gates satisfied. STOP.** Physical Character identity now precedes figurative titles/archetypes; human defaults and separate negative guards address the Chapel Rat Physician case while preserving explicit non-human Characters and literal Creatures. Family-specific prompt structures, preset defaults and visible classification/safeguards/positive/negative prompts are verified. Visual brief format 2 records changed compiler semantics; source/context/recipe identities, entity replay, schema 2, archive v1 and app 1.0.0 are unchanged. Accepted B10 loopback ComfyUI architecture remains intact; only its existing negative node receives the compiled negative text. **238 Rust tests PASS**, one existing fixture writer ignored; **123 frontend tests PASS**; format/lint/typecheck/build, strict Clippy, Cargo metadata, explicit no-fail-fast workspace suite, storage gauntlet, `scripts/verify.ps1`, optimized Tauri no-bundle build and `git diff --check` PASS. Exact executable: `target/mission-b10-r1-verify/release/character-forge-desktop.exe`, version 1.0.0. Actual checkpoint image quality needs operator retest; no independent native image-generation/GUI acceptance is claimed. Existing UI-001, npm launcher issue and accepted Mission 08 advisory limitation remain. See `docs/missions/THE_FORGE_B10_R1_VISUAL_PROMPT_REMEDIATION_REPORT.md`. Four unrelated files remain byte-identical/untracked; all mission changes unstaged/uncommitted; no later work started.
+B10.R3 is **PARTIAL - automated gates PASS; operator image acceptance PENDING. STOP.** The operator's R2 Mara Crowl retest exposed object/architecture dominance. R3 now anchors one Character with canonical physical/gear cues, classifies physician separately from the parish-keys narrative role, selects bounded supporting cues and adds Character-only subject-dominance negatives. R1 species classification, non-Character prompting, B10 provider behavior/settings and FOUNDATION/storage/generator contracts are unchanged. Brief format 4 records the derived selection; context/recipe versions, schema 2, archive v1 and app 1.0.0 remain unchanged. Focused suite 20 PASS; workspace 246 Rust tests PASS (one existing fixture writer ignored); frontend 123 tests and format/lint/typecheck/build PASS; metadata/Rust format PASS. Strict Clippy, final `scripts/verify.ps1`, optimized no-bundle build and `git diff --check` PASS. Dedicated executable: `target/mission-b10-r3-verify/release/character-forge-desktop.exe`, version 1.0.0; SHA-256 `FCCB992FC5EB776625DD6D323CF041975893712F4AA21C52F9B2C0E103D870FC`. See `docs/missions/THE_FORGE_B10_R3_SUBJECT_DOMINANCE_PROMPT_BUDGET_REPORT.md`. Four unrelated files preserved; index empty; no commit or later work. STOP for operator image acceptance using the dedicated R3 executable.
 
 ## Architecture decisions currently locked
 

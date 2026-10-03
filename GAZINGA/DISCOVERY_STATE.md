@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-THE_FORGE_B10_R2_VISUAL_SPECIFICITY_PASS — in progress
+THE_FORGE_B10_R3_SUBJECT_DOMINANCE_PROMPT_BUDGET — stopped at operator acceptance gate
 
 ## Status
 
-**B10.R2 PARTIAL — specificity remediation / verification in progress.**
+**B10.R3 PARTIAL - automated gates PASS; operator image acceptance PENDING. STOP.**
 
 B2 Hometown, B2.R1 reviewed-bundle provenance, and B3 Faction Core are closed as PASS.
 
@@ -22,8 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `3dbb60931be301a11049b5e0ae207a8aad08c22a` (B10.R2 starting/current HEAD)
-- worktree: B10.R2 changes unstaged/uncommitted; accepted B10 architecture preserved; four unrelated files byte-identical
+- HEAD: `4fa3a05596dbb7f8134bb2d9c7b5d946c46b4ea1` (B10.R3 starting/current HEAD)
+- worktree: B10.R3 changes unstaged/uncommitted; accepted B10 architecture preserved; four unrelated files byte-identical
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -252,6 +252,12 @@ Branch `master`; accepted B8 implementation commit `7b22eb9` (`feat: add Charact
 Verification: **216 Rust tests PASS**, one existing fixture writer ignored; **107 frontend tests PASS**; full format/lint/typecheck/build, strict Clippy, Cargo metadata, explicit no-fail-fast workspace suite, 1,000-sequence / 32,000-operation gauntlet, `scripts/verify.ps1`, optimized isolated Tauri no-bundle build and `git diff --check` PASS. Native operator smoke is not claimed. The existing npm shim limitation remains; configured Corepack/pnpm suites pass. Existing UI-001 and accepted Mission 08 dependency-review limitation remain open.
 
 See `docs/missions/THE_FORGE_B9_VISUAL_FORGE_FOUNDATION_REPORT.md`. No next mission starts. Actual provider/persistence direction requires operator choice.
+
+## B10.R3 Subject Dominance and Prompt Budget
+
+**PARTIAL - automated gates PASS; operator image acceptance PENDING. STOP.** R2's real Mara Crowl retest produced object/architecture dominance; the mission records that operator evidence as a compiler failure, not a provider failure. R3 adds a single-Character anchor with canonical eye/gear cues, separates supported occupation from narrative role, selects at most 2 occupation cues / 2 accents / 1 distant setting / 1 motif, and applies Character-only anti-object/anti-architecture negatives. Canonical facts stay exact in context; interpretation is secondary and hash-validated. R1 species classification and non-Character family/provider behavior remain unchanged. Brief format 4 records the new derived selection; context/recipe versions, schema 2, archive v1, app 1.0.0 and entity replay stay unchanged.
+
+20 focused visual tests and 246 workspace Rust tests PASS (one existing fixture writer ignored); 123 frontend tests and frontend format/lint/typecheck/build PASS. Cargo metadata and Rust format PASS. Strict Clippy, `scripts/verify.ps1`, optimized no-bundle build and final `git diff --check` PASS. Dedicated executable: `target/mission-b10-r3-verify/release/character-forge-desktop.exe`, version 1.0.0; SHA-256 `FCCB992FC5EB776625DD6D323CF041975893712F4AA21C52F9B2C0E103D870FC`. Exact artifact evidence is recorded in `docs/missions/THE_FORGE_B10_R3_SUBJECT_DOMINANCE_PROMPT_BUDGET_REPORT.md`. STOP at B10.R3 for human image acceptance; no later work. Existing UI-001 and Mission 08 advisory verification limitation remain.
 
 ## B10.R2 Visual Specificity Pass
 

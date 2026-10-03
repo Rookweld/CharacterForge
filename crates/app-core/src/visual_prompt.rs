@@ -1,4 +1,4 @@
-//! B10.R1/R2 deterministic projection: physical identity and role precede styling.
+//! B10.R3: subject anchor, semantic occupation and category-bounded interpretation.
 use super::{
     LiteralizationRisk as L, PromptSemantics, SpeciesMode as M, SubjectClassification,
     SubjectKind as K, VisualContextSnapshot, VisualField as F,
@@ -191,16 +191,30 @@ fn physical_kind(appearance: &str) -> (K, M) {
     }
     (K::Human, M::InferredDefault)
 }
-fn profession(c: &VisualContextSnapshot) -> String {
-    // Use only an occupation word actually present in canonical role/archetype.
-    let professions = [
+// Category limits are selection limits, not character-string truncation.
+pub(super) const OCCUPATION_LIMIT: usize = 2;
+pub(super) const ACCENT_LIMIT: usize = 2;
+pub(super) const SETTING_LIMIT: usize = 1;
+pub(super) const MOTIF_LIMIT: usize = 1;
+pub(super) const DOMINANCE_NEGATIVES: [&str; 6] = [
+    "object-only composition",
+    "architectural detail as sole subject",
+    "emblem-only image",
+    "still life",
+    "empty environment",
+    "shrine, relic, door or wall ornament as sole subject",
+];
+fn has(tokens: &[String], word: &str) -> bool {
+    tokens.iter().any(|s| s == word)
+}
+fn occupation(c: &VisualContextSnapshot) -> Option<String> {
+    // Bare keeper/warden are narrative responsibilities, not specific professions.
+    const OCCUPATIONS: [&str; 29] = [
         "physician",
         "doctor",
         "healer",
         "apothecary",
         "surgeon",
-        "warden",
-        "keeper",
         "knight",
         "priest",
         "priestess",
@@ -222,104 +236,253 @@ fn profession(c: &VisualContextSnapshot) -> String {
         "detective",
         "courier",
         "thief",
+        "blacksmith",
+        "farmer",
+        "carpenter",
     ];
-    let archetype = words(&fact(c, F::Archetype));
-    let role = words(&fact(c, F::Role));
-    archetype
+    for field in [F::Archetype, F::Role, F::Appearance] {
+        let tokens = words(&fact(c, field));
+        for (i, word) in tokens.iter().enumerate().rev() {
+            if OCCUPATIONS.contains(&word.as_str())
+                && !tokens[i.saturating_sub(3)..i]
+                    .iter()
+                    .any(|s| ["not", "no", "never", "without"].contains(&s.as_str()))
+            {
+                return Some(word.clone());
+            }
+        }
+    }
+    None
+}
+/// Whole source-derived clauses, ranked by physical/functional relevance.
+/// Overlong clauses stay in the exact context rather than being cut into fragments.
+fn clause(text: &str, preferred: &[&str], max_words: usize) -> Option<String> {
+    text.split(['.', ';', '\n', '!', '?'])
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.len() <= 512 && s.split_whitespace().count() <= max_words)
+        .min_by_key(|s| {
+            if words(s).iter().any(|w| preferred.contains(&w.as_str())) {
+                0
+            } else {
+                1
+            }
+        })
+        .map(super::scrub_identifiers)
+}
+fn occupation_cues(occupation: Option<&str>) -> Vec<String> {
+    let candidates: &[&str] = match occupation {
+        Some("physician" | "doctor" | "healer" | "surgeon" | "apothecary") => {
+            &["medical satchel", "folded bandages"]
+        }
+        Some("scholar") => &["annotated pages", "ink-marked cuffs"],
+        Some("engineer" | "blacksmith" | "carpenter") => &["measuring tools", "work-worn cuffs"],
+        Some("detective") => &["evidence notebook", "inspection tool"],
+        Some("courier") => &["message case", "weather-worn carrying strap"],
+        Some("merchant") => &["transaction ledger", "sample goods"],
+        Some("sailor" | "pilot") => &["navigation instrument", "route chart"],
+        Some("hunter" | "ranger") => &["tracking kit", "field-worn clothing"],
+        Some("soldier" | "guard" | "knight" | "warrior") => {
+            &["repaired equipment strap", "service wear"]
+        }
+        Some("butcher") => &["cutting tool", "work apron"],
+        Some("priest" | "priestess") => &["worn devotional text"],
+        Some("mage" | "witch") => &["annotated ritual materials"],
+        Some("thief" | "assassin" | "smuggler") => &["discreet tool case"],
+        Some("farmer") => &["field tool", "earth-marked workwear"],
+        _ => &[],
+    };
+    candidates
         .iter()
-        .rev()
-        .chain(role.iter().rev())
-        .find(|s| professions.contains(&s.as_str()))
-        .cloned()
-        .unwrap_or_else(|| "person".into())
+        .take(OCCUPATION_LIMIT)
+        .map(|s| (*s).into())
+        .collect()
 }
-/// Suggested image details, not additional source facts. Canonical appearance and
-/// equipment take precedence; this finite vocabulary never assigns species.
-fn role_evidence(profession: &str) -> &'static str {
-    match profession {
-        "physician" | "doctor" | "healer" | "surgeon" | "apothecary" => {
-            "medical instrument roll, folded bandages and stoppered medicine bottles; practical treatment apron or satchel, worn cuffs and medicinal stains; visible preparation for treating a patient"
-        }
-        "scholar" => {
-            "annotated pages, writing implement and reference folio; ink-marked cuffs and well-used book edges"
-        }
-        "engineer" => {
-            "measuring tools, repair kit and technical sketches; workwear with material dust and repaired seams"
-        }
-        "detective" => {
-            "evidence notebook and inspection tools; travel-worn coat details and a visible clue under examination"
-        }
-        "courier" => {
-            "message case and route notes; weather-worn carrying straps and scuffed travel gear"
-        }
-        "merchant" => {
-            "sample goods, balance and transaction ledger; handled packaging and a practical carrying case"
-        }
-        "sailor" | "pilot" => {
-            "navigation instruments and route chart; weathered working equipment and travel wear"
-        }
-        "hunter" | "ranger" => {
-            "tracking kit and field supplies; repaired outdoor gear and traces of fieldwork"
-        }
-        "soldier" | "guard" | "knight" | "warrior" => {
-            "source-described defensive equipment in functional use; maintained edges, repaired straps and service wear"
-        }
-        "butcher" => "cutting tools and work apron; marked work surfaces and wear from the trade",
-        "priest" | "priestess" => {
-            "ritual objects and a worn devotional text; service-worn ceremonial garment details"
-        }
-        "keeper" | "warden" => {
-            "maintenance tools, keys and inspection notes; repaired workwear and signs of a tended post"
-        }
-        "mage" | "witch" => {
-            "working implements and annotated ritual materials; material residue on practical equipment"
-        }
-        "thief" | "assassin" | "smuggler" => {
-            "discreet tool case and concealed carrying compartments; worn fastenings and practical travel layers"
-        }
-        _ => {
-            "functional use, material texture and wear of the source-described signature gear; occupation cues drawn from the canonical role"
-        }
+fn framing(role: super::VisualRole) -> &'static str {
+    match role {
+        super::VisualRole::Portrait => "portrait with face and carried gear readable",
+        super::VisualRole::FullBody => "full-body Character view",
+        super::VisualRole::CharacterSheet => "consistent Character reference views",
+        _ => "Character-centered view",
     }
 }
-fn has(tokens: &[String], word: &str) -> bool {
-    tokens.iter().any(|s| s == word)
-}
-/// Interpret only public title/archetype vocabulary. These are optional staging
-/// motifs, never an authoritative location, affiliation, uniform or possession.
-fn label_cues(c: &VisualContextSnapshot) -> (Vec<String>, Vec<String>) {
-    let tokens = words(&[fact(c, F::Name), fact(c, F::Title), fact(c, F::Archetype)].join(" "));
+fn selection(
+    c: &VisualContextSnapshot,
+    risks: &[&str],
+    guard: bool,
+) -> super::CharacterPromptSelection {
+    let occupation = occupation(c);
+    let appearance_text = fact(c, F::Appearance);
+    let appearance = if guard {
+        clause(
+            &appearance_text,
+            &["eye", "eyes", "scar", "ears", "skin"],
+            32,
+        )
+    } else {
+        let pieces = appearance_text
+            .split(['.', ';', '\n', '!', '?'])
+            .filter_map(|s| clause(s, &[], 32))
+            .take(2)
+            .collect::<Vec<_>>();
+        if pieces.is_empty() {
+            None
+        } else {
+            Some(pieces.join("; "))
+        }
+    };
+    let signature_gear = clause(
+        &fact(c, F::SignatureGear),
+        &["pistol", "weapon", "satchel", "cane", "tool"],
+        24,
+    );
+    let canonical = words(
+        &[
+            appearance.as_deref().unwrap_or(""),
+            signature_gear.as_deref().unwrap_or(""),
+        ]
+        .join(" "),
+    );
+    let label_words =
+        words(&[fact(c, F::Name), fact(c, F::Title), fact(c, F::Archetype)].join(" "));
+    // Each cue family can be represented only once, including canonical anchor facts.
     let mut props = Vec::new();
+    if has(&label_words, "unlit") && !has(&canonical, "lamp") {
+        props.push("one extinguished lamp carried as a small accessory".into());
+    }
+    if has(&label_words, "chapel") && !has(&canonical, "chapel") {
+        props.push("small chapel-associated garment stitch".into());
+    }
+    if has(&label_words, "bell") && !has(&canonical, "bell") {
+        props.push("small bell-shaped accessory".into());
+    }
+    if has(&label_words, "ash") && !has(&canonical, "ash") {
+        props.push("ash-grey garment edging".into());
+    }
+    props.truncate(ACCENT_LIMIT);
     let mut setting = Vec::new();
-    if has(&tokens, "chapel") {
-        props.push(
-            "chapel-associated garment accents: faded votive-stitch trim and candle-wax wear"
-                .into(),
-        );
-        setting.push("weathered chapel stone arch or votive niche as a secondary backdrop".into());
-    }
-    if has(&tokens, "unlit") {
-        props.push("extinguished lamp accessory and candle-soot marks on equipment".into());
-        setting.push("unlit lamp silhouettes in the secondary backdrop".into());
-    }
-    if has(&tokens, "mile")
+    if has(&label_words, "mile")
         && ["keeper", "road", "route", "way"]
             .iter()
-            .any(|w| has(&tokens, w))
+            .any(|s| has(&label_words, s))
     {
-        props.push("small mile-marker motif on a carrying strap or tool case".into());
-        setting.push(
-            "forgotten roadside mile-marker beside a lonely waystation or parish-route fragment"
-                .into(),
-        );
+        setting.push("one faint roadside mile-marker in the distant background".into());
     }
-    if has(&tokens, "bell") {
-        props.push("worn bell-shaped accessory or brass clapper detail".into());
+    setting.truncate(SETTING_LIMIT);
+    let motifs = if guard {
+        risks
+            .iter()
+            .filter(|risk| !has(&canonical, risk))
+            .take(MOTIF_LIMIT)
+            .map(|s| format!("subtle {s} symbolism as one small garment motif"))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let occupation_evidence = occupation_cues(occupation.as_deref())
+        .into_iter()
+        .filter(|s| !words(s).iter().any(|w| canonical.contains(w)))
+        .take(OCCUPATION_LIMIT)
+        .collect();
+    super::CharacterPromptSelection {
+        occupation,
+        narrative_role: fact(c, F::Role),
+        appearance,
+        signature_gear,
+        occupation_evidence,
+        prop_accents: props,
+        setting,
+        motifs,
     }
-    if has(&tokens, "ash") {
-        props.push("ash-grey garment edging and soot-marked working materials".into());
+}
+fn character_identity(
+    c: &VisualContextSnapshot,
+    kind: K,
+    plan: &super::CharacterPromptSelection,
+) -> Vec<String> {
+    let species = match kind {
+        K::Human => "human",
+        K::Humanoid => "explicitly non-human humanoid",
+        K::Beast => "explicitly non-human animal-form",
+        _ => "explicit canonical-species",
+    };
+    let profession = plan.occupation.as_deref().unwrap_or("");
+    let mut anchor = format!(
+        "A single {species} {} {profession} Character as the dominant focal subject",
+        genre(c)
+    );
+    anchor = anchor.split_whitespace().collect::<Vec<_>>().join(" ");
+    if let Some(appearance) = &plan.appearance {
+        anchor.push_str(&format!("; {appearance}"));
     }
-    (props, setting)
+    if let Some(gear) = &plan.signature_gear {
+        anchor.push_str(&format!("; carrying {gear}"));
+    }
+    anchor.push_str(&format!("; {}.", framing(c.role)));
+    let mut lines = vec![anchor];
+    if !plan.occupation_evidence.is_empty() {
+        lines.push(format!(
+            "Occupation evidence (visual interpretation, secondary): {}",
+            plan.occupation_evidence.join("; ")
+        ));
+    }
+    if let Some(role) = clause(&plan.narrative_role, &[], 32)
+        && plan.occupation.as_deref() != Some(role.to_lowercase().as_str())
+    {
+        lines.push(format!("Narrative role: {role}"));
+    }
+    if !plan.prop_accents.is_empty() {
+        lines.push(format!(
+            "Prop accents (visual interpretation, secondary): {}",
+            plan.prop_accents.join("; ")
+        ));
+    }
+    if !plan.setting.is_empty() {
+        lines.push(format!(
+            "Setting (visual interpretation, secondary): {}",
+            plan.setting.join("; ")
+        ));
+    }
+    if !plan.motifs.is_empty() {
+        lines.push(format!(
+            "Symbolic motif (visual interpretation, secondary): {}",
+            plan.motifs.join("; ")
+        ));
+    }
+    lines
+        .into_iter()
+        .map(|s| super::scrub_identifiers(&s))
+        .collect()
+}
+pub(super) fn render_character(b: &super::VisualGenerationBrief) -> String {
+    let mut lines = b.prompt_semantics.identity.clone();
+    let d = &b.context.art_direction;
+    let medium =
+        clause(&d.medium_style, &[], 12).unwrap_or_else(|| "clear concept illustration".into());
+    let mut style = vec![
+        format!("Style: {} {medium}", genre(&b.context))
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+    ];
+    for (label, text) in [
+        ("palette", &d.palette),
+        ("materials", &d.materials),
+        ("atmosphere", &d.atmosphere),
+    ] {
+        if let Some(cue) = clause(text, &[], 8) {
+            style.push(format!("{label}: {cue}"));
+        }
+    }
+    lines.push(style.join("; "));
+    let mut composition = format!(
+        "Composition: {}; the Character is primary; props, symbols, architecture and environment are secondary supporting elements.",
+        framing(b.context.role)
+    );
+    if let Some(camera) = clause(&d.camera_composition, &[], 12) {
+        composition.push_str(&format!(" Camera: {camera}"));
+    }
+    lines.push(composition);
+    lines.join("\n")
 }
 pub(super) fn compile_semantics(
     c: &VisualContextSnapshot,
@@ -425,12 +588,28 @@ pub(super) fn compile_semantics(
         .into_iter()
         .map(|s| super::scrub_identifiers(&s))
         .collect();
+    if c.source.entity_type == E::Character {
+        negative.extend(DOMINANCE_NEGATIVES.map(str::to_owned));
+        safeguards.push("Character-first anchor; interpretation budgets: occupation 2, prop accents 2, setting 1, motif 1; canonical context remains exact.".into());
+        let plan = selection(c, &risks, guard);
+        let identity = character_identity(c, kind, &plan);
+        return (
+            classification,
+            PromptSemantics {
+                identity,
+                flavor_symbolism: Vec::new(),
+                negative_guardrails: negative,
+                character_selection: Some(plan),
+            },
+            safeguards,
+        );
+    }
     let primary = match kind {
-        K::Human => format!("human {} {}", genre(c), profession(c)),
+        K::Human => format!("human {} {}", genre(c), occupation(c).unwrap_or_default()),
         K::Humanoid => format!(
             "humanoid {} {} with the explicit canonical non-human appearance",
             genre(c),
-            profession(c)
+            occupation(c).unwrap_or_default()
         ),
         K::Beast => format!(
             "explicit non-human {} character with the canonical animal form",
@@ -465,48 +644,7 @@ pub(super) fn compile_semantics(
         }
     };
     match c.source.entity_type {
-        E::Character => {
-            add("Role / profession", &[F::Role]);
-            add("Physical identity", &[F::Appearance]);
-            add("Clothing / equipment", &[F::SignatureGear]);
-            identity.push(format!("Role evidence (visual interpretation; canonical gear/appearance take precedence): {}", role_evidence(&profession(c))));
-            let (props, settings) = label_cues(c);
-            if !props.is_empty() {
-                identity.push(format!(
-                    "Title / archetype prop accents (visual interpretation): {}",
-                    props.join("; ")
-                ));
-            }
-            identity.push(if settings.is_empty() {
-                "Setting: restrained working context suggested by the canonical role; subject and named equipment remain dominant".into()
-            } else {
-                format!("Setting (title / archetype visual interpretation): {}; subordinate to the working {} and source-described equipment", settings.join("; "), profession(c))
-            });
-            flavor.push(format!(
-                "Identity labels / epithets (figurative): {}",
-                labels.join("; ")
-            ));
-            if guard && !risks.is_empty() {
-                flavor.push(format!(
-                    "Symbolic motifs: {}",
-                    risks
-                        .iter()
-                        .map(|s| format!(
-                            "subtle {s} symbolism on garment trim or a small tool-case ornament"
-                        ))
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                ));
-            }
-            let details = [F::Personality, F::Abilities, F::FactionHint]
-                .iter()
-                .map(|f| fact(c, *f))
-                .collect::<Vec<_>>()
-                .join("; ");
-            flavor.push(format!(
-                "Supporting design context (observable cues only): {details}"
-            ));
-        }
+        E::Character => unreachable!("Character is handled before generic family assembly"),
         E::Item => {
             add(
                 "Object physical form / material",
@@ -583,6 +721,7 @@ pub(super) fn compile_semantics(
             identity,
             flavor_symbolism: flavor,
             negative_guardrails: negative,
+            character_selection: None,
         },
         safeguards,
     )
