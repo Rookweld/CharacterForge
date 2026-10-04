@@ -10,13 +10,19 @@
 **FOUNDATION release gates:** VERIFIED
 **FOUNDATION release baseline:** `98777fefa0eea7de11371602c3a496f854065ef9` (`v1.0.0`)
 **Branch:** `master`
-**HEAD:** `4fa3a05596dbb7f8134bb2d9c7b5d946c46b4ea1` (B10.R3 starting/current HEAD; unchanged)
-**Worktree:** B10.R3 changes are unstaged/uncommitted; accepted B10 implementation remains intact; index empty. Four unrelated operator/export/log files remain untouched. No commit was created.
+**HEAD:** `9e47d9eb497bf71f080d08b97a9cfc149c33ff03` (live ForgeGate inspection, 2026-10-03)
+**Worktree:** B10.R3 implementation is committed at this HEAD. ForgeGate pilot tooling and this handoff reconciliation are pending review. Four unrelated operator/export/log files are preserved. No commit was created by the ForgeGate pilot.
 **Database schema version:** 2 (schema-1 projects migrate transactionally with a no-clobber recovery copy)
 **Generator version:** 1
 **Content version:** 3 for new Quest recipes; Quest v2 replay retained; Character v1/v2 unchanged
 
+## ForgeGate development pilot — 2026-10-03
+
+`tools/forgeflow/README.md` documents the small optional ForgeBrain API adapter and ForgeGate finishing CLI. It reuses the Nullfeather Harness runner and existing verification scripts. Fresh pilot verification/readiness evidence is kept separately in `target/forgegate/pilot-final-2026-10-03/`; operator B10.R3 image acceptance remains PENDING. No product/generator/provider changes, later mission, commit or publication are authorized by a tool result.
+
 ## Current The Forge handoff
+
+The paragraph below records the original B10.R3 verification snapshot; live checkout identity is recorded above. The later implementation commit does not establish operator image acceptance.
 
 B10.R3 is **PARTIAL - automated gates PASS; operator image acceptance PENDING. STOP.** The operator's R2 Mara Crowl retest exposed object/architecture dominance. R3 now anchors one Character with canonical physical/gear cues, classifies physician separately from the parish-keys narrative role, selects bounded supporting cues and adds Character-only subject-dominance negatives. R1 species classification, non-Character prompting, B10 provider behavior/settings and FOUNDATION/storage/generator contracts are unchanged. Brief format 4 records the derived selection; context/recipe versions, schema 2, archive v1 and app 1.0.0 remain unchanged. Focused suite 20 PASS; workspace 246 Rust tests PASS (one existing fixture writer ignored); frontend 123 tests and format/lint/typecheck/build PASS; metadata/Rust format PASS. Strict Clippy, final `scripts/verify.ps1`, optimized no-bundle build and `git diff --check` PASS. Dedicated executable: `target/mission-b10-r3-verify/release/character-forge-desktop.exe`, version 1.0.0; SHA-256 `FCCB992FC5EB776625DD6D323CF041975893712F4AA21C52F9B2C0E103D870FC`. See `docs/missions/THE_FORGE_B10_R3_SUBJECT_DOMINANCE_PROMPT_BUDGET_REPORT.md`. Four unrelated files preserved; index empty; no commit or later work. STOP for operator image acceptance using the dedicated R3 executable.
 
@@ -89,3 +95,11 @@ Mission B3 Faction Core is **PASS — automated exit gates satisfied**. Faction 
 ## B4 closeout
 
 **PASS — automated exit gates satisfied. STOP at B4.** Current evidence and Git state are recorded in the handoff above and `docs/missions/THE_FORGE_B4_ITEM_CORE_REPORT.md`. No Creature Forge or Item Forge Further action was begun.
+
+## Visual retest remediation — 2026-10-03
+
+Fresh seed-2 operator evidence failed character fidelity. A compact Character provider prompt candidate (brief format 5) improves occupation but still misses eye/weapon details. 21 focused and 247 workspace Rust tests, strict Clippy and isolated Tauri build PASS; visual acceptance remains unresolved. See docs/missions/THE_FORGE_B10_COMPACT_PROVIDER_PROMPT_REPORT.md. Candidate: target/visual-r4-verify/release/character-forge-desktop.exe. No commit or publication; existing open application preserved.
+
+## Portrait detail candidate — 2026-10-03
+
+Brief format 6 adds close default portrait framing and bounded literal eye/pistol cues. 22 focused tests, 248 workspace Rust tests, strict Clippy and isolated native build PASS. Exact final compiled prompt verified against a completed local seed-1 image: closer illustration and small pistol; bandage below eyes and pistol wrapping still fail. Visual fidelity PARTIAL; no human PASS. Final focused tests, Clippy and native build PASS; full 248-test suite predates final cue wording. Candidate: target/portrait-detail-verify/release/character-forge-desktop.exe. See docs/missions/THE_FORGE_B10_PORTRAIT_DETAIL_REPORT.md. No commit/publication; existing open app and unrelated files preserved.

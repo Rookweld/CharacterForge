@@ -453,36 +453,108 @@ fn character_identity(
         .map(|s| super::scrub_identifiers(&s))
         .collect()
 }
+/// Image encoders consume visual descriptions, not the provenance labels in identity.
+/// Keep those labels and the exact narrative role in the brief, separate from provider text.
+fn literal_detail_cues(plan: &super::CharacterPromptSelection) -> Vec<&'static str> {
+    let appearance = plan.appearance.as_deref().unwrap_or("").to_lowercase();
+    let gear = words(plan.signature_gear.as_deref().unwrap_or(""));
+    let mut cues = Vec::new();
+    // Derived visual phrasing only: canonical strings remain in context and below.
+    if appearance.contains("linen covers one eye")
+        && !words(&appearance)
+            .iter()
+            .any(|s| ["not", "no", "without"].contains(&s.as_str()))
+    {
+        cues.push("A cloth bandage covers one eye, the other eye is visible.");
+    }
+    if ["six", "shot", "pistol", "wrapped", "linen"]
+        .iter()
+        .all(|s| has(&gear, s))
+        && !gear.iter().any(|s| {
+            [
+                "not", "no", "without", "toy", "figurine", "symbol", "motif", "pendant", "rifle",
+                "shotgun",
+            ]
+            .contains(&s.as_str())
+        })
+    {
+        cues.push("Holding a small six-shot pistol wrapped in linen cloth.");
+    }
+    cues
+}
 pub(super) fn render_character(b: &super::VisualGenerationBrief) -> String {
-    let mut lines = b.prompt_semantics.identity.clone();
-    let d = &b.context.art_direction;
+    let c = &b.context;
+    let Some(plan) = b.prompt_semantics.character_selection.as_ref() else {
+        return String::new();
+    };
+    let species = match b.subject_classification.subject_kind {
+        K::Human => "human",
+        K::Humanoid => "explicitly non-human humanoid",
+        K::Beast => "explicitly non-human animal-form",
+        _ => "explicit canonical-species",
+    };
+    let d = &c.art_direction;
     let medium =
         clause(&d.medium_style, &[], 12).unwrap_or_else(|| "clear concept illustration".into());
-    let mut style = vec![
-        format!("Style: {} {medium}", genre(&b.context))
+    let profession = plan.occupation.as_deref().unwrap_or("");
+    let opening_style = if d.medium_style.trim().is_empty() {
+        medium.as_str()
+    } else {
+        ""
+    };
+    let framing_prefix = if c.role == super::VisualRole::Portrait
+        && d.camera_composition.trim().is_empty()
+        && matches!(
+            b.subject_classification.subject_kind,
+            K::Human | K::Humanoid
+        ) {
+        "waist-up portrait of one"
+    } else {
+        "one"
+    };
+    let opening = format!("{} {opening_style}", genre(c)).trim().to_owned();
+    let mut sentences = vec![
+        format!("{opening}, {framing_prefix} {species} {profession}.")
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" "),
     ];
-    for (label, text) in [
-        ("palette", &d.palette),
-        ("materials", &d.materials),
-        ("atmosphere", &d.atmosphere),
+    if matches!(
+        b.subject_classification.subject_kind,
+        K::Human | K::Humanoid
+    ) {
+        sentences.extend(literal_detail_cues(plan).into_iter().map(str::to_owned));
+    }
+    if let Some(appearance) = &plan.appearance {
+        sentences.push(format!("{appearance}."));
+    }
+    if let Some(gear) = &plan.signature_gear {
+        sentences.push(format!("Carrying {gear}."));
+    }
+    for cues in [
+        &plan.occupation_evidence,
+        &plan.prop_accents,
+        &plan.setting,
+        &plan.motifs,
     ] {
-        if let Some(cue) = clause(text, &[], 8) {
-            style.push(format!("{label}: {cue}"));
+        if !cues.is_empty() {
+            sentences.push(format!("{}.", cues.join("; ")));
         }
     }
-    lines.push(style.join("; "));
-    let mut composition = format!(
-        "Composition: {}; the Character is primary; props, symbols, architecture and environment are secondary supporting elements.",
-        framing(b.context.role)
-    );
-    if let Some(camera) = clause(&d.camera_composition, &[], 12) {
-        composition.push_str(&format!(" Camera: {camera}"));
+    if !d.medium_style.trim().is_empty() {
+        sentences.push(format!("{} {medium}.", genre(c)));
     }
-    lines.push(composition);
-    lines.join("\n")
+    for direction in [&d.palette, &d.materials, &d.atmosphere] {
+        if let Some(cue) = clause(direction, &[], 8) {
+            sentences.push(format!("{cue}."));
+        }
+    }
+    sentences.push(format!("{}.", framing(c.role)));
+    if let Some(camera) = clause(&d.camera_composition, &[], 12) {
+        sentences.push(format!("{camera}."));
+    }
+    sentences.push("The Character is primary; supporting props and environment.".into());
+    super::scrub_identifiers(&sentences.join(" "))
 }
 pub(super) fn compile_semantics(
     c: &VisualContextSnapshot,
@@ -526,6 +598,7 @@ pub(super) fn compile_semantics(
     let mut safeguards =
         vec!["Canonical physical identity precedes names and figurative labels.".into()];
     if c.source.entity_type == E::Character {
+        safeguards.push("Close portrait framing and literal eye/handgun cues are derived visual interpretations; exact canonical appearance/equipment remain in context and provider text.".into());
         safeguards.push("Role evidence and label-derived props/settings are visual interpretations, subordinate to canonical appearance/equipment; no Canon facts or insignia are established.".into());
         // Target anonymous aesthetic drift, not attractiveness or genuine clergy.
         let requested_style = words(&c.art_direction.medium_style);

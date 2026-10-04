@@ -22,8 +22,8 @@ The operator has authorized continued non-destructive development through bounde
 ## Current Repository State
 
 - branch: `master`
-- HEAD: `4fa3a05596dbb7f8134bb2d9c7b5d946c46b4ea1` (B10.R3 starting/current HEAD)
-- worktree: B10.R3 changes unstaged/uncommitted; accepted B10 architecture preserved; four unrelated files byte-identical
+- HEAD: `9e47d9eb497bf71f080d08b97a9cfc149c33ff03` (live ForgeGate inspection, 2026-10-03)
+- worktree: B10.R3 implementation committed; ForgeGate pilot tooling/handoff reconciliation pending review; four unrelated operator/export/log files preserved
 - database schema: 2
 - forgeproject archive format: v1
 - application version: 1.0.0
@@ -314,3 +314,11 @@ Connect to Nullfeather Bridge and read this file first.
 ## Last Updated
 
 2026-10-01
+
+## Visual retest remediation — 2026-10-03
+
+Fresh seed-2 operator evidence failed character fidelity. A compact Character provider prompt candidate (brief format 5) improves occupation but still misses eye/weapon details. 21 focused and 247 workspace Rust tests, strict Clippy and isolated Tauri build PASS; visual acceptance remains unresolved. See docs/missions/THE_FORGE_B10_COMPACT_PROVIDER_PROMPT_REPORT.md. Candidate: target/visual-r4-verify/release/character-forge-desktop.exe. No commit or publication; existing open application preserved.
+
+## Portrait detail candidate — 2026-10-03
+
+Brief format 6 adds close default portrait framing and bounded literal eye/pistol cues. 22 focused tests, 248 workspace Rust tests, strict Clippy and isolated native build PASS. Exact final compiled prompt verified against a completed local seed-1 image: closer illustration and small pistol; bandage below eyes and pistol wrapping still fail. Visual fidelity PARTIAL; no human PASS. Final focused tests, Clippy and native build PASS; full 248-test suite predates final cue wording. Candidate: target/portrait-detail-verify/release/character-forge-desktop.exe. See docs/missions/THE_FORGE_B10_PORTRAIT_DETAIL_REPORT.md. No commit/publication; existing open app and unrelated files preserved.

@@ -577,7 +577,7 @@ pub fn compile_visual_brief(
     let subject_description = prompt_semantics.identity[0].clone();
     let avoid = prompt_semantics.negative_guardrails.clone();
     let mut brief = VisualGenerationBrief {
-        format_version: 4,
+        format_version: 6,
         subject_classification,
         prompt_semantics,
         safeguards_applied,
@@ -759,7 +759,7 @@ pub fn validate_visual_brief(brief: &VisualGenerationBrief) -> ValidationResult<
     {
         return Err(invalid());
     }
-    if brief.format_version != 4
+    if brief.format_version != 6
         || brief.context.format_version != 1
         || brief.brief_hash != visual_digest(&unsigned)?
         || brief.prompt_text != render_prompt(brief)
@@ -772,6 +772,7 @@ pub fn validate_visual_brief(brief: &VisualGenerationBrief) -> ValidationResult<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use crate::{CharacterForge, CreatureForge, FactionForge, ItemForge, LocationForge};
     use forge_contracts::{CreativeAxes, RootSeed};
     use std::collections::BTreeMap;
@@ -1041,9 +1042,11 @@ mod tests {
             brief.subject_classification.literalization_risk,
             LiteralizationRisk::High
         );
-        assert!(brief.prompt_text.starts_with(
-            "A single human dark fantasy physician Character as the dominant focal subject"
-        ));
+        assert!(
+            brief
+                .prompt_text
+                .starts_with("dark fantasy clear concept illustration, ")
+        );
         assert!(brief.prompt_text.contains("subtle rat symbolism"));
         for cue in [
             "medical satchel",
@@ -1079,21 +1082,20 @@ mod tests {
             assert!(brief.negative_prompt_text.contains(guard));
             assert!(!brief.prompt_text.contains(guard));
         }
+        let metadata = brief.prompt_semantics.identity.join("\n");
         let mut last = 0;
         for section in [
             "Occupation evidence",
             "Prop accents",
             "Setting (",
             "Symbolic motif:",
-            "Style:",
-            "Composition:",
         ] {
             let section = if section == "Symbolic motif:" {
                 "Symbolic motif ("
             } else {
                 section
             };
-            let at = brief.prompt_text.find(section).unwrap();
+            let at = metadata.find(section).unwrap();
             assert!(at > last);
             last = at;
         }
@@ -1102,7 +1104,7 @@ mod tests {
             brief,
             compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap()
         );
-        assert_eq!(brief.format_version, 4);
+        assert_eq!(brief.format_version, 6);
         validate_visual_brief(&brief).unwrap();
     }
     #[test]
@@ -1166,7 +1168,13 @@ mod tests {
                     .contains("Named iron cane with a red wrap")
             );
             if occupation != "unlisted occupation" {
-                assert!(brief.prompt_text.contains("visual interpretation"));
+                assert!(
+                    brief
+                        .prompt_semantics
+                        .identity
+                        .join(" ")
+                        .contains("visual interpretation")
+                );
             }
             assert!(brief.prompt_text.contains("Character is primary"));
             assert_eq!(source, before);
@@ -1311,6 +1319,156 @@ mod tests {
         source
     }
     #[test]
+    fn character_portrait_puts_literal_details_before_supporting_scenery() {
+        let source = mara_crowl();
+        let before = source.clone();
+        let b =
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap();
+        assert!(b.prompt_text.contains("waist-up portrait"));
+        assert!(b.prompt_text.contains("cloth bandage"));
+        assert!(
+            b.prompt_text
+                .contains("small six-shot pistol wrapped in linen cloth")
+        );
+        assert!(
+            b.prompt_text.find("cloth bandage").unwrap()
+                < b.prompt_text.find("medical satchel").unwrap()
+        );
+        assert_eq!(source, before);
+        validate_visual_brief(&b).unwrap();
+        println!(
+            "PORTRAIT_DETAIL_PROMPT_BEGIN\n{}\nPORTRAIT_DETAIL_PROMPT_END",
+            b.prompt_text
+        );
+        let full =
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::FullBody).unwrap();
+        assert!(!full.prompt_text.contains("waist-up"));
+        let custom = ArtDirection {
+            camera_composition: "full-body distant view".into(),
+            ..ArtDirection::default()
+        };
+        let b = compile_visual_brief(&source, 1, None, custom, R::Portrait).unwrap();
+        assert!(!b.prompt_text.contains("waist-up"));
+        let other = physician("Silver hair and a patched coat");
+        let b =
+            compile_visual_brief(&other, 1, None, ArtDirection::default(), R::Portrait).unwrap();
+        assert!(!b.prompt_text.contains("cloth bandage"));
+        assert!(!b.prompt_text.contains("small six-shot pistol"));
+    }
+    #[test]
+    fn b10_r3_experiment_manifest() {
+        let source = mara_crowl();
+        let direction = ArtDirection::default();
+        let role = R::Portrait;
+
+        // Variant A: Exact production Format 6
+        let brief_a = compile_visual_brief(&source, 1, None, direction.clone(), role)
+            .expect("Failed to compile Variant A");
+
+        // Variant B: Stronger positive literal cues
+        let mut brief_b = brief_a.clone();
+        brief_b.prompt_text = brief_b.prompt_text
+            .replace(
+                "A cloth bandage covers one eye, the other eye is visible.",
+                "One eye is completely obscured by a thick, wrapped linen bandage; the other eye is wide open and visible."
+            )
+            .replace(
+                "Holding a small six-shot pistol wrapped in linen cloth.",
+                "The small six-shot pistol is clearly visible, with its grip and barrel tightly bound in visible strips of coarse linen cloth."
+            );
+
+        // Variant C: Variant B + Stronger negatives
+        let mut brief_c = brief_b.clone();
+        let additional_negatives = vec!["bandage on cheek", "bandage under eye", "eye-patch", "decorative ribbon"];
+        let mut negatives: Vec<String> = brief_c.negative_prompt_text.split(',').map(|s| s.trim().to_string()).collect();
+        for n in additional_negatives {
+            if !negatives.contains(&n.to_string()) {
+                negatives.push(n.to_string());
+            }
+        }
+        brief_c.negative_prompt_text = negatives.join(", ");
+
+        // Output results
+        println!("\n--- B10.R3 EXPERIMENT PROMPTS ---");
+        println!("\n[VARIANT A - CONTROL]\nPositive: {}\nNegative: {}", brief_a.prompt_text, brief_a.negative_prompt_text);
+        println!("\n[VARIANT B - STRONGER POSITIVE]\nPositive: {}\nNegative: {}", brief_b.prompt_text, brief_b.negative_prompt_text);
+        println!("\n[VARIANT C - FULL]\nPositive: {}\nNegative: {}", brief_c.prompt_text, brief_c.negative_prompt_text);
+
+        // Manifest generation
+        let manifest = serde_json::json!({
+            "fixture": {
+                "name": "Mara Crowl",
+                "id": "mara-crowl-fixture",
+                "hash": brief_a.context.source.source_body_hash,
+            },
+            "format_version": brief_a.format_version,
+            "variants": {
+                "A": { "positive": brief_a.prompt_text, "negative": brief_a.negative_prompt_text },
+                "B": { "positive": brief_b.prompt_text, "negative": brief_b.negative_prompt_text },
+                "C": { "positive": brief_c.prompt_text, "negative": brief_c.negative_prompt_text },
+            },
+            "fixed_seeds": [42, 1337, 2026, 888, 9999],
+            "operator_note": "Checkpoint, sampler, scheduler, steps, CFG, and resolution are OPERATOR-SUPPLIED. Original R2 values were not recoverable from repository evidence."
+        });
+
+        fs::create_dir_all("artifacts/missions/B10_R3_EXP").unwrap();
+        fs::write(
+            "artifacts/missions/B10_R3_EXP/PROMPT_MANIFEST.json",
+            serde_json::to_string_pretty(&manifest).unwrap()
+        ).expect("Failed to write manifest");
+
+        // Scoring Template
+        let template = "Seed,Variant,EyeCoverage,EyeVisibility,PistolPresent,PistolWrap,SubjectDominance,ImagePath,Notes\n\
+                        42,A,,,,,,,\n42,B,,,,,,,\n42,C,,,,,,,\n\
+                        1337,A,,,,,,,\n1337,B,,,,,,,\n1337,C,,,,,,,\n\
+                        2026,A,,,,,,,\n2026,B,,,,,,,\n2026,C,,,,,,,\n\
+                        888,A,,,,,,,\n888,B,,,,,,,\n888,C,,,,,,,\n\
+                        9999,A,,,,,,,\n9999,B,,,,,,,\n9999,C,,,,,,,\n";
+        fs::write("artifacts/missions/B10_R3_EXP/SCORING_TEMPLATE.csv", template).unwrap();
+    }
+
+    #[test]
+    fn character_provider_prompt_is_visual_text_not_brief_metadata() {
+        let source = mara_crowl();
+        let before = source.clone();
+        let b =
+            compile_visual_brief(&source, 1, None, ArtDirection::default(), R::Portrait).unwrap();
+        for label in [
+            "Narrative role:",
+            "Occupation evidence",
+            "visual interpretation",
+            "Composition:",
+        ] {
+            assert!(
+                !b.prompt_text.contains(label),
+                "Provider prompt leaked metadata: {label}"
+            );
+        }
+        assert!(b.prompt_text.contains("one human physician"));
+        assert!(b.prompt_text.contains("Funeral linen covers one eye"));
+        assert!(
+            b.prompt_text
+                .contains("six-shot chapel pistol wrapped in funeral linen")
+        );
+        assert!(b.prompt_text.contains("medical satchel"));
+        assert!(b.prompt_text.split_whitespace().count() <= 110);
+        assert_eq!(
+            b.prompt_semantics
+                .character_selection
+                .as_ref()
+                .unwrap()
+                .narrative_role,
+            "keeper of parish keys that fit no church"
+        );
+        assert_eq!(source, before);
+        validate_visual_brief(&b).unwrap();
+        println!(
+            "R4_MARA_PROMPT_BEGIN\n{}\nR4_MARA_PROMPT_END",
+            b.prompt_text
+        );
+    }
+
+    #[test]
     fn mara_crowl_anchor_is_self_sufficient_and_person_dominant() {
         let source = mara_crowl();
         let before = source.clone();
@@ -1318,9 +1476,7 @@ mod tests {
             let b = compile_visual_brief(&source, 1, None, ArtDirection::default(), role).unwrap();
             let plan = b.prompt_semantics.character_selection.as_ref().unwrap();
             let anchor = b.prompt_text.lines().next().unwrap();
-            assert!(anchor.starts_with(
-                "A single human dark fantasy physician Character as the dominant focal subject"
-            ));
+            assert!(anchor.starts_with("dark fantasy clear concept illustration, "));
             assert!(anchor.contains("Funeral linen covers one eye"));
             assert!(anchor.contains("six-shot chapel pistol wrapped in funeral linen"));
             assert_eq!(plan.occupation.as_deref(), Some("physician"));
@@ -1329,15 +1485,14 @@ mod tests {
                 "keeper of parish keys that fit no church"
             );
             assert!(
-                b.prompt_text
+                b.prompt_semantics
+                    .identity
+                    .join(" ")
                     .contains("Narrative role: keeper of parish keys that fit no church")
             );
             assert!(!b.prompt_text.contains("Role / profession:"));
             assert!(b.prompt_text.contains("Character is primary"));
-            assert!(
-                b.prompt_text
-                    .contains("architecture and environment are secondary")
-            );
+            assert!(b.prompt_text.contains("supporting props and environment"));
             assert!(plan.occupation_evidence.len() <= prompt::OCCUPATION_LIMIT);
             assert!(plan.prop_accents.len() <= prompt::ACCENT_LIMIT);
             assert_eq!(plan.setting.len(), 1);
@@ -1357,6 +1512,7 @@ mod tests {
             ] {
                 assert!(b.negative_prompt_text.contains(negative));
             }
+            let metadata = b.prompt_semantics.identity.join("\n");
             let mut last = 0;
             for label in [
                 "Occupation evidence",
@@ -1364,10 +1520,8 @@ mod tests {
                 "Prop accents",
                 "Setting (",
                 "Symbolic motif (",
-                "Style:",
-                "Composition:",
             ] {
-                let at = b.prompt_text.find(label).unwrap();
+                let at = metadata.find(label).unwrap();
                 assert!(at > last);
                 last = at;
             }
@@ -1379,7 +1533,7 @@ mod tests {
             validate_visual_brief(&b).unwrap();
             if role == R::Portrait {
                 println!(
-                    "R3_MARA_PROMPT_BEGIN\n{}\nR3_MARA_PROMPT_END",
+                    "R4_MARA_RENDERED_BEGIN\n{}\nR4_MARA_RENDERED_END",
                     b.prompt_text
                 );
             }
@@ -1454,7 +1608,9 @@ mod tests {
             assert!(!b.prompt_text.contains("Occupation evidence"));
             assert!(!b.prompt_text.lines().next().unwrap().contains("physician"));
             assert!(
-                b.prompt_text
+                b.prompt_semantics
+                    .identity
+                    .join(" ")
                     .contains("Narrative role: keeper of parish keys that fit no church")
             );
             validate_visual_brief(&b).unwrap();
@@ -1495,7 +1651,7 @@ mod tests {
             plan.signature_gear.as_deref(),
             Some("a chapel pistol wrapped in funeral linen")
         );
-        assert!(b.prompt_text.contains("Style: dark fantasy ink drawing"));
+        assert!(b.prompt_text.contains("dark fantasy ink drawing"));
         assert!(!b.prompt_text.contains("decorative clothing"));
         assert!(!b.prompt_text.contains("broad distant scenery"));
         assert_eq!(source, before);
@@ -1587,12 +1743,7 @@ mod tests {
             c.appearance = "A literal giant rat with fur, whiskers and a long tail".into();
         }
         for (source, role, kind, section) in [
-            (
-                &sources[0],
-                R::Portrait,
-                SubjectKind::Human,
-                "A single human",
-            ),
+            (&sources[0], R::Portrait, SubjectKind::Human, "one human"),
             (
                 &sources[1],
                 R::EstablishingShot,
@@ -1681,7 +1832,7 @@ mod tests {
             1,
             None,
             ArtDirection {
-                materials: format!("f{uuid} {hash} Ελληνικά"),
+                materials: format!("f{uuid} {hash} ÃŽâ€¢ÃŽÂ»ÃŽÂ»ÃŽÂ·ÃŽÂ½ÃŽÂ¹ÃŽÂºÃŽÂ¬"),
                 ..ArtDirection::default()
             },
             R::Portrait,
@@ -1689,7 +1840,11 @@ mod tests {
         .unwrap();
         assert!(!brief.prompt_text.contains(&uuid));
         assert!(!brief.prompt_text.contains(&hash));
-        assert!(brief.prompt_text.contains("Ελληνικά"));
+        assert!(
+            brief
+                .prompt_text
+                .contains("ÃŽâ€¢ÃŽÂ»ÃŽÂ»ÃŽÂ·ÃŽÂ½ÃŽÂ¹ÃŽÂºÃŽÂ¬")
+        );
     }
     #[test]
     fn visual_size_limits_and_self_hashed_invalid_contexts_are_rejected() {
